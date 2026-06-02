@@ -10,6 +10,7 @@ import (
 	"b2bcommerce/internal/auth"
 	authmod "b2bcommerce/internal/modules/auth"
 	"b2bcommerce/internal/modules/catalog"
+	"b2bcommerce/internal/modules/customers"
 	"b2bcommerce/internal/modules/health"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/store"
@@ -31,6 +32,7 @@ func New(st *store.Store, issuer *auth.Issuer) http.Handler {
 	health.New(st).Routes(r)
 	authmod.New(st, issuer).Routes(r)
 	catalog.New(st).Routes(r, authMW)
+	customers.New(st.Queries()).Routes(r, authMW)
 
 	return r
 }
