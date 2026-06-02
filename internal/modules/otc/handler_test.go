@@ -316,3 +316,57 @@ func invoiceStatus(t *testing.T, h http.Handler, tok string, invID int64) string
 	_ = json.Unmarshal(rr.Body.Bytes(), &got)
 	return got.Status
 }
+
+func TestAdminListInvoices(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	tok := adminToken(t, issuer)
+	ctx := context.Background()
+
+	_, orderID, _ := seedOrder(t, pool, 30, "100000")
+	invID, pubID, _, _ := issueInvoice(t, h, tok, orderID)
+
+	// Org-wide admin list includes our invoice.
+	rr := do(t, h, http.MethodGet, "/admin/invoices", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("admin invoices: want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			ID       int64  `json:"id"`
+			PublicID string `json:"public_id"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	found := false
+	for _, i := range resp.Items {
+		if i.ID == invID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected issued invoice %d in admin list", invID)
+	}
+
+	// Tenant isolation: an invoice in another org must not appear.
+	q := gen.New(pool)
+	var org2 int64
+	if err := pool.QueryRow(ctx, `INSERT INTO organizations (name) VALUES ('Org Two') RETURNING id`).Scan(&org2); err != nil {
+		t.Fatalf("org2: %v", err)
+	}
+	c2, _ := q.CreateCustomer(ctx, gen.CreateCustomerParams{OrganizationID: org2, Name: "Other", CreditLimit: "0"})
+	o2, _ := q.CreateOrder(ctx, gen.CreateOrderParams{
+		OrganizationID: org2, WebsiteID: 1, CustomerID: c2.ID, Currency: "USD",
+		BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"), Subtotal: "1", TaxTotal: "0", ShippingTotal: "0", GrandTotal: "1",
+	})
+	inv2, _ := q.CreateInvoice(ctx, gen.CreateInvoiceParams{
+		OrderID: o2.ID, CustomerID: c2.ID, Currency: "USD", Subtotal: "1", TaxTotal: "0", GrandTotal: "1",
+	})
+	rr2 := do(t, h, http.MethodGet, "/admin/invoices", tok, nil)
+	_ = json.Unmarshal(rr2.Body.Bytes(), &resp)
+	for _, i := range resp.Items {
+		if i.PublicID == inv2.PublicID.String() {
+			t.Error("tenant isolation breach: org1 admin list returned org2 invoice")
+		}
+	}
+	_ = pubID
+}

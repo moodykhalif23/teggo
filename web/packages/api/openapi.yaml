@@ -1668,3 +1668,19 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/invoices:
+    get:
+      tags: [OrderToCash]
+      operationId: adminListInvoices
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperInvoiceSummary' } } } }
+
+  /storefront/quotes:
+    get:
+      tags: [Sales]
+      operationId: storefrontListQuotes
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperQuoteSummary' } } } }

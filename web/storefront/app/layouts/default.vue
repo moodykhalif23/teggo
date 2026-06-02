@@ -17,7 +17,8 @@ function signOut() {
       <nav class="nav">
         <NuxtLink to="/">Home</NuxtLink>
         <NuxtLink to="/c/all">Catalog</NuxtLink>
-        <NuxtLink v-if="isAuthenticated" to="/account/rfqs">Quotes</NuxtLink>
+        <NuxtLink v-if="isAuthenticated" to="/account/rfqs">RFQs</NuxtLink>
+        <NuxtLink v-if="isAuthenticated" to="/account/quotes">Quotes</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/orders">Orders</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/invoices">Invoices</NuxtLink>
       </nav>

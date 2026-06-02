@@ -406,3 +406,41 @@ func (f fixture) assertRevisionCount(t *testing.T, quoteID int64, want int) {
 		t.Errorf("revisions: want %d, got %d", want, n)
 	}
 }
+
+func TestStorefrontListMyQuotes(t *testing.T) {
+	f := setup(t)
+	// A sent quote for the fixture customer.
+	cr := f.do(t, http.MethodPost, "/admin/quotes", f.adminTok, map[string]any{
+		"customer_id": f.customerID,
+		"items":       []map[string]any{{"product_id": f.p1ID, "quantity": "1", "unit_price": "5.0000"}},
+	})
+	var quote struct {
+		PublicID string `json:"public_id"`
+	}
+	decode(t, cr, &quote)
+
+	// The buyer can list their own quotes.
+	rr := f.do(t, http.MethodGet, "/storefront/quotes", f.custTok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list my quotes: want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			PublicID   string `json:"public_id"`
+			CustomerID int64  `json:"customer_id"`
+		} `json:"items"`
+	}
+	decode(t, rr, &resp)
+	found := false
+	for _, q := range resp.Items {
+		if q.CustomerID != f.customerID {
+			t.Errorf("isolation: my-quotes returned another customer's quote")
+		}
+		if q.PublicID == quote.PublicID {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected my quote in the list")
+	}
+}
