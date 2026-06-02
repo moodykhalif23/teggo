@@ -11,14 +11,20 @@ import (
 )
 
 type Querier interface {
+	// ===== Movements ===========================================================
+	AddInventoryMovement(ctx context.Context, arg AddInventoryMovementParams) (InventoryMovement, error)
 	AddInvoiceItem(ctx context.Context, arg AddInvoiceItemParams) (InvoiceItem, error)
 	AddOrderItem(ctx context.Context, arg AddOrderItemParams) (OrderItem, error)
 	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
 	AddRFQItem(ctx context.Context, arg AddRFQItemParams) (RfqItem, error)
 	AddShipmentItem(ctx context.Context, arg AddShipmentItemParams) (ShipmentItem, error)
+	// AdjustInventoryLevel applies signed deltas to on-hand and reserved.
+	AdjustInventoryLevel(ctx context.Context, arg AdjustInventoryLevelParams) (InventoryLevel, error)
 	AssignAttributeToFamily(ctx context.Context, arg AssignAttributeToFamilyParams) error
 	AssignProductToCategory(ctx context.Context, arg AssignProductToCategoryParams) error
+	// AvailableToPromise sums available across warehouses for a set of products (§12.4).
+	AvailableToPromise(ctx context.Context, dollar_1 []int64) ([]AvailableToPromiseRow, error)
 	// CategoryDescendantIDs returns the category and all of its descendants
 	// (subtree, Pack 1 §12.3). $1 root id, $2 organization_id.
 	CategoryDescendantIDs(ctx context.Context, arg CategoryDescendantIDsParams) ([]int64, error)
@@ -68,6 +74,9 @@ type Querier interface {
 	CreateShipment(ctx context.Context, arg CreateShipmentParams) (Shipment, error)
 	// ===== Shopping lists ======================================================
 	CreateShoppingList(ctx context.Context, arg CreateShoppingListParams) (ShoppingList, error)
+	// Inventory queries — Implementation Pack 1 §8 + §12.4 (ATP).
+	// ===== Warehouses ==========================================================
+	CreateWarehouse(ctx context.Context, arg CreateWarehouseParams) (Warehouse, error)
 	// CustomerAncestors returns all ancestors of a customer, nearest first
 	// (cycle-safe recursive CTE — Pack 1 §12.2). Used to inherit price list /
 	// settings down the account tree.
@@ -80,6 +89,8 @@ type Querier interface {
 	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
 	DeleteQuoteItems(ctx context.Context, quoteID int64) error
+	// ===== Levels ==============================================================
+	EnsureInventoryLevel(ctx context.Context, arg EnsureInventoryLevelParams) error
 	// FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
 	// backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like
 	// {"color":"red","voltage":"24"}.
@@ -106,7 +117,9 @@ type Querier interface {
 	// GetCustomerUserForLogin resolves a customer-user by email within an org for
 	// storefront authentication (email is citext, so case-insensitive).
 	GetCustomerUserForLogin(ctx context.Context, arg GetCustomerUserForLoginParams) (GetCustomerUserForLoginRow, error)
+	GetDefaultWarehouse(ctx context.Context, organizationID int64) (Warehouse, error)
 	GetDefaultWebsite(ctx context.Context, organizationID int64) (GetDefaultWebsiteRow, error)
+	GetInventoryLevel(ctx context.Context, arg GetInventoryLevelParams) (InventoryLevel, error)
 	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
 	GetInvoiceByIDInternal(ctx context.Context, id int64) (Invoice, error)
 	GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) (Invoice, error)
@@ -126,6 +139,7 @@ type Querier interface {
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
 	GetUserPermissions(ctx context.Context, userID int64) ([]string, error)
+	GetWarehouse(ctx context.Context, arg GetWarehouseParams) (Warehouse, error)
 	ListActiveProducts(ctx context.Context, arg ListActiveProductsParams) ([]ListActiveProductsRow, error)
 	// ListActiveProductsInCategory returns active products in a category's whole
 	// subtree (storefront browse, §12.3). $1 org, $2 root category, $3 limit, $4 offset.
@@ -141,6 +155,8 @@ type Querier interface {
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
 	ListFamilyAttributes(ctx context.Context, familyID int64) ([]ListFamilyAttributesRow, error)
+	ListInventoryLevelsForProduct(ctx context.Context, productID int64) ([]ListInventoryLevelsForProductRow, error)
+	ListInventoryMovements(ctx context.Context, arg ListInventoryMovementsParams) ([]InventoryMovement, error)
 	ListInvoiceItems(ctx context.Context, invoiceID int64) ([]InvoiceItem, error)
 	ListInvoicesForCustomer(ctx context.Context, customerID int64) ([]Invoice, error)
 	ListInvoicesForOrder(ctx context.Context, orderID int64) ([]Invoice, error)
@@ -159,10 +175,14 @@ type Querier interface {
 	ListRFQItems(ctx context.Context, rfqID int64) ([]ListRFQItemsRow, error)
 	ListRFQsAdmin(ctx context.Context, arg ListRFQsAdminParams) ([]Rfq, error)
 	ListRFQsForCustomer(ctx context.Context, customerID int64) ([]Rfq, error)
+	// ListShipmentItemProducts resolves a shipment's lines to product + quantity
+	// (for converting reservations to fulfilment on ship).
+	ListShipmentItemProducts(ctx context.Context, shipmentID int64) ([]ListShipmentItemProductsRow, error)
 	ListShipmentItems(ctx context.Context, shipmentID int64) ([]ShipmentItem, error)
 	ListShipmentsForOrder(ctx context.Context, orderID int64) ([]Shipment, error)
 	ListShoppingListItems(ctx context.Context, shoppingListID int64) ([]ListShoppingListItemsRow, error)
 	ListShoppingLists(ctx context.Context, customerID int64) ([]ShoppingList, error)
+	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
 	MarkCartConverted(ctx context.Context, id int64) error
 	// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
 	// currency: for each product it picks the winning candidate list (highest
@@ -181,6 +201,7 @@ type Querier interface {
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
+	SetInventoryLevelConfig(ctx context.Context, arg SetInventoryLevelConfigParams) (InventoryLevel, error)
 	SetInvoicePDFURL(ctx context.Context, arg SetInvoicePDFURLParams) error
 	SetInvoiceStatus(ctx context.Context, arg SetInvoiceStatusParams) (Invoice, error)
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)

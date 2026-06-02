@@ -137,6 +137,29 @@ type CustomerUser struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+type InventoryLevel struct {
+	ID               int64     `json:"id"`
+	ProductID        int64     `json:"product_id"`
+	WarehouseID      int64     `json:"warehouse_id"`
+	QuantityOnHand   string    `json:"quantity_on_hand"`
+	QuantityReserved string    `json:"quantity_reserved"`
+	ReorderThreshold *string   `json:"reorder_threshold"`
+	AllowBackorder   bool      `json:"allow_backorder"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type InventoryMovement struct {
+	ID            int64     `json:"id"`
+	ProductID     int64     `json:"product_id"`
+	WarehouseID   int64     `json:"warehouse_id"`
+	Type          string    `json:"type"`
+	Quantity      string    `json:"quantity"`
+	ReferenceType *string   `json:"reference_type"`
+	ReferenceID   *int64    `json:"reference_id"`
+	CreatedBy     *string   `json:"created_by"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type Invoice struct {
 	ID         int64              `json:"id"`
 	PublicID   uuid.UUID          `json:"public_id"`
@@ -432,6 +455,13 @@ type User struct {
 type UserRole struct {
 	UserID int64 `json:"user_id"`
 	RoleID int64 `json:"role_id"`
+}
+
+type Warehouse struct {
+	ID             int64  `json:"id"`
+	OrganizationID int64  `json:"organization_id"`
+	Name           string `json:"name"`
+	IsActive       bool   `json:"is_active"`
 }
 
 type Website struct {

@@ -3,10 +3,12 @@ package otc
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"b2bcommerce/internal/inventory"
 	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
@@ -109,7 +111,8 @@ var shipmentTransitions = map[string][]string{
 }
 
 func (h *Handler) patchShipmentStatus(w http.ResponseWriter, r *http.Request) {
-	if _, ok := admin(r); !ok {
+	a, ok := admin(r)
+	if !ok {
 		unauthorized(w)
 		return
 	}
@@ -144,7 +147,23 @@ func (h *Handler) patchShipmentStatus(w http.ResponseWriter, r *http.Request) {
 	if req.Status == "shipped" {
 		shippedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	}
-	updated, err := h.q.SetShipmentStatus(r.Context(), gen.SetShipmentStatusParams{ID: id, Status: req.Status, ShippedAt: shippedAt})
+	by := "user:0"
+	if a.userID != nil {
+		by = "user:" + strconv.FormatInt(*a.userID, 10)
+	}
+	var updated gen.Shipment
+	err = h.tx(r.Context(), func(q *gen.Queries) error {
+		var e error
+		updated, e = q.SetShipmentStatus(r.Context(), gen.SetShipmentStatusParams{ID: id, Status: req.Status, ShippedAt: shippedAt})
+		if e != nil {
+			return e
+		}
+		// Shipping converts reservation to fulfilment for tracked lines (§8).
+		if req.Status == "shipped" {
+			return inventory.FulfilShipment(r.Context(), q, a.orgID, id, by)
+		}
+		return nil
+	})
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not update shipment")
 		return

@@ -3,6 +3,7 @@ package sales
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"b2bcommerce/internal/inventory"
 	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
@@ -222,11 +224,22 @@ func (h *Handler) patchOrderStatus(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return e
 		}
+		// Confirming an order reserves stock for tracked lines (§8). Untracked
+		// products are skipped; insufficient stock (no backorder) aborts the tx.
+		if req.Status == "confirmed" {
+			if e := inventory.ReserveForOrder(r.Context(), q, a.orgID, order.ID, by); e != nil {
+				return e
+			}
+		}
 		return q.AddOrderStatusHistory(r.Context(), gen.AddOrderStatusHistoryParams{
 			OrderID: order.ID, FromStatus: &from, ToStatus: req.Status, ChangedBy: by, Note: req.Note,
 		})
 	})
 	if err != nil {
+		if errors.Is(err, inventory.ErrInsufficientStock) {
+			response.Fail(w, http.StatusConflict, "insufficient_stock", "not enough stock to confirm this order")
+			return
+		}
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not update status")
 		return
 	}

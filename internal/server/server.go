@@ -8,6 +8,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 
 	"b2bcommerce/internal/auth"
+	"b2bcommerce/internal/inventory"
 	authmod "b2bcommerce/internal/modules/auth"
 	"b2bcommerce/internal/modules/cart"
 	"b2bcommerce/internal/modules/catalog"
@@ -64,6 +65,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool()).Routes(r, authMW)
 	otc.New(st.Pool(), o.pdf).Routes(r, authMW)
+	inventory.New(st.Pool()).Routes(r, authMW)
 
 	return r
 }
