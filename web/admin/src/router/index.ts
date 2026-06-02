@@ -26,6 +26,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/products/ProductListView.vue'),
         meta: { permission: 'product.view' },
       },
+      {
+        path: 'categories',
+        name: 'categories',
+        component: () => import('@/views/catalog/CategoriesView.vue'),
+        meta: { permission: 'category.view' },
+      },
+      {
+        path: 'attributes',
+        name: 'attributes',
+        component: () => import('@/views/catalog/AttributesView.vue'),
+        meta: { permission: 'attribute.view' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -1,0 +1,398 @@
+openapi: 3.1.0
+info:
+  title: oro-folk B2B Commerce API
+  version: 0.1.0
+  description: >
+    The single source of truth for the oro-folk API contract. The TypeScript
+    client used by both frontends is generated from this file (do not hand-edit
+    the generated schema). Grown module-by-module as the backend lands.
+servers:
+  - url: http://localhost:8080
+    description: Local Go API
+tags:
+  - { name: Auth }
+  - { name: Catalog }
+
+components:
+  securitySchemes:
+    adminAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    storefrontAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+        org_id: { type: integer, format: int64 }
+
+    AuthToken:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+
+    Attributes:
+      type: object
+      additionalProperties: true
+      description: Flexible product attributes keyed by attribute code.
+
+    AdminProduct:
+      type: object
+      required: [id, public_id, sku, type, name, slug, status, unit]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        sku: { type: string }
+        type: { type: string, enum: [simple, configurable, kit, digital] }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [draft, active, disabled] }
+        attributes: { $ref: '#/components/schemas/Attributes' }
+        unit: { type: string }
+        parent_id: { type: integer, format: int64, nullable: true }
+        attribute_family_id: { type: integer, format: int64, nullable: true }
+
+    ProductInput:
+      type: object
+      required: [sku, name, slug]
+      properties:
+        sku: { type: string }
+        type: { type: string, enum: [simple, configurable, kit, digital] }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [draft, active, disabled] }
+        attributes: { $ref: '#/components/schemas/Attributes' }
+        unit: { type: string }
+        parent_id: { type: integer, format: int64, nullable: true }
+        attribute_family_id: { type: integer, format: int64, nullable: true }
+
+    AdminProductList:
+      type: object
+      required: [items, page]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminProduct' } }
+        page: { type: integer }
+        total: { type: integer, format: int64 }
+
+    StorefrontProduct:
+      type: object
+      required: [public_id, sku, name, slug, status, unit]
+      properties:
+        public_id: { type: string, format: uuid }
+        sku: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string }
+        attributes: { $ref: '#/components/schemas/Attributes' }
+        unit: { type: string }
+
+    StorefrontProductList:
+      type: object
+      required: [items, page]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/StorefrontProduct' } }
+        page: { type: integer }
+
+    Category:
+      type: object
+      required: [id, organization_id, name, slug, sort_order]
+      properties:
+        id: { type: integer, format: int64 }
+        organization_id: { type: integer, format: int64 }
+        parent_id: { type: integer, format: int64, nullable: true }
+        name: { type: string }
+        slug: { type: string }
+        sort_order: { type: integer }
+
+    CategoryInput:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        parent_id: { type: integer, format: int64, nullable: true }
+        sort_order: { type: integer }
+
+    Attribute:
+      type: object
+      required: [id, code, label, data_type]
+      properties:
+        id: { type: integer, format: int64 }
+        organization_id: { type: integer, format: int64 }
+        code: { type: string }
+        label: { type: string }
+        data_type: { type: string, enum: [text, number, boolean, select, multiselect, date, file, price] }
+        options: { type: array, items: { type: string }, nullable: true }
+        is_filterable: { type: boolean }
+        is_variant_axis: { type: boolean }
+
+    AttributeInput:
+      type: object
+      required: [code, label, data_type]
+      properties:
+        code: { type: string }
+        label: { type: string }
+        data_type: { type: string, enum: [text, number, boolean, select, multiselect, date, file, price] }
+        options: { type: array, items: { type: string }, nullable: true }
+        is_filterable: { type: boolean }
+        is_variant_axis: { type: boolean }
+
+    AttributeFamily:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, format: int64 }
+        organization_id: { type: integer, format: int64 }
+        name: { type: string }
+
+    ListWrapperCategory:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Category' } }
+    ListWrapperAttribute:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Attribute' } }
+    ListWrapperAttributeFamily:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AttributeFamily' } }
+
+  responses:
+    ErrorResponse:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+  /admin/auth/login:
+    post:
+      tags: [Auth]
+      operationId: adminLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthToken' } } }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/auth/login:
+    post:
+      tags: [Auth]
+      operationId: storefrontLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthToken' } } }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/products:
+    get:
+      tags: [Catalog]
+      operationId: storefrontListProducts
+      security: []
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: filter, in: query, description: 'JSON object of attribute equalities', schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 24 } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/StorefrontProductList' } } }
+
+  /storefront/products/{slug}:
+    get:
+      tags: [Catalog]
+      operationId: storefrontGetProduct
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/StorefrontProduct' } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/products:
+    get:
+      tags: [Catalog]
+      operationId: adminListProducts
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 24 } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminProductList' } } }
+    post:
+      tags: [Catalog]
+      operationId: adminCreateProduct
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProductInput' } } }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/products/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Catalog]
+      operationId: adminGetProduct
+      security: [{ adminAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Catalog]
+      operationId: adminUpdateProduct
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProductInput' } } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } }
+    delete:
+      tags: [Catalog]
+      operationId: adminDeleteProduct
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/products/{id}/categories:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Catalog]
+      operationId: adminListProductCategories
+      security: [{ adminAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  category_ids: { type: array, items: { type: integer, format: int64 } }
+    post:
+      tags: [Catalog]
+      operationId: adminAssignProductCategory
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_id]
+              properties:
+                category_id: { type: integer, format: int64 }
+      responses:
+        '204': { description: No Content }
+
+  /admin/categories:
+    get:
+      tags: [Catalog]
+      operationId: adminListCategories
+      security: [{ adminAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperCategory' } } }
+    post:
+      tags: [Catalog]
+      operationId: adminCreateCategory
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CategoryInput' } } }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } }
+
+  /admin/attributes:
+    get:
+      tags: [Catalog]
+      operationId: adminListAttributes
+      security: [{ adminAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperAttribute' } } }
+    post:
+      tags: [Catalog]
+      operationId: adminCreateAttribute
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AttributeInput' } } }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Attribute' } } }
+
+  /admin/attribute-families:
+    get:
+      tags: [Catalog]
+      operationId: adminListAttributeFamilies
+      security: [{ adminAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperAttributeFamily' } } }
+    post:
+      tags: [Catalog]
+      operationId: adminCreateAttributeFamily
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/AttributeFamily' } } }

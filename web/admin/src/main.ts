@@ -11,7 +11,7 @@ import '@/assets/main.css'
 import App from '@/App.vue'
 import { router } from '@/router'
 import { useAuthStore } from '@/stores/auth'
-import { configureApi } from '@/lib/api'
+import { configureClient } from '@/lib/client'
 
 const app = createApp(App)
 
@@ -30,7 +30,7 @@ app.use(ConfirmationService)
 // Wire the API client to the auth store: token on every request, and a 401
 // clears the session and bounces to login.
 const auth = useAuthStore()
-configureApi({
+configureClient({
   getToken: () => auth.token,
   onUnauthorized: () => {
     auth.logout()

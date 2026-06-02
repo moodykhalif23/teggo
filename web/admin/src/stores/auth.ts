@@ -1,9 +1,5 @@
 import { defineStore } from 'pinia'
-import { api } from '@/lib/api'
-
-interface LoginResponse {
-  token: string
-}
+import { api, errMessage } from '@/lib/client'
 
 // JWT payload minted by the Go API (internal/auth/jwt.go): org_id, aud, perms, sub.
 interface JwtClaims {
@@ -53,12 +49,11 @@ export const useAuthStore = defineStore('auth', {
       else localStorage.removeItem(TOKEN_KEY)
     },
     async login(email: string, password: string, orgId = 1) {
-      const res = await api.post<LoginResponse>('/admin/auth/login', {
-        email,
-        password,
-        org_id: orgId,
+      const { data, error } = await api.POST('/admin/auth/login', {
+        body: { email, password, org_id: orgId },
       })
-      this.setToken(res.token)
+      if (error || !data) throw new Error(errMessage(error, 'Invalid credentials'))
+      this.setToken(data.token)
     },
     logout() {
       this.setToken(null)

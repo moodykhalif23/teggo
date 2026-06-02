@@ -2,14 +2,19 @@
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
-import type { Product } from '~/types'
 
 const route = useRoute()
-const api = useApi()
+const client = useClient()
 
 const { data: product, error } = await useAsyncData(
   () => `product-${route.params.slug}`,
-  () => api<Product>(`/storefront/products/${route.params.slug}`),
+  async () => {
+    const { data, error } = await client.GET('/storefront/products/{slug}', {
+      params: { path: { slug: route.params.slug as string } },
+    })
+    if (error) throw createError({ statusCode: 404, statusMessage: 'Product not found' })
+    return data
+  },
 )
 
 useSeoMeta({

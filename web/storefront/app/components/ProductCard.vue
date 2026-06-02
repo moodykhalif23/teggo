@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
-import type { Product } from '~/types'
+import type { components } from '@oro/api/schema'
+
+type Product = components['schemas']['StorefrontProduct']
 
 defineProps<{ product: Product }>()
 </script>

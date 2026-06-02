@@ -1,18 +1,6 @@
-// Shapes returned by the Go storefront API. These will be replaced by the
-// generated TypeScript client from the OpenAPI contract (Pack 2 §5).
-export interface Product {
-  public_id: string
-  sku: string
-  name: string
-  slug: string
-  description?: string
-  status: 'draft' | 'active' | 'disabled'
-  unit: string
-  attributes?: Record<string, unknown>
-}
+// Re-export the generated OpenAPI schema types for ergonomic local use.
+// The contract is owned by @oro/api (generated from openapi.yaml).
+import type { components } from '@oro/api/schema'
 
-export interface ProductList {
-  items: Product[]
-  page: number
-  total?: number
-}
+export type Product = components['schemas']['StorefrontProduct']
+export type ProductList = components['schemas']['StorefrontProductList']

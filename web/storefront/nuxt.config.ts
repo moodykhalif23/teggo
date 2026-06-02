@@ -7,6 +7,9 @@ export default defineNuxtConfig({
 
   modules: ['@primevue/nuxt-module'],
 
+  // @oro/api ships as TypeScript source (workspace package) — transpile it.
+  build: { transpile: ['@oro/api'] },
+
   primevue: {
     options: {
       theme: {

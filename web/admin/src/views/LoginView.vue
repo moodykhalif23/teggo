@@ -2,9 +2,9 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ApiError } from '@/lib/api'
 import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
@@ -27,7 +27,7 @@ async function submit() {
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'Login failed'
+    error.value = e instanceof Error ? e.message : 'Login failed'
   } finally {
     loading.value = false
   }
@@ -60,7 +60,7 @@ async function submit() {
           </div>
           <div class="field">
             <label for="org">Organization ID</label>
-            <InputText id="org" v-model.number="orgId" fluid />
+            <InputNumber id="org" v-model="orgId" :useGrouping="false" fluid />
           </div>
           <Button type="submit" label="Sign in" :loading="loading" fluid />
         </form>

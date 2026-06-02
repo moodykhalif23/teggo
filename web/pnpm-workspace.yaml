@@ -1,6 +1,7 @@
 packages:
   - 'admin'
   - 'storefront'
+  - 'packages/*'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

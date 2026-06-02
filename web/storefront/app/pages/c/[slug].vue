@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import ProductCard from '~/components/ProductCard.vue'
 import Message from 'primevue/message'
-import type { ProductList } from '~/types'
 
 const route = useRoute()
-const api = useApi()
+const client = useClient()
 
-// SSR fetch so the catalog page is crawlable. The Go storefront endpoint
-// accepts ?category= (and ?q=, ?filter=, paging); 'all' lists everything.
+// SSR fetch so the catalog page is crawlable. 'all' lists everything; any other
+// slug filters by that category's subtree (resolved server-side).
 const { data, error } = await useAsyncData(
   () => `products-${route.params.slug}`,
-  () => {
+  async () => {
     const slug = route.params.slug as string
-    const qs = new URLSearchParams({ page: '1', page_size: '24' })
-    if (slug && slug !== 'all') qs.set('category', slug)
-    return api<ProductList>(`/storefront/products?${qs.toString()}`)
+    const query: Record<string, string | number> = { page: 1, page_size: 24 }
+    if (slug && slug !== 'all') query.category = slug
+    const { data, error } = await client.GET('/storefront/products', { params: { query } })
+    if (error) throw createError({ statusCode: 502, statusMessage: 'Catalog unavailable' })
+    return data
   },
 )
 

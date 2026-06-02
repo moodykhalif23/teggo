@@ -8,7 +8,7 @@ VALUES (1, 'Demo Store', 'demo.localhost', 'USD', 'en');
 
 INSERT INTO users (organization_id, email, password_hash, full_name)
 VALUES (1, 'admin@demo.test',
-        '$2a$10$N9qo8uLOickgx2ZMRZoMy.MQDqz1F1Z3yq1y3qD6qg3kq1m1Q1q1u',  -- placeholder; regenerate (see README)
+        '$2a$10$KJNNgCtq2yM0p08JTkuouefWrFkbgqASEEjSR5/DkDyn/5QK2R3wq',  -- bcrypt('admin1234')
         'Demo Admin');
 
 INSERT INTO roles (organization_id, name, description) VALUES (1, 'admin', 'Full access');
