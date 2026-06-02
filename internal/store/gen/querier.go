@@ -11,10 +11,12 @@ import (
 )
 
 type Querier interface {
+	AddInvoiceItem(ctx context.Context, arg AddInvoiceItemParams) (InvoiceItem, error)
 	AddOrderItem(ctx context.Context, arg AddOrderItemParams) (OrderItem, error)
 	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
 	AddRFQItem(ctx context.Context, arg AddRFQItemParams) (RfqItem, error)
+	AddShipmentItem(ctx context.Context, arg AddShipmentItemParams) (ShipmentItem, error)
 	AssignAttributeToFamily(ctx context.Context, arg AssignAttributeToFamilyParams) error
 	AssignProductToCategory(ctx context.Context, arg AssignProductToCategoryParams) error
 	// CategoryDescendantIDs returns the category and all of its descendants
@@ -35,8 +37,12 @@ type Querier interface {
 	// Every query is organization-scoped (tenant isolation enforced at the query layer).
 	CreateCustomerGroup(ctx context.Context, arg CreateCustomerGroupParams) (CustomerGroup, error)
 	CreateCustomerUser(ctx context.Context, arg CreateCustomerUserParams) (CreateCustomerUserRow, error)
+	// ===== Invoices ============================================================
+	CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (Invoice, error)
 	// ===== Order ===============================================================
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	// ===== Payments ============================================================
+	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	// Pricing engine queries — Implementation Pack 1 §4 + §12.1.
 	// NUMERIC params arrive as strings (sqlc money override), so quantity
 	// comparisons cast explicitly with ::numeric.
@@ -57,6 +63,9 @@ type Querier interface {
 	// are the primitives. Money columns are decimal strings (sqlc money override).
 	// ===== RFQ =================================================================
 	CreateRFQ(ctx context.Context, arg CreateRFQParams) (Rfq, error)
+	// Order-to-cash queries — Implementation Pack 1 §7.
+	// ===== Shipments ===========================================================
+	CreateShipment(ctx context.Context, arg CreateShipmentParams) (Shipment, error)
 	// ===== Shopping lists ======================================================
 	CreateShoppingList(ctx context.Context, arg CreateShoppingListParams) (ShoppingList, error)
 	// CustomerAncestors returns all ancestors of a customer, nearest first
@@ -87,6 +96,8 @@ type Querier interface {
 	// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency
 	GetCombinedPrice(ctx context.Context, arg GetCombinedPriceParams) (GetCombinedPriceRow, error)
 	GetCustomer(ctx context.Context, arg GetCustomerParams) (Customer, error)
+	// ===== Customer billing terms =============================================
+	GetCustomerBilling(ctx context.Context, id int64) (GetCustomerBillingRow, error)
 	GetCustomerByPublicID(ctx context.Context, arg GetCustomerByPublicIDParams) (Customer, error)
 	// ===== Snapshot helpers ====================================================
 	// GetCustomerDefaultAddress returns the default (or first) address of a type
@@ -96,8 +107,13 @@ type Querier interface {
 	// storefront authentication (email is citext, so case-insensitive).
 	GetCustomerUserForLogin(ctx context.Context, arg GetCustomerUserForLoginParams) (GetCustomerUserForLoginRow, error)
 	GetDefaultWebsite(ctx context.Context, organizationID int64) (GetDefaultWebsiteRow, error)
+	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
+	GetInvoiceByIDInternal(ctx context.Context, id int64) (Invoice, error)
+	GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) (Invoice, error)
 	GetOrderByID(ctx context.Context, arg GetOrderByIDParams) (Order, error)
 	GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (Order, error)
+	GetOrderItem(ctx context.Context, arg GetOrderItemParams) (OrderItem, error)
+	GetPayment(ctx context.Context, id int64) (Payment, error)
 	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
 	GetProductBySlug(ctx context.Context, arg GetProductBySlugParams) (GetProductBySlugRow, error)
@@ -106,6 +122,7 @@ type Querier interface {
 	GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Quote, error)
 	GetRFQByID(ctx context.Context, arg GetRFQByIDParams) (Rfq, error)
 	GetRFQByPublicID(ctx context.Context, arg GetRFQByPublicIDParams) (Rfq, error)
+	GetShipment(ctx context.Context, id int64) (Shipment, error)
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
 	GetUserPermissions(ctx context.Context, userID int64) ([]string, error)
@@ -124,10 +141,14 @@ type Querier interface {
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
 	ListFamilyAttributes(ctx context.Context, familyID int64) ([]ListFamilyAttributesRow, error)
+	ListInvoiceItems(ctx context.Context, invoiceID int64) ([]InvoiceItem, error)
+	ListInvoicesForCustomer(ctx context.Context, customerID int64) ([]Invoice, error)
+	ListInvoicesForOrder(ctx context.Context, orderID int64) ([]Invoice, error)
 	ListOrderItems(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderStatusHistory(ctx context.Context, orderID int64) ([]ListOrderStatusHistoryRow, error)
 	ListOrdersAdmin(ctx context.Context, arg ListOrdersAdminParams) ([]Order, error)
 	ListOrdersForCustomer(ctx context.Context, customerID int64) ([]Order, error)
+	ListPaymentsForInvoice(ctx context.Context, invoiceID *int64) ([]Payment, error)
 	ListPriceLists(ctx context.Context, organizationID int64) ([]PriceList, error)
 	ListPricesForList(ctx context.Context, priceListID int64) ([]Price, error)
 	ListProductCategoryIDs(ctx context.Context, productID int64) ([]int64, error)
@@ -138,6 +159,8 @@ type Querier interface {
 	ListRFQItems(ctx context.Context, rfqID int64) ([]ListRFQItemsRow, error)
 	ListRFQsAdmin(ctx context.Context, arg ListRFQsAdminParams) ([]Rfq, error)
 	ListRFQsForCustomer(ctx context.Context, customerID int64) ([]Rfq, error)
+	ListShipmentItems(ctx context.Context, shipmentID int64) ([]ShipmentItem, error)
+	ListShipmentsForOrder(ctx context.Context, orderID int64) ([]Shipment, error)
 	ListShoppingListItems(ctx context.Context, shoppingListID int64) ([]ListShoppingListItemsRow, error)
 	ListShoppingLists(ctx context.Context, customerID int64) ([]ShoppingList, error)
 	MarkCartConverted(ctx context.Context, id int64) error
@@ -158,12 +181,24 @@ type Querier interface {
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
+	SetInvoicePDFURL(ctx context.Context, arg SetInvoicePDFURLParams) error
+	SetInvoiceStatus(ctx context.Context, arg SetInvoiceStatusParams) (Invoice, error)
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
+	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
 	SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) (Quote, error)
 	SetQuoteSubtotal(ctx context.Context, arg SetQuoteSubtotalParams) error
 	SetRFQStatus(ctx context.Context, arg SetRFQStatusParams) (Rfq, error)
+	SetShipmentStatus(ctx context.Context, arg SetShipmentStatusParams) (Shipment, error)
+	// ShippedQtyForOrderItem returns the total already shipped for an order line,
+	// used to cap new shipment quantities (§7 AC).
+	ShippedQtyForOrderItem(ctx context.Context, orderItemID int64) (string, error)
 	SoftDeleteCustomer(ctx context.Context, arg SoftDeleteCustomerParams) (int64, error)
 	SoftDeleteProduct(ctx context.Context, arg SoftDeleteProductParams) (int64, error)
+	// SumCapturedForInvoice totals captured payments against an invoice.
+	SumCapturedForInvoice(ctx context.Context, invoiceID *int64) (string, error)
+	// SumOpenInvoices totals a customer's unpaid (issued/overdue) invoices, used to
+	// enforce the credit limit when paying on terms.
+	SumOpenInvoices(ctx context.Context, customerID int64) (string, error)
 	TouchUserLogin(ctx context.Context, id int64) error
 	UpdateCartItemPrice(ctx context.Context, arg UpdateCartItemPriceParams) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)

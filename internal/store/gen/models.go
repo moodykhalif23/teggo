@@ -137,6 +137,33 @@ type CustomerUser struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+type Invoice struct {
+	ID         int64              `json:"id"`
+	PublicID   uuid.UUID          `json:"public_id"`
+	OrderID    int64              `json:"order_id"`
+	CustomerID int64              `json:"customer_id"`
+	Status     string             `json:"status"`
+	Currency   string             `json:"currency"`
+	Subtotal   string             `json:"subtotal"`
+	TaxTotal   string             `json:"tax_total"`
+	GrandTotal string             `json:"grand_total"`
+	IssuedAt   pgtype.Timestamptz `json:"issued_at"`
+	DueAt      pgtype.Timestamptz `json:"due_at"`
+	PdfUrl     *string            `json:"pdf_url"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
+type InvoiceItem struct {
+	ID          int64  `json:"id"`
+	InvoiceID   int64  `json:"invoice_id"`
+	Description string `json:"description"`
+	Quantity    string `json:"quantity"`
+	UnitPrice   string `json:"unit_price"`
+	TaxAmount   string `json:"tax_amount"`
+	RowTotal    string `json:"row_total"`
+}
+
 type Order struct {
 	ID                    int64       `json:"id"`
 	PublicID              uuid.UUID   `json:"public_id"`
@@ -189,6 +216,23 @@ type Organization struct {
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type Payment struct {
+	ID               int64              `json:"id"`
+	PublicID         uuid.UUID          `json:"public_id"`
+	InvoiceID        *int64             `json:"invoice_id"`
+	OrderID          *int64             `json:"order_id"`
+	CustomerID       int64              `json:"customer_id"`
+	Method           string             `json:"method"`
+	Gateway          *string            `json:"gateway"`
+	GatewayReference *string            `json:"gateway_reference"`
+	Amount           string             `json:"amount"`
+	Currency         string             `json:"currency"`
+	Status           string             `json:"status"`
+	CapturedAt       pgtype.Timestamptz `json:"captured_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 type Price struct {
@@ -334,6 +378,25 @@ type Role struct {
 type RolePermission struct {
 	RoleID     int64  `json:"role_id"`
 	Permission string `json:"permission"`
+}
+
+type Shipment struct {
+	ID             int64              `json:"id"`
+	PublicID       uuid.UUID          `json:"public_id"`
+	OrderID        int64              `json:"order_id"`
+	Carrier        *string            `json:"carrier"`
+	TrackingNumber *string            `json:"tracking_number"`
+	Status         string             `json:"status"`
+	ShippedAt      pgtype.Timestamptz `json:"shipped_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type ShipmentItem struct {
+	ID          int64  `json:"id"`
+	ShipmentID  int64  `json:"shipment_id"`
+	OrderItemID int64  `json:"order_item_id"`
+	Quantity    string `json:"quantity"`
 }
 
 type ShoppingList struct {

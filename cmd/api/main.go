@@ -40,7 +40,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("queue: %v", err)
 	}
-	handler := server.New(st, issuer, server.WithRecompute(enq))
+	handler := server.New(st, issuer,
+		server.WithRecompute(enq),
+		server.WithInvoicePDF(enq),
+	)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,

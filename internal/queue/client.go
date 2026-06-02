@@ -15,6 +15,7 @@ func NewWorkerClient(pool *pgxpool.Pool) (*river.Client[pgx.Tx], error) {
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &jobs.SendEmailWorker{})
 	river.AddWorker(workers, &jobs.RecomputeWorker{Pool: pool})
+	river.AddWorker(workers, &jobs.InvoicePDFWorker{Pool: pool})
 	// Register additional workers here as modules add jobs.
 
 	return river.NewClient(riverpgxv5.New(pool), &river.Config{
@@ -52,5 +53,11 @@ func (e *Enqueuer) EnqueueRecompute(ctx context.Context, customerID int64, websi
 		WebsiteID:  websiteID,
 		Currency:   currency,
 	}, nil)
+	return err
+}
+
+// EnqueueInvoicePDF schedules PDF generation for an issued invoice.
+func (e *Enqueuer) EnqueueInvoicePDF(ctx context.Context, invoiceID int64) error {
+	_, err := e.ic.Insert(ctx, jobs.GenerateInvoicePDFArgs{InvoiceID: invoiceID}, nil)
 	return err
 }

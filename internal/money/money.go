@@ -35,6 +35,32 @@ func LineTotal(quantity, unitPrice string) (string, error) {
 	return Format(new(big.Rat).Mul(q, p)), nil
 }
 
+// Sub returns a - b as a 4-dp string.
+func Sub(a, b string) (string, error) {
+	ra, err := Parse(a)
+	if err != nil {
+		return "", err
+	}
+	rb, err := Parse(b)
+	if err != nil {
+		return "", err
+	}
+	return Format(new(big.Rat).Sub(ra, rb)), nil
+}
+
+// Cmp compares two decimal strings: -1 if a<b, 0 if equal, 1 if a>b.
+func Cmp(a, b string) (int, error) {
+	ra, err := Parse(a)
+	if err != nil {
+		return 0, err
+	}
+	rb, err := Parse(b)
+	if err != nil {
+		return 0, err
+	}
+	return ra.Cmp(rb), nil
+}
+
 // RowTotal returns quantity*unitPrice - discount as a 4-dp string.
 func RowTotal(quantity, unitPrice, discount string) (string, error) {
 	q, err := Parse(quantity)

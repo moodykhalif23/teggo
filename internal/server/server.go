@@ -13,6 +13,7 @@ import (
 	"b2bcommerce/internal/modules/catalog"
 	"b2bcommerce/internal/modules/customers"
 	"b2bcommerce/internal/modules/health"
+	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
 	"b2bcommerce/internal/modules/sales"
 	mw "b2bcommerce/internal/server/middleware"
@@ -22,6 +23,7 @@ import (
 // options holds optional dependencies wired in by the caller.
 type options struct {
 	recompute pricing.Enqueuer
+	pdf       otc.PDFEnqueuer
 }
 
 // Option configures optional server dependencies.
@@ -29,6 +31,11 @@ type Option func(*options)
 
 func WithRecompute(e pricing.Enqueuer) Option {
 	return func(o *options) { o.recompute = e }
+}
+
+// WithInvoicePDF wires the invoice-PDF enqueuer into the order-to-cash module.
+func WithInvoicePDF(e otc.PDFEnqueuer) Option {
+	return func(o *options) { o.pdf = e }
 }
 
 // New builds the fully-wired HTTP handler.
@@ -56,6 +63,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool()).Routes(r, authMW)
+	otc.New(st.Pool(), o.pdf).Routes(r, authMW)
 
 	return r
 }
