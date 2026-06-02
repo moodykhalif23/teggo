@@ -14,6 +14,7 @@ import (
 	"b2bcommerce/internal/modules/customers"
 	"b2bcommerce/internal/modules/health"
 	"b2bcommerce/internal/modules/pricing"
+	"b2bcommerce/internal/modules/sales"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/store"
 )
@@ -26,9 +27,6 @@ type options struct {
 // Option configures optional server dependencies.
 type Option func(*options)
 
-// WithRecompute wires the combined_prices recompute enqueuer into the pricing
-// module. Without it, pricing still serves reads/CRUD but cannot fan out
-// recompute jobs (the recompute endpoint returns 503).
 func WithRecompute(e pricing.Enqueuer) Option {
 	return func(o *options) { o.recompute = e }
 }
@@ -57,6 +55,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	customers.New(st.Queries()).Routes(r, authMW)
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
+	sales.New(st.Pool()).Routes(r, authMW)
 
 	return r
 }

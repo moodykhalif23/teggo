@@ -6,9 +6,15 @@ package gen
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	AddOrderItem(ctx context.Context, arg AddOrderItemParams) (OrderItem, error)
+	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
+	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
+	AddRFQItem(ctx context.Context, arg AddRFQItemParams) (RfqItem, error)
 	AssignAttributeToFamily(ctx context.Context, arg AssignAttributeToFamilyParams) error
 	AssignProductToCategory(ctx context.Context, arg AssignProductToCategoryParams) error
 	// CategoryDescendantIDs returns the category and all of its descendants
@@ -29,6 +35,8 @@ type Querier interface {
 	// Every query is organization-scoped (tenant isolation enforced at the query layer).
 	CreateCustomerGroup(ctx context.Context, arg CreateCustomerGroupParams) (CustomerGroup, error)
 	CreateCustomerUser(ctx context.Context, arg CreateCustomerUserParams) (CreateCustomerUserRow, error)
+	// ===== Order ===============================================================
+	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	// Pricing engine queries — Implementation Pack 1 §4 + §12.1.
 	// NUMERIC params arrive as strings (sqlc money override), so quantity
 	// comparisons cast explicitly with ::numeric.
@@ -41,6 +49,14 @@ type Querier interface {
 	// plus the category-subtree and JSONB-facet reads used by the storefront listing.
 	// ===== Products (admin) ====================================================
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	// ===== Quote ===============================================================
+	CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote, error)
+	CreateQuoteRevision(ctx context.Context, arg CreateQuoteRevisionParams) error
+	// RFQ -> Quote -> Order queries — Implementation Pack 1 §6.
+	// Status transitions are validated in the app (state machines); these queries
+	// are the primitives. Money columns are decimal strings (sqlc money override).
+	// ===== RFQ =================================================================
+	CreateRFQ(ctx context.Context, arg CreateRFQParams) (Rfq, error)
 	// ===== Shopping lists ======================================================
 	CreateShoppingList(ctx context.Context, arg CreateShoppingListParams) (ShoppingList, error)
 	// CustomerAncestors returns all ancestors of a customer, nearest first
@@ -54,6 +70,7 @@ type Querier interface {
 	DeleteAssignment(ctx context.Context, id int64) (int64, error)
 	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
+	DeleteQuoteItems(ctx context.Context, quoteID int64) error
 	// FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
 	// backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like
 	// {"color":"red","voltage":"24"}.
@@ -71,14 +88,24 @@ type Querier interface {
 	GetCombinedPrice(ctx context.Context, arg GetCombinedPriceParams) (GetCombinedPriceRow, error)
 	GetCustomer(ctx context.Context, arg GetCustomerParams) (Customer, error)
 	GetCustomerByPublicID(ctx context.Context, arg GetCustomerByPublicIDParams) (Customer, error)
+	// ===== Snapshot helpers ====================================================
+	// GetCustomerDefaultAddress returns the default (or first) address of a type
+	// for snapshotting onto an order.
+	GetCustomerDefaultAddress(ctx context.Context, arg GetCustomerDefaultAddressParams) (GetCustomerDefaultAddressRow, error)
 	// GetCustomerUserForLogin resolves a customer-user by email within an org for
 	// storefront authentication (email is citext, so case-insensitive).
 	GetCustomerUserForLogin(ctx context.Context, arg GetCustomerUserForLoginParams) (GetCustomerUserForLoginRow, error)
 	GetDefaultWebsite(ctx context.Context, organizationID int64) (GetDefaultWebsiteRow, error)
+	GetOrderByID(ctx context.Context, arg GetOrderByIDParams) (Order, error)
+	GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (Order, error)
 	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
 	GetProductBySlug(ctx context.Context, arg GetProductBySlugParams) (GetProductBySlugRow, error)
 	GetProductIDByPublicID(ctx context.Context, arg GetProductIDByPublicIDParams) (int64, error)
+	GetQuoteByID(ctx context.Context, arg GetQuoteByIDParams) (Quote, error)
+	GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Quote, error)
+	GetRFQByID(ctx context.Context, arg GetRFQByIDParams) (Rfq, error)
+	GetRFQByPublicID(ctx context.Context, arg GetRFQByPublicIDParams) (Rfq, error)
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
 	GetUserPermissions(ctx context.Context, userID int64) ([]string, error)
@@ -97,10 +124,20 @@ type Querier interface {
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
 	ListFamilyAttributes(ctx context.Context, familyID int64) ([]ListFamilyAttributesRow, error)
+	ListOrderItems(ctx context.Context, orderID int64) ([]OrderItem, error)
+	ListOrderStatusHistory(ctx context.Context, orderID int64) ([]ListOrderStatusHistoryRow, error)
+	ListOrdersAdmin(ctx context.Context, arg ListOrdersAdminParams) ([]Order, error)
+	ListOrdersForCustomer(ctx context.Context, customerID int64) ([]Order, error)
 	ListPriceLists(ctx context.Context, organizationID int64) ([]PriceList, error)
 	ListPricesForList(ctx context.Context, priceListID int64) ([]Price, error)
 	ListProductCategoryIDs(ctx context.Context, productID int64) ([]int64, error)
 	ListProductsAdmin(ctx context.Context, arg ListProductsAdminParams) ([]Product, error)
+	ListQuoteItems(ctx context.Context, quoteID int64) ([]ListQuoteItemsRow, error)
+	ListQuoteRevisions(ctx context.Context, quoteID int64) ([]ListQuoteRevisionsRow, error)
+	ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams) ([]Quote, error)
+	ListRFQItems(ctx context.Context, rfqID int64) ([]ListRFQItemsRow, error)
+	ListRFQsAdmin(ctx context.Context, arg ListRFQsAdminParams) ([]Rfq, error)
+	ListRFQsForCustomer(ctx context.Context, customerID int64) ([]Rfq, error)
 	ListShoppingListItems(ctx context.Context, shoppingListID int64) ([]ListShoppingListItemsRow, error)
 	ListShoppingLists(ctx context.Context, customerID int64) ([]ShoppingList, error)
 	MarkCartConverted(ctx context.Context, id int64) error
@@ -118,6 +155,13 @@ type Querier interface {
 	// broken by the most specific qty tier <= requested.
 	// params: $1 customer_id, $2 product_id, $3 quantity, $4 currency, $5 website_id, $6 at
 	ResolvePrice(ctx context.Context, arg ResolvePriceParams) (ResolvePriceRow, error)
+	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
+	// the matching quote_revisions snapshot in the same transaction.
+	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
+	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
+	SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) (Quote, error)
+	SetQuoteSubtotal(ctx context.Context, arg SetQuoteSubtotalParams) error
+	SetRFQStatus(ctx context.Context, arg SetRFQStatusParams) (Rfq, error)
 	SoftDeleteCustomer(ctx context.Context, arg SoftDeleteCustomerParams) (int64, error)
 	SoftDeleteProduct(ctx context.Context, arg SoftDeleteProductParams) (int64, error)
 	TouchUserLogin(ctx context.Context, id int64) error

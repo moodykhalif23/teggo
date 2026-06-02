@@ -137,6 +137,52 @@ type CustomerUser struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+type Order struct {
+	ID                    int64       `json:"id"`
+	PublicID              uuid.UUID   `json:"public_id"`
+	OrganizationID        int64       `json:"organization_id"`
+	WebsiteID             int64       `json:"website_id"`
+	CustomerID            int64       `json:"customer_id"`
+	CustomerUserID        *int64      `json:"customer_user_id"`
+	QuoteID               *int64      `json:"quote_id"`
+	PlacedBySalesRepID    *int64      `json:"placed_by_sales_rep_id"`
+	Status                string      `json:"status"`
+	Currency              string      `json:"currency"`
+	PoNumber              *string     `json:"po_number"`
+	RequestedDeliveryDate pgtype.Date `json:"requested_delivery_date"`
+	BillingAddress        []byte      `json:"billing_address"`
+	ShippingAddress       []byte      `json:"shipping_address"`
+	Subtotal              string      `json:"subtotal"`
+	TaxTotal              string      `json:"tax_total"`
+	ShippingTotal         string      `json:"shipping_total"`
+	GrandTotal            string      `json:"grand_total"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
+type OrderItem struct {
+	ID        int64  `json:"id"`
+	OrderID   int64  `json:"order_id"`
+	ProductID int64  `json:"product_id"`
+	Sku       string `json:"sku"`
+	Name      string `json:"name"`
+	Quantity  string `json:"quantity"`
+	Unit      string `json:"unit"`
+	UnitPrice string `json:"unit_price"`
+	TaxAmount string `json:"tax_amount"`
+	RowTotal  string `json:"row_total"`
+}
+
+type OrderStatusHistory struct {
+	ID         int64     `json:"id"`
+	OrderID    int64     `json:"order_id"`
+	FromStatus *string   `json:"from_status"`
+	ToStatus   string    `json:"to_status"`
+	ChangedBy  string    `json:"changed_by"`
+	Note       *string   `json:"note"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type Organization struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
@@ -216,6 +262,66 @@ type ProductTranslation struct {
 	Locale      string  `json:"locale"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
+}
+
+type Quote struct {
+	ID             int64              `json:"id"`
+	PublicID       uuid.UUID          `json:"public_id"`
+	OrganizationID int64              `json:"organization_id"`
+	WebsiteID      int64              `json:"website_id"`
+	CustomerID     int64              `json:"customer_id"`
+	RfqID          *int64             `json:"rfq_id"`
+	SalesRepUserID *int64             `json:"sales_rep_user_id"`
+	Status         string             `json:"status"`
+	Currency       string             `json:"currency"`
+	Version        int32              `json:"version"`
+	ValidUntil     pgtype.Timestamptz `json:"valid_until"`
+	Subtotal       string             `json:"subtotal"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type QuoteItem struct {
+	ID        int64  `json:"id"`
+	QuoteID   int64  `json:"quote_id"`
+	ProductID int64  `json:"product_id"`
+	Quantity  string `json:"quantity"`
+	Unit      string `json:"unit"`
+	UnitPrice string `json:"unit_price"`
+	Discount  string `json:"discount"`
+	RowTotal  string `json:"row_total"`
+}
+
+type QuoteRevision struct {
+	ID        int64     `json:"id"`
+	QuoteID   int64     `json:"quote_id"`
+	Version   int32     `json:"version"`
+	Snapshot  []byte    `json:"snapshot"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Rfq struct {
+	ID             int64     `json:"id"`
+	PublicID       uuid.UUID `json:"public_id"`
+	OrganizationID int64     `json:"organization_id"`
+	WebsiteID      int64     `json:"website_id"`
+	CustomerID     int64     `json:"customer_id"`
+	CustomerUserID *int64    `json:"customer_user_id"`
+	Status         string    `json:"status"`
+	Notes          *string   `json:"notes"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type RfqItem struct {
+	ID          int64   `json:"id"`
+	RfqID       int64   `json:"rfq_id"`
+	ProductID   int64   `json:"product_id"`
+	Quantity    string  `json:"quantity"`
+	Unit        string  `json:"unit"`
+	TargetPrice *string `json:"target_price"`
+	Notes       *string `json:"notes"`
 }
 
 type Role struct {
