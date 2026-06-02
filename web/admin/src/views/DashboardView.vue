@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/lib/client'
-import BarChart from '@/components/BarChart.vue'
+
+// Lazy so ECharts lands in its own chunk, off the dashboard's critical path.
+const BarChart = defineAsyncComponent(() => import('@/components/BarChart.vue'))
 
 const auth = useAuthStore()
 const router = useRouter()
