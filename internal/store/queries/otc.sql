@@ -76,6 +76,30 @@ UPDATE invoices SET pdf_url = $2 WHERE id = $1;
 
 -- name: SetInvoiceStatus :one
 UPDATE invoices SET status = $2 WHERE id = $1 RETURNING *;
+SELECT
+  i.id, i.public_id, i.status, i.currency,
+  i.subtotal, i.tax_total, i.grand_total, i.issued_at, i.due_at,
+  o.public_id AS order_public_id, o.po_number,
+  o.billing_address, o.shipping_address,
+  c.name AS customer_name,
+  org.name AS organization_name
+FROM invoices i
+JOIN orders o ON o.id = i.order_id
+JOIN customers c ON c.id = i.customer_id
+JOIN organizations org ON org.id = o.organization_id
+WHERE i.id = $1;
+
+-- UpsertInvoiceDocument stores (or replaces, on regeneration) the rendered PDF.
+-- name: UpsertInvoiceDocument :exec
+INSERT INTO invoice_documents (invoice_id, content_type, bytes)
+VALUES ($1, $2, $3)
+ON CONFLICT (invoice_id)
+DO UPDATE SET content_type = EXCLUDED.content_type, bytes = EXCLUDED.bytes, generated_at = now();
+
+SELECT d.content_type, d.bytes
+FROM invoice_documents d
+JOIN invoices i ON i.id = d.invoice_id
+WHERE i.public_id = $1;
 
 -- SumOpenInvoices totals a customer's unpaid (issued/overdue) invoices, used to
 -- enforce the credit limit when paying on terms.

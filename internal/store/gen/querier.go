@@ -123,6 +123,12 @@ type Querier interface {
 	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
 	GetInvoiceByIDInternal(ctx context.Context, id int64) (Invoice, error)
 	GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) (Invoice, error)
+	// GetInvoiceDocument streams a stored PDF by the invoice's public_id (the
+	// capability URL); content_type + bytes are all the file route needs.
+	GetInvoiceDocument(ctx context.Context, publicID uuid.UUID) (GetInvoiceDocumentRow, error)
+	// GetInvoiceForRender gathers everything the PDF template needs in one row:
+	// the invoice, its order context, and the customer/organization names.
+	GetInvoiceForRender(ctx context.Context, id int64) (GetInvoiceForRenderRow, error)
 	GetOrderByID(ctx context.Context, arg GetOrderByIDParams) (Order, error)
 	GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (Order, error)
 	GetOrderItem(ctx context.Context, arg GetOrderItemParams) (OrderItem, error)
@@ -232,6 +238,8 @@ type Querier interface {
 	// UpsertCartItem snapshots unit_price at add-time; re-adding the same product
 	// sets the quantity and refreshes the price.
 	UpsertCartItem(ctx context.Context, arg UpsertCartItemParams) (CartItem, error)
+	// UpsertInvoiceDocument stores (or replaces, on regeneration) the rendered PDF.
+	UpsertInvoiceDocument(ctx context.Context, arg UpsertInvoiceDocumentParams) error
 	// ===== Prices (tiers) ======================================================
 	UpsertPrice(ctx context.Context, arg UpsertPriceParams) (Price, error)
 	UpsertShoppingListItem(ctx context.Context, arg UpsertShoppingListItemParams) (ShoppingListItem, error)

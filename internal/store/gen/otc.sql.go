@@ -321,6 +321,85 @@ func (q *Queries) GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) 
 	return i, err
 }
 
+const getInvoiceDocument = `-- name: GetInvoiceDocument :one
+SELECT d.content_type, d.bytes
+FROM invoice_documents d
+JOIN invoices i ON i.id = d.invoice_id
+WHERE i.public_id = $1
+`
+
+type GetInvoiceDocumentRow struct {
+	ContentType string `json:"content_type"`
+	Bytes       []byte `json:"bytes"`
+}
+
+// GetInvoiceDocument streams a stored PDF by the invoice's public_id (the
+// capability URL); content_type + bytes are all the file route needs.
+func (q *Queries) GetInvoiceDocument(ctx context.Context, publicID uuid.UUID) (GetInvoiceDocumentRow, error) {
+	row := q.db.QueryRow(ctx, getInvoiceDocument, publicID)
+	var i GetInvoiceDocumentRow
+	err := row.Scan(&i.ContentType, &i.Bytes)
+	return i, err
+}
+
+const getInvoiceForRender = `-- name: GetInvoiceForRender :one
+SELECT
+  i.id, i.public_id, i.status, i.currency,
+  i.subtotal, i.tax_total, i.grand_total, i.issued_at, i.due_at,
+  o.public_id AS order_public_id, o.po_number,
+  o.billing_address, o.shipping_address,
+  c.name AS customer_name,
+  org.name AS organization_name
+FROM invoices i
+JOIN orders o ON o.id = i.order_id
+JOIN customers c ON c.id = i.customer_id
+JOIN organizations org ON org.id = o.organization_id
+WHERE i.id = $1
+`
+
+type GetInvoiceForRenderRow struct {
+	ID               int64              `json:"id"`
+	PublicID         uuid.UUID          `json:"public_id"`
+	Status           string             `json:"status"`
+	Currency         string             `json:"currency"`
+	Subtotal         string             `json:"subtotal"`
+	TaxTotal         string             `json:"tax_total"`
+	GrandTotal       string             `json:"grand_total"`
+	IssuedAt         pgtype.Timestamptz `json:"issued_at"`
+	DueAt            pgtype.Timestamptz `json:"due_at"`
+	OrderPublicID    uuid.UUID          `json:"order_public_id"`
+	PoNumber         *string            `json:"po_number"`
+	BillingAddress   []byte             `json:"billing_address"`
+	ShippingAddress  []byte             `json:"shipping_address"`
+	CustomerName     string             `json:"customer_name"`
+	OrganizationName string             `json:"organization_name"`
+}
+
+// GetInvoiceForRender gathers everything the PDF template needs in one row:
+// the invoice, its order context, and the customer/organization names.
+func (q *Queries) GetInvoiceForRender(ctx context.Context, id int64) (GetInvoiceForRenderRow, error) {
+	row := q.db.QueryRow(ctx, getInvoiceForRender, id)
+	var i GetInvoiceForRenderRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.Status,
+		&i.Currency,
+		&i.Subtotal,
+		&i.TaxTotal,
+		&i.GrandTotal,
+		&i.IssuedAt,
+		&i.DueAt,
+		&i.OrderPublicID,
+		&i.PoNumber,
+		&i.BillingAddress,
+		&i.ShippingAddress,
+		&i.CustomerName,
+		&i.OrganizationName,
+	)
+	return i, err
+}
+
 const getOrderItem = `-- name: GetOrderItem :one
 SELECT id, order_id, product_id, sku, name, quantity, unit, unit_price, tax_amount, row_total FROM order_items WHERE id = $1 AND order_id = $2
 `
@@ -798,4 +877,23 @@ func (q *Queries) SumOpenInvoices(ctx context.Context, customerID int64) (string
 	var open_total string
 	err := row.Scan(&open_total)
 	return open_total, err
+}
+
+const upsertInvoiceDocument = `-- name: UpsertInvoiceDocument :exec
+INSERT INTO invoice_documents (invoice_id, content_type, bytes)
+VALUES ($1, $2, $3)
+ON CONFLICT (invoice_id)
+DO UPDATE SET content_type = EXCLUDED.content_type, bytes = EXCLUDED.bytes, generated_at = now()
+`
+
+type UpsertInvoiceDocumentParams struct {
+	InvoiceID   int64  `json:"invoice_id"`
+	ContentType string `json:"content_type"`
+	Bytes       []byte `json:"bytes"`
+}
+
+// UpsertInvoiceDocument stores (or replaces, on regeneration) the rendered PDF.
+func (q *Queries) UpsertInvoiceDocument(ctx context.Context, arg UpsertInvoiceDocumentParams) error {
+	_, err := q.db.Exec(ctx, upsertInvoiceDocument, arg.InvoiceID, arg.ContentType, arg.Bytes)
+	return err
 }

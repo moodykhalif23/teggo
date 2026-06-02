@@ -177,6 +177,13 @@ type Invoice struct {
 	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
+type InvoiceDocument struct {
+	InvoiceID   int64     `json:"invoice_id"`
+	ContentType string    `json:"content_type"`
+	Bytes       []byte    `json:"bytes"`
+	GeneratedAt time.Time `json:"generated_at"`
+}
+
 type InvoiceItem struct {
 	ID          int64  `json:"id"`
 	InvoiceID   int64  `json:"invoice_id"`
