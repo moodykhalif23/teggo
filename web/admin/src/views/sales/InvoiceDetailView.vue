@@ -117,7 +117,7 @@ function paySev(s: string) {
 
       <div class="meta">
         <span v-if="invoice.due_at">Due {{ new Date(invoice.due_at).toLocaleDateString() }}</span>
-        <span v-if="invoice.pdf_url"><i class="pi pi-file-pdf" /> {{ invoice.pdf_url }}</span>
+        <a v-if="invoice.pdf_url" :href="invoice.pdf_url" target="_blank" rel="noopener" class="pdf"><i class="pi pi-file-pdf" /> Download PDF</a>
         <Button label="Regenerate PDF" icon="pi pi-refresh" size="small" text :loading="regenerating" @click="regeneratePdf" />
       </div>
 

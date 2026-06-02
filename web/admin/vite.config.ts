@@ -18,6 +18,8 @@ export default defineConfig({
       // for direct calls in other environments.
       '/admin': { target: 'http://localhost:8080', changeOrigin: true },
       '/storefront': { target: 'http://localhost:8080', changeOrigin: true },
+      // Invoice PDF capability URLs are served by the API.
+      '/files': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },
 })

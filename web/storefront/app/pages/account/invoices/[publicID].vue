@@ -23,6 +23,11 @@ const { data: invoice, error } = await useAsyncData(`invoice-${publicID}`, async
 
 useSeoMeta({ title: () => (invoice.value ? `Invoice ${invoice.value.public_id.slice(0, 8)} — Teggo` : 'Invoice') })
 
+// pdf_url is an API-relative capability URL; resolve it against the API base so
+// the browser download reaches the Go service (not the Nuxt origin).
+const apiBase = useRuntimeConfig().public.apiBase
+const pdfHref = computed(() => (invoice.value?.pdf_url ? `${apiBase}${invoice.value.pdf_url}` : ''))
+
 function sev(s?: string) {
   return s === 'paid' ? 'success' : s === 'overdue' ? 'danger' : s === 'void' ? 'secondary' : 'info'
 }
@@ -40,7 +45,7 @@ function sev(s?: string) {
       </div>
       <div class="meta">
         <span v-if="invoice.due_at">Due {{ new Date(invoice.due_at).toLocaleDateString() }}</span>
-        <a v-if="invoice.pdf_url" :href="invoice.pdf_url" target="_blank" rel="noopener"><i class="pi pi-file-pdf" /> Download PDF</a>
+        <a v-if="pdfHref" :href="pdfHref" target="_blank" rel="noopener"><i class="pi pi-file-pdf" /> Download PDF</a>
       </div>
 
       <DataTable :value="invoice.items" dataKey="id" stripedRows>
