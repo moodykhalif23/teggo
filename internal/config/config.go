@@ -23,9 +23,9 @@ type Config struct {
 // validating required values.
 func Load() (Config, error) {
 	c := Config{
-		DatabaseURL: getenv("DATABASE_URL", ""),
-		HTTPPort:    getenv("HTTP_PORT", "8080"),
-		JWTSecret:   getenv("JWT_SECRET", ""),
+		DatabaseURL:  getenv("DATABASE_URL", ""),
+		HTTPPort:     getenv("HTTP_PORT", "8080"),
+		JWTSecret:    getenv("JWT_SECRET", ""),
 		Env:          getenv("ENV", "development"),
 		LogLevel:     getenv("LOG_LEVEL", "info"),
 		GotenbergURL: getenv("GOTENBERG_URL", ""),
