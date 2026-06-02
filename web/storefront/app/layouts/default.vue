@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+
+const { isAuthenticated, logout } = useAuth()
+const router = useRouter()
+
+function signOut() {
+  logout()
+  router.push('/')
+}
 </script>
 
 <template>
@@ -11,7 +19,13 @@ import Button from 'primevue/button'
         <NuxtLink to="/c/all">Catalog</NuxtLink>
       </nav>
       <span class="spacer" />
-      <Button icon="pi pi-shopping-cart" label="Cart" severity="secondary" outlined />
+      <NuxtLink to="/cart">
+        <Button icon="pi pi-shopping-cart" label="Cart" severity="secondary" outlined />
+      </NuxtLink>
+      <NuxtLink v-if="!isAuthenticated" to="/login">
+        <Button icon="pi pi-user" label="Sign in" text />
+      </NuxtLink>
+      <Button v-else icon="pi pi-sign-out" label="Sign out" text @click="signOut" />
     </header>
 
     <main class="content">

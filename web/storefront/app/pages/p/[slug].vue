@@ -4,7 +4,9 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 
 const route = useRoute()
+const router = useRouter()
 const client = useClient()
+const { isAuthenticated } = useAuth()
 
 const { data: product, error } = await useAsyncData(
   () => `product-${route.params.slug}`,
@@ -16,6 +18,31 @@ const { data: product, error } = await useAsyncData(
     return data
   },
 )
+
+const adding = ref(false)
+const feedback = ref<{ severity: 'success' | 'warn' | 'error'; text: string } | null>(null)
+
+async function addToCart() {
+  if (!product.value) return
+  if (!isAuthenticated.value) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  feedback.value = null
+  adding.value = true
+  const { error: err, response } = await client.POST('/storefront/cart/items', {
+    body: { product_public_id: product.value.public_id, quantity: '1' },
+  })
+  adding.value = false
+  if (!err) {
+    feedback.value = { severity: 'success', text: 'Added to your cart.' }
+    return
+  }
+  feedback.value =
+    response?.status === 409
+      ? { severity: 'warn', text: 'No price available — request a quote for this product.' }
+      : { severity: 'error', text: 'Could not add to cart.' }
+}
 
 useSeoMeta({
   title: () => (product.value ? `${product.value.name} — Teggo Store` : 'Product'),
@@ -38,8 +65,9 @@ useSeoMeta({
         <h1>{{ product.name }}</h1>
         <Tag :value="product.status" severity="secondary" />
         <p v-if="product.description" class="desc">{{ product.description }}</p>
+        <Message v-if="feedback" :severity="feedback.severity" :closable="false" class="feedback">{{ feedback.text }}</Message>
         <div class="actions">
-          <Button label="Add to cart" icon="pi pi-shopping-cart" />
+          <Button label="Add to cart" icon="pi pi-shopping-cart" :loading="adding" @click="addToCart" />
           <Button label="Request a quote" icon="pi pi-file-edit" severity="secondary" outlined />
         </div>
       </div>

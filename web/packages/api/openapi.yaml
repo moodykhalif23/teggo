@@ -14,6 +14,7 @@ tags:
   - { name: Catalog }
   - { name: Customers }
   - { name: Pricing }
+  - { name: Cart }
 
 components:
   securitySchemes:
@@ -402,6 +403,55 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/CombinedPrice' } }
+
+    CartItem:
+      type: object
+      required: [id, product_id, sku, name, quantity, unit, unit_price, row_total]
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        sku: { type: string }
+        name: { type: string }
+        quantity: { type: string }
+        unit: { type: string }
+        unit_price: { type: string }
+        row_total: { type: string }
+
+    Cart:
+      type: object
+      required: [public_id, currency, items, subtotal]
+      properties:
+        public_id: { type: string, format: uuid }
+        currency: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/CartItem' } }
+        subtotal: { type: string }
+
+    AddCartItem:
+      type: object
+      required: [product_public_id]
+      properties:
+        product_public_id: { type: string, format: uuid }
+        quantity: { type: string }
+        unit: { type: string }
+
+    UpdateCartItem:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: string }
+
+    RevalidateResult:
+      type: object
+      properties:
+        changed:
+          type: array
+          items:
+            type: object
+            required: [item_id, old_price, new_price]
+            properties:
+              item_id: { type: integer, format: int64 }
+              old_price: { type: string }
+              new_price: { type: string }
 
   responses:
     ErrorResponse:
@@ -918,3 +968,62 @@ paths:
         '200':
           description: OK
           content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperCombinedPrice' } } }
+
+  /storefront/cart:
+    get:
+      tags: [Cart]
+      operationId: storefrontGetCart
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } }
+
+  /storefront/cart/items:
+    post:
+      tags: [Cart]
+      operationId: storefrontAddCartItem
+      security: [{ storefrontAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AddCartItem' } } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } }
+        '409':
+          description: Price on request (no price resolved)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /storefront/cart/items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [Cart]
+      operationId: storefrontUpdateCartItem
+      security: [{ storefrontAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateCartItem' } } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } }
+    delete:
+      tags: [Cart]
+      operationId: storefrontRemoveCartItem
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } }
+
+  /storefront/cart/revalidate:
+    post:
+      tags: [Cart]
+      operationId: storefrontRevalidateCart
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/RevalidateResult' } } }
