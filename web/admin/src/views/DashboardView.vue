@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/lib/client'
+import BarChart from '@/components/BarChart.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -45,6 +46,11 @@ async function load() {
   kpis.value = out
 }
 
+// A KPI is charted only when its value is numeric (counts, not "—").
+const chartKpis = computed(() => kpis.value.filter((k) => typeof k.value === 'number'))
+const chartLabels = computed(() => chartKpis.value.map((k) => k.label))
+const chartValues = computed(() => chartKpis.value.map((k) => Number(k.value)))
+
 onMounted(load)
 </script>
 
@@ -66,6 +72,20 @@ onMounted(load)
         </template>
       </Card>
     </div>
+
+    <Card v-if="chartKpis.length" class="overview">
+      <template #title>At a glance</template>
+      <template #content>
+        <BarChart :labels="chartLabels" :values="chartValues" name="Records" />
+      </template>
+    </Card>
+
+    <Card v-if="chartValues.length" class="chartcard">
+      <template #title>Overview</template>
+      <template #content>
+        <BarChart :labels="chartLabels" :values="chartValues" name="Records" />
+      </template>
+    </Card>
 
     <Card class="session">
       <template #title>Session</template>
@@ -90,6 +110,7 @@ onMounted(load)
 .kpi-row i { font-size: 1.6rem; color: var(--p-primary-color, #0ea5e9); }
 .kpi-value { font-size: 1.7rem; font-weight: 700; line-height: 1; }
 .kpi-label { color: var(--p-text-muted-color, #64748b); font-size: 0.85rem; margin-top: 0.2rem; }
+.chartcard { margin-bottom: 1rem; }
 .session { margin-top: 0.5rem; }
 .tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 </style>
