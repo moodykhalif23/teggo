@@ -53,6 +53,17 @@ type Category struct {
 	SortOrder      int32  `json:"sort_order"`
 }
 
+type CombinedPrice struct {
+	CustomerID        int64     `json:"customer_id"`
+	ProductID         int64     `json:"product_id"`
+	Unit              string    `json:"unit"`
+	MinQuantity       string    `json:"min_quantity"`
+	Currency          string    `json:"currency"`
+	Value             string    `json:"value"`
+	SourcePriceListID *int64    `json:"source_price_list_id"`
+	ComputedAt        time.Time `json:"computed_at"`
+}
+
 type Customer struct {
 	ID                 int64              `json:"id"`
 	PublicID           uuid.UUID          `json:"public_id"`
@@ -111,6 +122,39 @@ type Organization struct {
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type Price struct {
+	ID          int64              `json:"id"`
+	PriceListID int64              `json:"price_list_id"`
+	ProductID   int64              `json:"product_id"`
+	Unit        string             `json:"unit"`
+	MinQuantity string             `json:"min_quantity"`
+	Value       string             `json:"value"`
+	ValidFrom   pgtype.Timestamptz `json:"valid_from"`
+	ValidTo     pgtype.Timestamptz `json:"valid_to"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
+type PriceList struct {
+	ID             int64              `json:"id"`
+	OrganizationID int64              `json:"organization_id"`
+	Name           string             `json:"name"`
+	Currency       string             `json:"currency"`
+	IsDefault      bool               `json:"is_default"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type PriceListAssignment struct {
+	ID              int64  `json:"id"`
+	PriceListID     int64  `json:"price_list_id"`
+	CustomerID      *int64 `json:"customer_id"`
+	CustomerGroupID *int64 `json:"customer_group_id"`
+	WebsiteID       *int64 `json:"website_id"`
+	Priority        int32  `json:"priority"`
 }
 
 type Product struct {

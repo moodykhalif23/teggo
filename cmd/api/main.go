@@ -13,6 +13,7 @@ import (
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/config"
 	"b2bcommerce/internal/db"
+	"b2bcommerce/internal/queue"
 	"b2bcommerce/internal/server"
 	"b2bcommerce/internal/store"
 )
@@ -32,7 +33,14 @@ func main() {
 
 	st := store.New(pool)
 	issuer := auth.NewIssuer(cfg.JWTSecret, cfg.JWTTTL)
-	handler := server.New(st, issuer)
+
+	// Insert-only river client so the API can enqueue background work
+	// (e.g. combined_prices recompute). The worker process runs the jobs.
+	enq, err := queue.NewEnqueuer(pool)
+	if err != nil {
+		log.Fatalf("queue: %v", err)
+	}
+	handler := server.New(st, issuer, server.WithRecompute(enq))
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,

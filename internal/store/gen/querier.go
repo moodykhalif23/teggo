@@ -28,6 +28,13 @@ type Querier interface {
 	// Every query is organization-scoped (tenant isolation enforced at the query layer).
 	CreateCustomerGroup(ctx context.Context, arg CreateCustomerGroupParams) (CustomerGroup, error)
 	CreateCustomerUser(ctx context.Context, arg CreateCustomerUserParams) (CreateCustomerUserRow, error)
+	// Pricing engine queries — Implementation Pack 1 §4 + §12.1.
+	// NUMERIC params arrive as strings (sqlc money override), so quantity
+	// comparisons cast explicitly with ::numeric.
+	// ===== Price lists =========================================================
+	CreatePriceList(ctx context.Context, arg CreatePriceListParams) (PriceList, error)
+	// ===== Assignments =========================================================
+	CreatePriceListAssignment(ctx context.Context, arg CreatePriceListAssignmentParams) (PriceListAssignment, error)
 	// Catalog & PIM queries — Implementation Pack 1 §3, §12.3 (subtree), §12.5 (facets).
 	// Storefront product reads live in products.sql; this file is the admin PIM surface
 	// plus the category-subtree and JSONB-facet reads used by the storefront listing.
@@ -37,14 +44,26 @@ type Querier interface {
 	// (cycle-safe recursive CTE — Pack 1 §12.2). Used to inherit price list /
 	// settings down the account tree.
 	CustomerAncestors(ctx context.Context, arg CustomerAncestorsParams) ([]CustomerAncestorsRow, error)
+	// CustomersAffectedByPriceList returns every customer whose resolved price may
+	// change when this price list changes (direct, via group, or via any website
+	// assignment of the list). Used to fan out recompute jobs.
+	CustomersAffectedByPriceList(ctx context.Context, id int64) ([]int64, error)
+	DeleteAssignment(ctx context.Context, id int64) (int64, error)
+	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
 	// FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
 	// backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like
 	// {"color":"red","voltage":"24"}.
 	FilterActiveProductsByAttributes(ctx context.Context, arg FilterActiveProductsByAttributesParams) ([]Product, error)
 	GetCategory(ctx context.Context, arg GetCategoryParams) (Category, error)
 	GetCategoryBySlug(ctx context.Context, arg GetCategoryBySlugParams) (Category, error)
+	// ===== combined_prices (precomputed read path) =============================
+	// GetCombinedPrice is the O(1) storefront read: the resolved tier for a qty.
+	// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency
+	GetCombinedPrice(ctx context.Context, arg GetCombinedPriceParams) (GetCombinedPriceRow, error)
 	GetCustomer(ctx context.Context, arg GetCustomerParams) (Customer, error)
 	GetCustomerByPublicID(ctx context.Context, arg GetCustomerByPublicIDParams) (Customer, error)
+	GetDefaultWebsite(ctx context.Context, organizationID int64) (GetDefaultWebsiteRow, error)
+	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
 	GetProductBySlug(ctx context.Context, arg GetProductBySlugParams) (GetProductBySlugRow, error)
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
@@ -53,22 +72,42 @@ type Querier interface {
 	// ListActiveProductsInCategory returns active products in a category's whole
 	// subtree (storefront browse, §12.3). $1 org, $2 root category, $3 limit, $4 offset.
 	ListActiveProductsInCategory(ctx context.Context, arg ListActiveProductsInCategoryParams) ([]ListActiveProductsInCategoryRow, error)
+	ListAssignmentsForList(ctx context.Context, priceListID int64) ([]PriceListAssignment, error)
 	ListAttributeFamilies(ctx context.Context, organizationID int64) ([]AttributeFamily, error)
 	ListAttributes(ctx context.Context, organizationID int64) ([]Attribute, error)
 	ListCategories(ctx context.Context, organizationID int64) ([]Category, error)
+	ListCombinedPricesForCustomer(ctx context.Context, arg ListCombinedPricesForCustomerParams) ([]CombinedPrice, error)
 	ListCustomerAddresses(ctx context.Context, customerID int64) ([]CustomerAddress, error)
 	ListCustomerGroups(ctx context.Context, organizationID int64) ([]CustomerGroup, error)
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
 	ListFamilyAttributes(ctx context.Context, familyID int64) ([]ListFamilyAttributesRow, error)
+	ListPriceLists(ctx context.Context, organizationID int64) ([]PriceList, error)
+	ListPricesForList(ctx context.Context, priceListID int64) ([]Price, error)
 	ListProductCategoryIDs(ctx context.Context, productID int64) ([]int64, error)
 	ListProductsAdmin(ctx context.Context, arg ListProductsAdminParams) ([]Product, error)
+	// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
+	// currency: for each product it picks the winning candidate list (highest
+	// level, then priority) that has a valid price, and flattens that list's tiers.
+	// Run after DeleteCombinedPricesForCustomerCurrency inside one tx.
+	// params: $1 customer_id, $2 website_id, $3 currency, $4 at
+	RecomputeCombinedPricesForCustomer(ctx context.Context, arg RecomputeCombinedPricesForCustomerParams) error
 	RemoveProductFromCategory(ctx context.Context, arg RemoveProductFromCategoryParams) error
+	// ===== Resolution (§12.1, on-the-fly) ======================================
+	// ResolvePrice returns the single unit price plus the source price list for a
+	// (customer, product, quantity, currency, website, at). Priority: customer (3)
+	// > group (2) > website default (1); higher priority wins within a level; ties
+	// broken by the most specific qty tier <= requested.
+	// params: $1 customer_id, $2 product_id, $3 quantity, $4 currency, $5 website_id, $6 at
+	ResolvePrice(ctx context.Context, arg ResolvePriceParams) (ResolvePriceRow, error)
 	SoftDeleteCustomer(ctx context.Context, arg SoftDeleteCustomerParams) (int64, error)
 	SoftDeleteProduct(ctx context.Context, arg SoftDeleteProductParams) (int64, error)
 	TouchUserLogin(ctx context.Context, id int64) error
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
+	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+	// ===== Prices (tiers) ======================================================
+	UpsertPrice(ctx context.Context, arg UpsertPriceParams) (Price, error)
 }
 
 var _ Querier = (*Queries)(nil)
