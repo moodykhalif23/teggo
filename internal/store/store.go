@@ -8,6 +8,8 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"b2bcommerce/internal/store/gen"
 )
 
 type Store struct {
@@ -15,6 +17,13 @@ type Store struct {
 }
 
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+
+// Queries returns the sqlc-generated, type-safe query layer bound to the pool.
+// New modules use this; the hand-written methods below are being migrated onto it.
+func (s *Store) Queries() *gen.Queries { return gen.New(s.pool) }
+
+// Pool exposes the underlying pool for transactions and the rare hand-written query.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // Ping verifies database connectivity (used by readiness checks).
 func (s *Store) Ping(ctx context.Context) error {
