@@ -15,7 +15,7 @@ frontends are pure API consumers.
 | Admin UI | **Vue 3** SPA (Vite · Pinia · Vue Router · **PrimeVue**) — login-gated back office |
 | Storefront | **Nuxt** SSR (**PrimeVue**) — crawlable, customer-facing |
 | Frontend ↔ API | **OpenAPI 3.1** contract → generated **TypeScript client** (`openapi-typescript` + `openapi-fetch`) |
-| PDF / Edge / Deploy | Gotenberg (planned) · Nginx (planned) · Docker Compose |
+| PDF / Edge / Deploy | Gotenberg (invoice PDFs) · Nginx (planned) · Docker Compose |
 
 The full product specification lives in [`docs/`](docs/) (PRD v0.2 + Implementation Packs 1–3).
 **Current state, implemented modules, gaps, and the phased roadmap are in [STATUS.md](STATUS.md).**

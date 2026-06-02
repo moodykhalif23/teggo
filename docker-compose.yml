@@ -46,9 +46,18 @@ services:
     environment:
       DATABASE_URL: postgres://b2b:b2b@postgres:5432/b2b?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please-32-bytes-min}
+      GOTENBERG_URL: http://gotenberg:3000
     depends_on:
       migrate:
         condition: service_completed_successfully
+      gotenberg:
+        condition: service_started
+
+  # Headless-Chromium PDF rendering for invoices (PRD §16).
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    expose:
+      - "3000"
 
 volumes:
   pgdata:

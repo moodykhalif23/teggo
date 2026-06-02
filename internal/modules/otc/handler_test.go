@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/auth"
+	"b2bcommerce/internal/pdf"
 	"b2bcommerce/internal/queue/jobs"
 	"b2bcommerce/internal/server"
 	"b2bcommerce/internal/store"
@@ -29,7 +30,7 @@ const (
 type syncPDF struct{ pool *pgxpool.Pool }
 
 func (s syncPDF) EnqueueInvoicePDF(ctx context.Context, invoiceID int64) error {
-	return jobs.GenerateInvoicePDF(ctx, s.pool, invoiceID)
+	return jobs.GenerateInvoicePDF(ctx, s.pool, pdf.Stub{}, invoiceID)
 }
 
 func newServer(t *testing.T) (http.Handler, *auth.Issuer, *pgxpool.Pool) {
@@ -188,10 +189,28 @@ func TestInvoiceIssueFreezesAndGeneratesPDF(t *testing.T) {
 	}
 	_ = json.Unmarshal(rr.Body.Bytes(), &got)
 	if got.PdfURL == nil || *got.PdfURL == "" {
-		t.Errorf("pdf_url should be set after async generation, got %v", got.PdfURL)
+		t.Fatalf("pdf_url should be set after async generation, got %v", got.PdfURL)
 	}
 	if len(got.Items) != 1 {
 		t.Errorf("invoice items frozen from order: want 1, got %d", len(got.Items))
+	}
+
+	// The capability URL serves a real PDF, unauthenticated, to anyone with the
+	// (unguessable) link.
+	dl := do(t, h, http.MethodGet, *got.PdfURL, "", nil)
+	if dl.Code != http.StatusOK {
+		t.Fatalf("download PDF: want 200, got %d (%s)", dl.Code, dl.Body.String())
+	}
+	if ct := dl.Header().Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("PDF content-type: want application/pdf, got %q", ct)
+	}
+	if body := dl.Body.Bytes(); len(body) < 4 || string(body[:4]) != "%PDF" {
+		t.Errorf("downloaded body is not a PDF (prefix %q)", body[:min(4, len(body))])
+	}
+
+	// An unknown invoice id is a 404.
+	if nf := do(t, h, http.MethodGet, "/files/invoices/00000000-0000-0000-0000-000000000000.pdf", "", nil); nf.Code != http.StatusNotFound {
+		t.Errorf("unknown PDF: want 404, got %d", nf.Code)
 	}
 }
 

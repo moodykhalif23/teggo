@@ -91,7 +91,11 @@ production-ready:
 - **Tax:** never computed — `tax_total`/`tax_amount` are always `0` (no tax engine / local VAT).
 - **Payments are manual records only:** no gateway adapters (no Stripe / M-Pesa-Daraja);
   `refund` flips state without calling a processor.
-- **Invoice PDF is a placeholder URL** — no real Gotenberg render/upload.
+- **Invoice PDF — real (Gotenberg).** The async job renders an HTML invoice → PDF via Gotenberg
+  (stub PDF when `GOTENBERG_URL` is unset), stores the bytes in `invoice_documents`, and the API
+  streams them at a capability URL `GET /files/invoices/{publicID}.pdf` (unguessable UUID, no auth —
+  works as a plain browser download). Remaining: object storage instead of DB bytea; signed/expiring
+  URLs if capability URLs aren't acceptable; quote PDFs.
 - **Quote expiry** is enforced at accept-time but there is **no scheduled job** to auto-flip
   expired quotes; no quote PDF.
 - **Email** (`send_email` job) just logs — no SES/SMTP/Mailgun adapter; no order/quote/invoice emails.
@@ -142,7 +146,9 @@ Close the §5 gaps that block a real launch:
 - **Full credit & approval gate (§10)**: migrate `approval_requests`; enforce `spending_limit`
   + `credit_limit` at placement with approval routing.
 - **One payment gateway** end-to-end (M-Pesa/Daraja or Stripe) via an adapter interface.
-- **Real invoice PDF** (Gotenberg) + object storage; **transactional email** adapter + templates.
+- **Invoice PDF object storage** (move `invoice_documents` bytea → S3/MinIO) + signed URLs;
+  quote PDFs reusing the renderer. (Gotenberg rendering itself is done.) **Transactional email**
+  adapter + templates.
 - **Tax**: rules-based local VAT provider; snapshot onto order/invoice lines.
 - **Full-text search** (Postgres FTS `tsvector`/GIN) + facets in `ProductList`; enforce
   `catalog_visibility`.
