@@ -788,6 +788,182 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/orders/{id}/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListShipments"];
+        put?: never;
+        post: operations["adminCreateShipment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/shipments/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["adminPatchShipmentStatus"];
+        trace?: never;
+    };
+    "/admin/orders/{id}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListInvoicesForOrder"];
+        put?: never;
+        post: operations["adminIssueInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/invoices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetInvoice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/invoices/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminRegenerateInvoicePdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/invoices/{id}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListInvoicePayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminRecordPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminRefundPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["storefrontListInvoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/invoices/{publicID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        get: operations["storefrontGetInvoice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1356,6 +1532,123 @@ export interface components {
         };
         ListWrapperOrderSummary: {
             items?: components["schemas"]["OrderSummary"][];
+        };
+        Shipment: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            order_id: number;
+            carrier?: string | null;
+            tracking_number?: string | null;
+            /** @enum {string} */
+            status: "pending" | "shipped" | "delivered" | "returned";
+            /** Format: date-time */
+            shipped_at?: string | null;
+        };
+        ShipmentInput: {
+            carrier?: string | null;
+            tracking_number?: string | null;
+            items: {
+                /** Format: int64 */
+                order_item_id: number;
+                quantity: string;
+            }[];
+        };
+        ShipmentStatusPatch: {
+            /** @enum {string} */
+            status: "pending" | "shipped" | "delivered" | "returned";
+        };
+        InvoiceItem: {
+            /** Format: int64 */
+            id: number;
+            description: string;
+            quantity: string;
+            unit_price: string;
+            tax_amount?: string;
+            row_total: string;
+        };
+        InvoiceDetail: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** @enum {string} */
+            status: "draft" | "issued" | "paid" | "overdue" | "void";
+            currency: string;
+            subtotal: string;
+            tax_total: string;
+            grand_total: string;
+            /** Format: date-time */
+            due_at?: string | null;
+            pdf_url?: string | null;
+            items: components["schemas"]["InvoiceItem"][];
+        };
+        InvoiceSummary: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            order_id: number;
+            status: string;
+            currency: string;
+            subtotal?: string;
+            tax_total?: string;
+            grand_total: string;
+            /** Format: date-time */
+            issued_at?: string | null;
+            /** Format: date-time */
+            due_at?: string | null;
+            pdf_url?: string | null;
+        };
+        Payment: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            invoice_id?: number | null;
+            /** Format: int64 */
+            order_id?: number | null;
+            /** Format: int64 */
+            customer_id: number;
+            /** @enum {string} */
+            method: "card" | "ach" | "invoice" | "po" | "mpesa";
+            gateway?: string | null;
+            gateway_reference?: string | null;
+            amount: string;
+            currency: string;
+            /** @enum {string} */
+            status: "pending" | "authorized" | "captured" | "failed" | "refunded";
+            /** Format: date-time */
+            captured_at?: string | null;
+        };
+        PaymentInput: {
+            /** Format: int64 */
+            invoice_id?: number | null;
+            /** Format: int64 */
+            order_id?: number | null;
+            /** Format: int64 */
+            customer_id: number;
+            /** @enum {string} */
+            method: "card" | "ach" | "invoice" | "po" | "mpesa";
+            gateway?: string | null;
+            gateway_reference?: string | null;
+            amount: string;
+            currency: string;
+            /** @enum {string} */
+            status?: "pending" | "authorized" | "captured" | "failed" | "refunded";
+        };
+        ListWrapperShipment: {
+            items?: components["schemas"]["Shipment"][];
+        };
+        ListWrapperInvoiceSummary: {
+            items?: components["schemas"]["InvoiceSummary"][];
+        };
+        ListWrapperPayment: {
+            items?: components["schemas"]["Payment"][];
         };
     };
     responses: {
@@ -2945,6 +3238,287 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderDetail"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListShipments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperShipment"];
+                };
+            };
+        };
+    };
+    adminCreateShipment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipmentInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shipment"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminPatchShipmentStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipmentStatusPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shipment"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListInvoicesForOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperInvoiceSummary"];
+                };
+            };
+        };
+    };
+    adminIssueInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminGetInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminRegenerateInvoicePdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enqueued?: boolean;
+                    };
+                };
+            };
+        };
+    };
+    adminListInvoicePayments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperPayment"];
+                };
+            };
+        };
+    };
+    adminRecordPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Payment"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminRefundPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Payment"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontListInvoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperInvoiceSummary"];
+                };
+            };
+        };
+    };
+    storefrontGetInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
                 };
             };
             404: components["responses"]["ErrorResponse"];

@@ -104,6 +104,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/sales/OrderDetailView.vue'),
         meta: { permission: 'order.view' },
       },
+      {
+        path: 'invoices/:id',
+        name: 'invoice-detail',
+        component: () => import('@/views/sales/InvoiceDetailView.vue'),
+        meta: { permission: 'invoice.view' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

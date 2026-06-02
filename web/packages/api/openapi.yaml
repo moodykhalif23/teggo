@@ -16,6 +16,7 @@ tags:
   - { name: Pricing }
   - { name: Cart }
   - { name: Sales }
+  - { name: OrderToCash }
 
 components:
   securitySchemes:
@@ -653,6 +654,125 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/OrderSummary' } }
+
+    Shipment:
+      type: object
+      required: [id, public_id, order_id, status]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        order_id: { type: integer, format: int64 }
+        carrier: { type: string, nullable: true }
+        tracking_number: { type: string, nullable: true }
+        status: { type: string, enum: [pending, shipped, delivered, returned] }
+        shipped_at: { type: string, format: date-time, nullable: true }
+
+    ShipmentInput:
+      type: object
+      required: [items]
+      properties:
+        carrier: { type: string, nullable: true }
+        tracking_number: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            required: [order_item_id, quantity]
+            properties:
+              order_item_id: { type: integer, format: int64 }
+              quantity: { type: string }
+
+    ShipmentStatusPatch:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, shipped, delivered, returned] }
+
+    InvoiceItem:
+      type: object
+      required: [id, description, quantity, unit_price, row_total]
+      properties:
+        id: { type: integer, format: int64 }
+        description: { type: string }
+        quantity: { type: string }
+        unit_price: { type: string }
+        tax_amount: { type: string }
+        row_total: { type: string }
+
+    InvoiceDetail:
+      type: object
+      required: [id, public_id, status, currency, subtotal, tax_total, grand_total, items]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        status: { type: string, enum: [draft, issued, paid, overdue, void] }
+        currency: { type: string }
+        subtotal: { type: string }
+        tax_total: { type: string }
+        grand_total: { type: string }
+        due_at: { type: string, format: date-time, nullable: true }
+        pdf_url: { type: string, nullable: true }
+        items: { type: array, items: { $ref: '#/components/schemas/InvoiceItem' } }
+
+    InvoiceSummary:
+      type: object
+      required: [id, public_id, order_id, status, currency, grand_total]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        order_id: { type: integer, format: int64 }
+        status: { type: string }
+        currency: { type: string }
+        subtotal: { type: string }
+        tax_total: { type: string }
+        grand_total: { type: string }
+        issued_at: { type: string, format: date-time, nullable: true }
+        due_at: { type: string, format: date-time, nullable: true }
+        pdf_url: { type: string, nullable: true }
+
+    Payment:
+      type: object
+      required: [id, public_id, customer_id, method, amount, currency, status]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        invoice_id: { type: integer, format: int64, nullable: true }
+        order_id: { type: integer, format: int64, nullable: true }
+        customer_id: { type: integer, format: int64 }
+        method: { type: string, enum: [card, ach, invoice, po, mpesa] }
+        gateway: { type: string, nullable: true }
+        gateway_reference: { type: string, nullable: true }
+        amount: { type: string }
+        currency: { type: string }
+        status: { type: string, enum: [pending, authorized, captured, failed, refunded] }
+        captured_at: { type: string, format: date-time, nullable: true }
+
+    PaymentInput:
+      type: object
+      required: [customer_id, method, amount, currency]
+      properties:
+        invoice_id: { type: integer, format: int64, nullable: true }
+        order_id: { type: integer, format: int64, nullable: true }
+        customer_id: { type: integer, format: int64 }
+        method: { type: string, enum: [card, ach, invoice, po, mpesa] }
+        gateway: { type: string, nullable: true }
+        gateway_reference: { type: string, nullable: true }
+        amount: { type: string }
+        currency: { type: string }
+        status: { type: string, enum: [pending, authorized, captured, failed, refunded] }
+
+    ListWrapperShipment:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Shipment' } }
+    ListWrapperInvoiceSummary:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/InvoiceSummary' } }
+    ListWrapperPayment:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Payment' } }
 
   responses:
     ErrorResponse:
@@ -1429,4 +1549,122 @@ paths:
       security: [{ storefrontAuth: [] }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrderDetail' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/orders/{id}/shipments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [OrderToCash]
+      operationId: adminListShipments
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperShipment' } } } }
+    post:
+      tags: [OrderToCash]
+      operationId: adminCreateShipment
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ShipmentInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Shipment' } } } }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/shipments/{id}/status:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [OrderToCash]
+      operationId: adminPatchShipmentStatus
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ShipmentStatusPatch' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Shipment' } } } }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/orders/{id}/invoices:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [OrderToCash]
+      operationId: adminListInvoicesForOrder
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperInvoiceSummary' } } } }
+    post:
+      tags: [OrderToCash]
+      operationId: adminIssueInvoice
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/invoices/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [OrderToCash]
+      operationId: adminGetInvoice
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/invoices/{id}/pdf:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [OrderToCash]
+      operationId: adminRegenerateInvoicePdf
+      security: [{ adminAuth: [] }]
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { type: object, properties: { enqueued: { type: boolean } } } } } }
+
+  /admin/invoices/{id}/payments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [OrderToCash]
+      operationId: adminListInvoicePayments
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperPayment' } } } }
+
+  /admin/payments:
+    post:
+      tags: [OrderToCash]
+      operationId: adminRecordPayment
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/payments/{id}/refund:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [OrderToCash]
+      operationId: adminRefundPayment
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/invoices:
+    get:
+      tags: [OrderToCash]
+      operationId: storefrontListInvoices
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperInvoiceSummary' } } } }
+
+  /storefront/invoices/{publicID}:
+    parameters:
+      - { name: publicID, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [OrderToCash]
+      operationId: storefrontGetInvoice
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
