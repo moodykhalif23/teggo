@@ -996,6 +996,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/warehouses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListWarehouses"];
+        put?: never;
+        post: operations["adminCreateWarehouse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inventory/movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListInventoryMovements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inventory/atp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminAtp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inventory/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminProductLevels"];
+        put: operations["adminSetLevelConfig"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inventory/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminInventoryAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1681,6 +1763,90 @@ export interface components {
         };
         ListWrapperPayment: {
             items?: components["schemas"]["Payment"][];
+        };
+        Warehouse: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            organization_id?: number;
+            name: string;
+            is_active: boolean;
+        };
+        InventoryLevel: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            product_id: number;
+            /** Format: int64 */
+            warehouse_id: number;
+            quantity_on_hand: string;
+            quantity_reserved: string;
+            reorder_threshold?: string | null;
+            allow_backorder: boolean;
+        };
+        InventoryLevelRow: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            product_id: number;
+            /** Format: int64 */
+            warehouse_id: number;
+            quantity_on_hand: string;
+            quantity_reserved: string;
+            reorder_threshold?: string | null;
+            allow_backorder: boolean;
+            available: string;
+        };
+        LevelsForProduct: {
+            /** Format: int64 */
+            product_id: number;
+            levels: components["schemas"]["InventoryLevelRow"][];
+        };
+        LevelConfigInput: {
+            /** Format: int64 */
+            warehouse_id: number;
+            reorder_threshold?: string | null;
+            allow_backorder?: boolean;
+        };
+        AdjustmentInput: {
+            /** Format: int64 */
+            product_id: number;
+            /** Format: int64 */
+            warehouse_id: number;
+            /** @enum {string} */
+            type: "receipt" | "return" | "adjustment";
+            quantity: string;
+        };
+        InventoryMovement: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            product_id: number;
+            /** Format: int64 */
+            warehouse_id: number;
+            /** @enum {string} */
+            type: "receipt" | "reservation" | "release" | "fulfillment" | "adjustment" | "return";
+            quantity: string;
+            reference_type?: string | null;
+            /** Format: int64 */
+            reference_id?: number | null;
+            created_by?: string | null;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        ATPResponse: {
+            available?: {
+                [key: string]: string;
+            };
+        };
+        WarehouseInput: {
+            name: string;
+        };
+        ListWrapperWarehouse: {
+            items?: components["schemas"]["Warehouse"][];
+        };
+        ListWrapperInventoryMovement: {
+            items?: components["schemas"]["InventoryMovement"][];
         };
     };
     responses: {
@@ -3592,6 +3758,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListWrapperQuoteSummary"];
+                };
+            };
+        };
+    };
+    adminListWarehouses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperWarehouse"];
+                };
+            };
+        };
+    };
+    adminCreateWarehouse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarehouseInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Warehouse"];
+                };
+            };
+        };
+    };
+    adminListInventoryMovements: {
+        parameters: {
+            query: {
+                product_id: number;
+                warehouse_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperInventoryMovement"];
+                };
+            };
+        };
+    };
+    adminAtp: {
+        parameters: {
+            query: {
+                /** @description comma-separated product ids */
+                product_ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ATPResponse"];
+                };
+            };
+        };
+    };
+    adminProductLevels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LevelsForProduct"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminSetLevelConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LevelConfigInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLevel"];
+                };
+            };
+        };
+    };
+    adminInventoryAdjustment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustmentInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLevel"];
                 };
             };
         };

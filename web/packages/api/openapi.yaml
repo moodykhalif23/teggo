@@ -17,6 +17,7 @@ tags:
   - { name: Cart }
   - { name: Sales }
   - { name: OrderToCash }
+  - { name: Inventory }
 
 components:
   securitySchemes:
@@ -773,6 +774,100 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+
+    Warehouse:
+      type: object
+      required: [id, name, is_active]
+      properties:
+        id: { type: integer, format: int64 }
+        organization_id: { type: integer, format: int64 }
+        name: { type: string }
+        is_active: { type: boolean }
+
+    InventoryLevel:
+      type: object
+      required: [id, product_id, warehouse_id, quantity_on_hand, quantity_reserved, allow_backorder]
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        warehouse_id: { type: integer, format: int64 }
+        quantity_on_hand: { type: string }
+        quantity_reserved: { type: string }
+        reorder_threshold: { type: string, nullable: true }
+        allow_backorder: { type: boolean }
+
+    InventoryLevelRow:
+      type: object
+      required: [id, product_id, warehouse_id, quantity_on_hand, quantity_reserved, allow_backorder, available]
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        warehouse_id: { type: integer, format: int64 }
+        quantity_on_hand: { type: string }
+        quantity_reserved: { type: string }
+        reorder_threshold: { type: string, nullable: true }
+        allow_backorder: { type: boolean }
+        available: { type: string }
+
+    LevelsForProduct:
+      type: object
+      required: [product_id, levels]
+      properties:
+        product_id: { type: integer, format: int64 }
+        levels: { type: array, items: { $ref: '#/components/schemas/InventoryLevelRow' } }
+
+    LevelConfigInput:
+      type: object
+      required: [warehouse_id]
+      properties:
+        warehouse_id: { type: integer, format: int64 }
+        reorder_threshold: { type: string, nullable: true }
+        allow_backorder: { type: boolean }
+
+    AdjustmentInput:
+      type: object
+      required: [product_id, warehouse_id, type, quantity]
+      properties:
+        product_id: { type: integer, format: int64 }
+        warehouse_id: { type: integer, format: int64 }
+        type: { type: string, enum: [receipt, return, adjustment] }
+        quantity: { type: string }
+
+    InventoryMovement:
+      type: object
+      required: [id, product_id, warehouse_id, type, quantity]
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        warehouse_id: { type: integer, format: int64 }
+        type: { type: string, enum: [receipt, reservation, release, fulfillment, adjustment, return] }
+        quantity: { type: string }
+        reference_type: { type: string, nullable: true }
+        reference_id: { type: integer, format: int64, nullable: true }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    ATPResponse:
+      type: object
+      properties:
+        available:
+          type: object
+          additionalProperties: { type: string }
+
+    WarehouseInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    ListWrapperWarehouse:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Warehouse' } }
+    ListWrapperInventoryMovement:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/InventoryMovement' } }
 
   responses:
     ErrorResponse:
@@ -1684,3 +1779,66 @@ paths:
       security: [{ storefrontAuth: [] }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperQuoteSummary' } } } }
+
+  /admin/warehouses:
+    get:
+      tags: [Inventory]
+      operationId: adminListWarehouses
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperWarehouse' } } } }
+    post:
+      tags: [Inventory]
+      operationId: adminCreateWarehouse
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WarehouseInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Warehouse' } } } }
+
+  /admin/inventory/movements:
+    get:
+      tags: [Inventory]
+      operationId: adminListInventoryMovements
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: product_id, in: query, required: true, schema: { type: integer, format: int64 } }
+        - { name: warehouse_id, in: query, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperInventoryMovement' } } } }
+
+  /admin/inventory/atp:
+    get:
+      tags: [Inventory]
+      operationId: adminAtp
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: product_ids, in: query, required: true, schema: { type: string }, description: 'comma-separated product ids' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ATPResponse' } } } }
+
+  /admin/inventory/{productId}:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Inventory]
+      operationId: adminProductLevels
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LevelsForProduct' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Inventory]
+      operationId: adminSetLevelConfig
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LevelConfigInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryLevel' } } } }
+
+  /admin/inventory/adjustments:
+    post:
+      tags: [Inventory]
+      operationId: adminInventoryAdjustment
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdjustmentInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryLevel' } } } }
