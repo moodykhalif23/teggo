@@ -68,7 +68,9 @@ useSeoMeta({
         <Message v-if="feedback" :severity="feedback.severity" :closable="false" class="feedback">{{ feedback.text }}</Message>
         <div class="actions">
           <Button label="Add to cart" icon="pi pi-shopping-cart" :loading="adding" @click="addToCart" />
-          <Button label="Request a quote" icon="pi pi-file-edit" severity="secondary" outlined />
+          <NuxtLink to="/rfq">
+            <Button label="Request a quote" icon="pi pi-file-edit" severity="secondary" outlined />
+          </NuxtLink>
         </div>
       </div>
     </article>
