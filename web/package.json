@@ -1,0 +1,16 @@
+{
+  "name": "oro-web",
+  "private": true,
+  "type": "module",
+  "description": "Frontends for the oro-folk B2B commerce platform (Vue 3 admin SPA + Nuxt storefront SSR), sharing PrimeVue and a generated API client.",
+  "scripts": {
+    "dev:admin": "pnpm --filter @oro/admin dev",
+    "dev:storefront": "pnpm --filter @oro/storefront dev",
+    "build": "pnpm -r build",
+    "build:admin": "pnpm --filter @oro/admin build",
+    "build:storefront": "pnpm --filter @oro/storefront build"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

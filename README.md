@@ -1,7 +1,7 @@
 # b2bcommerce
 
 Runnable starting point for the in-house B2B commerce platform (PRD v0.2 + Implementation Packs 1–3).
-Stack: **Go (chi + sqlc + river)**, **PostgreSQL 16**, with **Vue/Nuxt** frontends added later.
+Stack: **Go (chi + sqlc + river)**, **PostgreSQL 16**, with **Vue/Nuxt** frontends in [`web/`](web/) (Vue 3 admin SPA + Nuxt storefront, both on **PrimeVue** — see [web/README.md](web/README.md)).
 
 ## Quick start (Docker)
 

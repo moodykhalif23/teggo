@@ -1,0 +1,10 @@
+packages:
+  - 'admin'
+  - 'storefront'
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+# Dependencies allowed to run install/build scripts (pnpm blocks these by default).
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - esbuild
