@@ -763,7 +763,11 @@ export interface paths {
         };
         get: operations["storefrontListOrders"];
         put?: never;
-        post?: never;
+        /**
+         * Place an order from the active cart
+         * @description Converts the customer's active cart into a pending order in one transaction. Addresses default to the customer's defaults when omitted.
+         */
+        post: operations["storefrontPlaceOrder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1316,6 +1320,21 @@ export interface components {
             region?: string | null;
             postal_code?: string | null;
             country: string;
+        };
+        OrderAddressInput: {
+            line1: string;
+            line2?: string | null;
+            city: string;
+            region?: string | null;
+            postal_code?: string | null;
+            country: string;
+        };
+        PlaceOrderRequest: {
+            po_number?: string | null;
+            /** Format: date-time */
+            requested_delivery_date?: string | null;
+            billing_address?: components["schemas"]["OrderAddressInput"];
+            shipping_address?: components["schemas"]["OrderAddressInput"];
         };
         ListWrapperCustomerGroup: {
             items?: components["schemas"]["CustomerGroup"][];
@@ -3416,6 +3435,31 @@ export interface operations {
                     "application/json": components["schemas"]["ListWrapperOrderSummary"];
                 };
             };
+        };
+    };
+    storefrontPlaceOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PlaceOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Order created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetail"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
         };
     };
     storefrontGetOrder: {

@@ -407,6 +407,108 @@ func (f fixture) assertRevisionCount(t *testing.T, quoteID int64, want int) {
 	}
 }
 
+// ---- checkout from cart (§9) ---------------------------------------------
+
+// seedCart creates an active cart for the fixture customer on the default
+// website with the given (productID, qty, unitPrice) lines, and returns its id.
+func (f fixture) seedCart(t *testing.T, lines ...[3]any) int64 {
+	t.Helper()
+	q := gen.New(f.pool)
+	ctx := context.Background()
+	ws, err := q.GetDefaultWebsite(ctx, 1)
+	if err != nil {
+		t.Fatalf("default website: %v", err)
+	}
+	cart, err := q.CreateCart(ctx, gen.CreateCartParams{
+		CustomerID: f.customerID, WebsiteID: ws.ID, Currency: ws.DefaultCurrency,
+	})
+	if err != nil {
+		t.Fatalf("create cart: %v", err)
+	}
+	for _, ln := range lines {
+		if _, err := q.UpsertCartItem(ctx, gen.UpsertCartItemParams{
+			CartID: cart.ID, ProductID: ln[0].(int64), Quantity: ln[1].(string),
+			Unit: "each", UnitPrice: ln[2].(string),
+		}); err != nil {
+			t.Fatalf("cart item: %v", err)
+		}
+	}
+	return cart.ID
+}
+
+func TestPlaceOrderFromCart(t *testing.T) {
+	f := setup(t)
+	cartID := f.seedCart(t,
+		[3]any{f.p1ID, "5", "10.0000"}, // 50
+		[3]any{f.p2ID, "2", "25.0000"}, // 50
+	)
+
+	rr := f.do(t, http.MethodPost, "/storefront/orders", f.custTok, map[string]any{
+		"po_number": "PO-1234",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("place order: want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var order struct {
+		ID         int64  `json:"id"`
+		Status     string `json:"status"`
+		GrandTotal string `json:"grand_total"`
+		Items      []struct {
+			Sku      string `json:"sku"`
+			Name     string `json:"name"`
+			RowTotal string `json:"row_total"`
+		} `json:"items"`
+	}
+	decode(t, rr, &order)
+	if order.Status != "pending" || order.GrandTotal != "100.0000" || len(order.Items) != 2 {
+		t.Fatalf("order: want pending/100.0000/2 items, got %s/%s/%d", order.Status, order.GrandTotal, len(order.Items))
+	}
+	// Line snapshots carry the cart's sku/name.
+	foundP1 := false
+	for _, it := range order.Items {
+		if it.Sku == "P1" && it.Name == "Product One" && it.RowTotal == "50.0000" {
+			foundP1 = true
+		}
+	}
+	if !foundP1 {
+		t.Errorf("order item snapshot missing/incorrect: %+v", order.Items)
+	}
+
+	// The cart is now converted, so a second checkout finds no active cart.
+	var status string
+	if err := f.pool.QueryRow(context.Background(), `SELECT status FROM carts WHERE id = $1`, cartID).Scan(&status); err != nil {
+		t.Fatalf("cart status: %v", err)
+	}
+	if status != "converted" {
+		t.Errorf("cart status: want converted, got %s", status)
+	}
+	if again := f.do(t, http.MethodPost, "/storefront/orders", f.custTok, map[string]any{}); again.Code != http.StatusUnprocessableEntity {
+		t.Errorf("checkout with no active cart: want 422, got %d (%s)", again.Code, again.Body.String())
+	}
+
+	// A status-history row was written for the placed order.
+	var n int
+	if err := f.pool.QueryRow(context.Background(), `SELECT count(*) FROM order_status_history WHERE order_id = $1`, order.ID).Scan(&n); err != nil {
+		t.Fatalf("history count: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("status history: want 1 row, got %d", n)
+	}
+}
+
+func TestPlaceOrderEmptyCart(t *testing.T) {
+	f := setup(t)
+	// No cart seeded at all.
+	if rr := f.do(t, http.MethodPost, "/storefront/orders", f.custTok, map[string]any{}); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("checkout with no cart: want 422, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	// An active-but-empty cart is also rejected.
+	f.seedCart(t)
+	if rr := f.do(t, http.MethodPost, "/storefront/orders", f.custTok, map[string]any{}); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("checkout with empty cart: want 422, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
 func TestStorefrontListMyQuotes(t *testing.T) {
 	f := setup(t)
 	// A sent quote for the fixture customer.

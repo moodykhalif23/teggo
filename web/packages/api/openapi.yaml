@@ -284,6 +284,25 @@ components:
         postal_code: { type: string, nullable: true }
         country: { type: string, minLength: 2, maxLength: 2 }
 
+    OrderAddressInput:
+      type: object
+      required: [line1, city, country]
+      properties:
+        line1: { type: string }
+        line2: { type: string, nullable: true }
+        city: { type: string }
+        region: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+        country: { type: string, minLength: 2, maxLength: 2 }
+
+    PlaceOrderRequest:
+      type: object
+      properties:
+        po_number: { type: string, nullable: true }
+        requested_delivery_date: { type: string, format: date-time, nullable: true }
+        billing_address: { $ref: '#/components/schemas/OrderAddressInput' }
+        shipping_address: { $ref: '#/components/schemas/OrderAddressInput' }
+
     ListWrapperCustomerGroup:
       type: object
       properties:
@@ -1634,6 +1653,19 @@ paths:
       security: [{ storefrontAuth: [] }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperOrderSummary' } } } }
+    post:
+      tags: [Sales]
+      operationId: storefrontPlaceOrder
+      summary: Place an order from the active cart
+      description: Converts the customer's active cart into a pending order in one transaction. Addresses default to the customer's defaults when omitted.
+      security: [{ storefrontAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceOrderRequest' }
+      responses:
+        '200': { description: Order created, content: { application/json: { schema: { $ref: '#/components/schemas/OrderDetail' } } } }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
 
   /storefront/orders/{publicID}:
     parameters:

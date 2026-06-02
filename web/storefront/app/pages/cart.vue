@@ -95,7 +95,9 @@ await load()
             <span>Subtotal</span>
             <strong>{{ cart.subtotal }} {{ cart.currency }}</strong>
           </div>
-          <Button label="Checkout (soon)" icon="pi pi-arrow-right" iconPos="right" disabled />
+          <NuxtLink to="/checkout">
+            <Button label="Checkout" icon="pi pi-arrow-right" iconPos="right" />
+          </NuxtLink>
         </div>
       </div>
 
