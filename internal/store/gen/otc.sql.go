@@ -321,6 +321,27 @@ func (q *Queries) GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) 
 	return i, err
 }
 
+const getInvoiceDocument = `-- name: GetInvoiceDocument :one
+SELECT d.content_type, d.bytes
+FROM invoice_documents d
+JOIN invoices i ON i.id = d.invoice_id
+WHERE i.public_id = $1
+`
+
+type GetInvoiceDocumentRow struct {
+	ContentType string `json:"content_type"`
+	Bytes       []byte `json:"bytes"`
+}
+
+// GetInvoiceDocument streams a stored PDF by the invoice's public_id (the
+// capability URL); content_type + bytes are all the file route needs.
+func (q *Queries) GetInvoiceDocument(ctx context.Context, publicID uuid.UUID) (GetInvoiceDocumentRow, error) {
+	row := q.db.QueryRow(ctx, getInvoiceDocument, publicID)
+	var i GetInvoiceDocumentRow
+	err := row.Scan(&i.ContentType, &i.Bytes)
+	return i, err
+}
+
 const getInvoiceForRender = `-- name: GetInvoiceForRender :one
 SELECT
   i.id, i.public_id, i.status, i.currency,

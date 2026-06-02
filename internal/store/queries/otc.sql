@@ -100,6 +100,9 @@ VALUES ($1, $2, $3)
 ON CONFLICT (invoice_id)
 DO UPDATE SET content_type = EXCLUDED.content_type, bytes = EXCLUDED.bytes, generated_at = now();
 
+-- GetInvoiceDocument streams a stored PDF by the invoice's public_id (the
+-- capability URL); content_type + bytes are all the file route needs.
+-- name: GetInvoiceDocument :one
 SELECT d.content_type, d.bytes
 FROM invoice_documents d
 JOIN invoices i ON i.id = d.invoice_id

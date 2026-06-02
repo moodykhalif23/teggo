@@ -123,6 +123,9 @@ type Querier interface {
 	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
 	GetInvoiceByIDInternal(ctx context.Context, id int64) (Invoice, error)
 	GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) (Invoice, error)
+	// GetInvoiceDocument streams a stored PDF by the invoice's public_id (the
+	// capability URL); content_type + bytes are all the file route needs.
+	GetInvoiceDocument(ctx context.Context, publicID uuid.UUID) (GetInvoiceDocumentRow, error)
 	// GetInvoiceForRender gathers everything the PDF template needs in one row:
 	// the invoice, its order context, and the customer/organization names.
 	GetInvoiceForRender(ctx context.Context, id int64) (GetInvoiceForRenderRow, error)
