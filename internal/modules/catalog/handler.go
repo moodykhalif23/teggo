@@ -512,6 +512,7 @@ func (h *Handler) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not update product")
 		return
 	}
+	changelog.Record(r.Context(), h.q, org, nil, "product", p.ID, "upsert", toAdminProduct(p))
 	response.JSON(w, http.StatusOK, toAdminProduct(p))
 }
 
