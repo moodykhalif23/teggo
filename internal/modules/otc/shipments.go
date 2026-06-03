@@ -2,6 +2,7 @@ package otc
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
+	"b2bcommerce/internal/workflow"
 )
 
 func (h *Handler) listShipments(w http.ResponseWriter, r *http.Request) {
@@ -104,12 +106,8 @@ func (h *Handler) createShipment(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, shipment)
 }
 
-var shipmentTransitions = map[string][]string{
-	"pending":   {"shipped", "returned"},
-	"shipped":   {"delivered", "returned"},
-	"delivered": {"returned"},
-}
-
+// Shipment lifecycle transitions live in the `shipment_default` workflow
+// definition (migration 0015), applied via the configurable engine.
 func (h *Handler) patchShipmentStatus(w http.ResponseWriter, r *http.Request) {
 	a, ok := admin(r)
 	if !ok {
@@ -133,39 +131,43 @@ func (h *Handler) patchShipmentStatus(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "status is required")
 		return
 	}
-	allowed := false
-	for _, t := range shipmentTransitions[sh.Status] {
-		if t == req.Status {
-			allowed = true
-		}
-	}
-	if !allowed {
-		response.Fail(w, http.StatusConflict, "invalid_transition", "cannot move shipment from "+sh.Status+" to "+req.Status)
-		return
-	}
-	var shippedAt pgtype.Timestamptz
-	if req.Status == "shipped" {
-		shippedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-	}
 	by := "user:0"
 	if a.userID != nil {
 		by = "user:" + strconv.FormatInt(*a.userID, 10)
 	}
-	var updated gen.Shipment
-	err = h.tx(r.Context(), func(q *gen.Queries) error {
-		var e error
-		updated, e = q.SetShipmentStatus(r.Context(), gen.SetShipmentStatusParams{ID: id, Status: req.Status, ShippedAt: shippedAt})
-		if e != nil {
+
+	inst, err := h.wf.EnsureInstance(r.Context(), a.orgID, "shipment_default", "shipment", sh.ID, sh.Status)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load shipment workflow")
+		return
+	}
+	hook := func(q *gen.Queries, _, to gen.WorkflowState) error {
+		var shippedAt pgtype.Timestamptz
+		if to.Code == "shipped" {
+			shippedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+		}
+		if _, e := q.SetShipmentStatus(r.Context(), gen.SetShipmentStatusParams{ID: id, Status: to.Code, ShippedAt: shippedAt}); e != nil {
 			return e
 		}
 		// Shipping converts reservation to fulfilment for tracked lines (§8).
-		if req.Status == "shipped" {
+		if to.Code == "shipped" {
 			return inventory.FulfilShipment(r.Context(), q, a.orgID, id, by)
 		}
 		return nil
-	})
+	}
+	actor := workflow.Actor{Type: "user", ID: a.userID}
+	if _, err := h.wf.ApplyTransitionTo(r.Context(), inst.ID, req.Status, actor, nil, hook); err != nil {
+		switch {
+		case errors.Is(err, workflow.ErrNoTransition), errors.Is(err, workflow.ErrFinalState):
+			response.Fail(w, http.StatusConflict, "invalid_transition", "cannot move shipment from "+sh.Status+" to "+req.Status)
+		default:
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not update shipment")
+		}
+		return
+	}
+	updated, err := h.q.GetShipment(r.Context(), id)
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not update shipment")
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load shipment")
 		return
 	}
 	response.JSON(w, http.StatusOK, updated)

@@ -33,6 +33,13 @@ var templates = map[string]tmpl{
 <p>You can view and pay it from your account.</p>
 <p>— Teggo</p>`,
 	},
+	"quote_expired": {
+		subject: "Quote {{.quote_number}} has expired",
+		body: `<p>Hi {{.name}},</p>
+<p>Quote <strong>{{.quote_number}}</strong> has passed its validity date and is now expired.</p>
+<p>Need it again? Reply or request a new quote and we'll be glad to help.</p>
+<p>— Teggo</p>`,
+	},
 }
 
 func Render(to, key string, data map[string]any) (Message, error) {

@@ -17,6 +17,7 @@ import (
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
+	"b2bcommerce/internal/workflow"
 )
 
 // PDFEnqueuer schedules async invoice-PDF generation. Satisfied by
@@ -37,10 +38,13 @@ type Handler struct {
 	pdf     PDFEnqueuer
 	notify  Notifier
 	gateway gateway.Gateway
+	wf      *workflow.Engine
 }
 
 func New(pool *pgxpool.Pool, pdf PDFEnqueuer, notify Notifier, gw gateway.Gateway) *Handler {
-	return &Handler{pool: pool, q: gen.New(pool), pdf: pdf, notify: notify, gateway: gw}
+	// Shipment transitions are governed by the DB-defined `shipment_default`
+	// workflow (no guards/actions configured → an empty registry suffices).
+	return &Handler{pool: pool, q: gen.New(pool), pdf: pdf, notify: notify, gateway: gw, wf: workflow.New(pool, nil)}
 }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {

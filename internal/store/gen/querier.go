@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -31,6 +32,7 @@ type Querier interface {
 	// (subtree, Pack 1 §12.3). $1 root id, $2 organization_id.
 	CategoryDescendantIDs(ctx context.Context, arg CategoryDescendantIDsParams) ([]int64, error)
 	CountActiveProducts(ctx context.Context, organizationID int64) (int64, error)
+	CountAutomationExecutions(ctx context.Context, ruleID int64) (int64, error)
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
 	CountProductsAdmin(ctx context.Context, organizationID int64) (int64, error)
 	CountSearchProductsAdmin(ctx context.Context, arg CountSearchProductsAdminParams) (int64, error)
@@ -40,6 +42,7 @@ type Querier interface {
 	// ===== Attributes & families ==============================================
 	CreateAttribute(ctx context.Context, arg CreateAttributeParams) (Attribute, error)
 	CreateAttributeFamily(ctx context.Context, arg CreateAttributeFamilyParams) (AttributeFamily, error)
+	CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error)
 	CreateCart(ctx context.Context, arg CreateCartParams) (Cart, error)
 	// ===== Categories ==========================================================
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error)
@@ -193,6 +196,10 @@ type Querier interface {
 	ListAssignmentsForList(ctx context.Context, priceListID int64) ([]PriceListAssignment, error)
 	ListAttributeFamilies(ctx context.Context, organizationID int64) ([]AttributeFamily, error)
 	ListAttributes(ctx context.Context, organizationID int64) ([]Attribute, error)
+	// Automation engine queries — Pack 2 §3.
+	// ListAutomationRulesByEvent returns active rules for a trigger event, across
+	// orgs (the scheduler doesn't know orgs; each rule carries its own).
+	ListAutomationRulesByEvent(ctx context.Context, triggerEvent string) ([]AutomationRule, error)
 	ListCartItems(ctx context.Context, cartID int64) ([]ListCartItemsRow, error)
 	ListCategories(ctx context.Context, organizationID int64) ([]Category, error)
 	ListCombinedPricesForCustomer(ctx context.Context, arg ListCombinedPricesForCustomerParams) ([]CombinedPrice, error)
@@ -201,6 +208,9 @@ type Querier interface {
 	ListCustomerGroups(ctx context.Context, organizationID int64) ([]CustomerGroup, error)
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
+	// ListExpirableQuotes returns open quotes (sent/revised) whose validity has
+	// passed — the quote-expiry sweep's working set.
+	ListExpirableQuotes(ctx context.Context, validUntil pgtype.Timestamptz) ([]Quote, error)
 	ListFamilyAttributes(ctx context.Context, familyID int64) ([]ListFamilyAttributesRow, error)
 	ListInventoryLevelsForProduct(ctx context.Context, productID int64) ([]ListInventoryLevelsForProductRow, error)
 	ListInventoryMovements(ctx context.Context, arg ListInventoryMovementsParams) ([]InventoryMovement, error)
@@ -250,6 +260,7 @@ type Querier interface {
 	// Run after DeleteCombinedPricesForCustomerCurrency inside one tx.
 	// params: $1 customer_id, $2 website_id, $3 currency, $4 at
 	RecomputeCombinedPricesForCustomer(ctx context.Context, arg RecomputeCombinedPricesForCustomerParams) error
+	RecordAutomationExecution(ctx context.Context, arg RecordAutomationExecutionParams) error
 	RemoveProductFromCategory(ctx context.Context, arg RemoveProductFromCategoryParams) error
 	// ===== Resolution (§12.1, on-the-fly) ======================================
 	// ResolvePrice returns the single unit price plus the source price list for a
