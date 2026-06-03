@@ -21,6 +21,7 @@ import (
 	"b2bcommerce/internal/modules/crm"
 	"b2bcommerce/internal/modules/customers"
 	"b2bcommerce/internal/modules/dam"
+	"b2bcommerce/internal/modules/field"
 	"b2bcommerce/internal/modules/health"
 	"b2bcommerce/internal/modules/integration"
 	"b2bcommerce/internal/modules/otc"
@@ -161,6 +162,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 		dam.New(st.Pool(), o.blobStore, proc, issuer, o.rendition).Routes(r, authMW)
 	}
 	integration.New(st.Pool(), issuer, o.punchoutURL, o.ediSenderID, o.punchoutTTL).Routes(r, authMW)
+	field.New(st.Pool()).Routes(r, authMW)
 
 	// Wrap the router so HTTP server metrics (request count, duration) flow to
 	// the configured OpenTelemetry MeterProvider. No-op when telemetry is off.
