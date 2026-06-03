@@ -17,6 +17,18 @@ type Config struct {
 	// GotenbergURL is the base URL of the Gotenberg PDF service (e.g.
 	// http://gotenberg:3000). Empty falls back to a stub PDF renderer.
 	GotenbergURL string
+
+	// SMTP transport for transactional email. When SMTPHost is empty the worker
+	// uses a log transport (prints emails) so the flow runs without a server.
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	EmailFrom    string
+
+	// PaymentsGateway selects the card processor ("mock" — default — or a real
+	// provider like "stripe"/"mpesa" once configured).
+	PaymentsGateway string
 }
 
 // Load reads configuration from environment variables, applying defaults and
@@ -29,6 +41,14 @@ func Load() (Config, error) {
 		Env:          getenv("ENV", "development"),
 		LogLevel:     getenv("LOG_LEVEL", "info"),
 		GotenbergURL: getenv("GOTENBERG_URL", ""),
+
+		SMTPHost:     getenv("SMTP_HOST", ""),
+		SMTPPort:     getenv("SMTP_PORT", "587"),
+		SMTPUsername: getenv("SMTP_USERNAME", ""),
+		SMTPPassword: getenv("SMTP_PASSWORD", ""),
+		EmailFrom:    getenv("EMAIL_FROM", "Teggo <no-reply@teggo.local>"),
+
+		PaymentsGateway: getenv("PAYMENTS_GATEWAY", "mock"),
 	}
 
 	ttl, err := time.ParseDuration(getenv("JWT_TTL", "24h"))

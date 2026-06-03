@@ -9,6 +9,7 @@ import (
 
 	"b2bcommerce/internal/config"
 	"b2bcommerce/internal/db"
+	"b2bcommerce/internal/email"
 	"b2bcommerce/internal/pdf"
 	"b2bcommerce/internal/queue"
 )
@@ -26,8 +27,6 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Real PDFs need a Gotenberg service; without one, fall back to a stub
-	// renderer so the worker still runs (it just produces a placeholder PDF).
 	var renderer pdf.Renderer
 	if cfg.GotenbergURL != "" {
 		renderer = pdf.NewGotenberg(cfg.GotenbergURL)
@@ -37,7 +36,19 @@ func main() {
 		log.Println("invoice PDFs: GOTENBERG_URL unset, using stub renderer")
 	}
 
-	client, err := queue.NewWorkerClient(pool, renderer)
+	var sender email.Sender
+	if cfg.SMTPHost != "" {
+		sender = email.NewSMTP(email.SMTPConfig{
+			Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
+			Password: cfg.SMTPPassword, From: cfg.EmailFrom,
+		})
+		log.Printf("email: SMTP at %s:%s", cfg.SMTPHost, cfg.SMTPPort)
+	} else {
+		sender = email.LogSender{From: cfg.EmailFrom}
+		log.Println("email: SMTP_HOST unset, using log transport")
+	}
+
+	client, err := queue.NewWorkerClient(pool, renderer, sender)
 	if err != nil {
 		log.Fatalf("queue: %v", err)
 	}

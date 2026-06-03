@@ -1,6 +1,7 @@
 package otc
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -80,7 +81,40 @@ func (h *Handler) issueInvoice(w http.ResponseWriter, r *http.Request) {
 	if h.pdf != nil {
 		_ = h.pdf.EnqueueInvoicePDF(r.Context(), invoice.ID)
 	}
+	if h.notify != nil {
+		if to, name := h.primaryContact(r.Context(), invoice.CustomerID); to != "" {
+			due := ""
+			if invoice.DueAt.Valid {
+				due = invoice.DueAt.Time.Format("2006-01-02")
+			}
+			_ = h.notify.EnqueueEmail(r.Context(), to, "invoice_issued", map[string]any{
+				"name":           name,
+				"invoice_number": "INV-" + shortID(invoice.PublicID.String()),
+				"total":          invoice.GrandTotal,
+				"currency":       invoice.Currency,
+				"due_at":         due,
+			})
+		}
+	}
 	h.renderInvoice(w, r, invoice)
+}
+
+// primaryContact returns the email + name of a customer's first user (the
+// notification recipient), or empty strings when the customer has no users.
+func (h *Handler) primaryContact(ctx context.Context, customerID int64) (email, name string) {
+	users, err := h.q.ListCustomerUsers(ctx, customerID)
+	if err != nil || len(users) == 0 {
+		return "", ""
+	}
+	return users[0].Email, users[0].FullName
+}
+
+// shortID returns the first 8 chars of an id for human-facing references.
+func shortID(s string) string {
+	if len(s) >= 8 {
+		return s[:8]
+	}
+	return s
 }
 
 func (h *Handler) adminListInvoices(w http.ResponseWriter, r *http.Request) {

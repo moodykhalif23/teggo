@@ -2,19 +2,86 @@ package otc
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"b2bcommerce/internal/money"
+	"b2bcommerce/internal/payments/gateway"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
 )
 
-// recordPayment records a payment and, when it covers an invoice, flips the
-// invoice to paid. Paying on terms (method=invoice) requires the customer to
-// have payment terms and remaining credit (Pack 1 §7/§10 AC, light enforcement).
+func (h *Handler) payInvoiceByCard(w http.ResponseWriter, r *http.Request) {
+	cid, ok := customerID(r)
+	if !ok {
+		unauthorized(w)
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "publicID"))
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return
+	}
+	inv, err := h.q.GetInvoiceByPublicID(r.Context(), pid)
+	if err != nil || inv.CustomerID != cid {
+		response.Fail(w, http.StatusNotFound, "not_found", "invoice not found")
+		return
+	}
+	if inv.Status == "paid" {
+		response.Fail(w, http.StatusConflict, "already_paid", "invoice is already paid")
+		return
+	}
+	if inv.Status == "void" {
+		response.Fail(w, http.StatusConflict, "invalid_state", "invoice is void")
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"` // gateway card token / nonce
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	res, err := h.gateway.CreateCharge(r.Context(), gateway.ChargeRequest{
+		Amount: inv.GrandTotal, Currency: inv.Currency, Token: req.Token, Reference: inv.PublicID.String(),
+	})
+	if err != nil {
+		if errors.Is(err, gateway.ErrDeclined) {
+			response.Fail(w, http.StatusPaymentRequired, "declined", "the card was declined")
+			return
+		}
+		response.Fail(w, http.StatusBadGateway, "gateway_error", "payment could not be processed")
+		return
+	}
+
+	provider := h.gateway.Provider()
+	ref := res.GatewayReference
+	if _, err := h.q.CreatePayment(r.Context(), gen.CreatePaymentParams{
+		InvoiceID: &inv.ID, OrderID: &inv.OrderID, CustomerID: cid,
+		Method: "card", Gateway: &provider, GatewayReference: &ref,
+		Amount: inv.GrandTotal, Currency: inv.Currency, Status: "captured",
+		CapturedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not record payment")
+		return
+	}
+	if err := h.settleInvoiceIfCovered(r, inv.ID); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not settle invoice")
+		return
+	}
+	// Re-read so the response reflects the (now paid) status.
+	updated, err := h.q.GetInvoiceByPublicID(r.Context(), pid)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load invoice")
+		return
+	}
+	h.renderInvoice(w, r, updated)
+}
+
 func (h *Handler) recordPayment(w http.ResponseWriter, r *http.Request) {
 	a, ok := admin(r)
 	if !ok {

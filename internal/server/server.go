@@ -17,6 +17,7 @@ import (
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
 	"b2bcommerce/internal/modules/sales"
+	"b2bcommerce/internal/payments/gateway"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/store"
 )
@@ -25,6 +26,8 @@ import (
 type options struct {
 	recompute pricing.Enqueuer
 	pdf       otc.PDFEnqueuer
+	notifier  otc.Notifier
+	gateway   gateway.Gateway
 }
 
 // Option configures optional server dependencies.
@@ -39,11 +42,26 @@ func WithInvoicePDF(e otc.PDFEnqueuer) Option {
 	return func(o *options) { o.pdf = e }
 }
 
+// WithNotifier wires the transactional-email enqueuer into the sales + OTC
+// modules (order confirmation, quote sent, invoice issued).
+func WithNotifier(n otc.Notifier) Option {
+	return func(o *options) { o.notifier = n }
+}
+
+// WithPaymentGateway sets the card processor for storefront card payments.
+// Defaults to the deterministic Mock gateway when unset.
+func WithPaymentGateway(g gateway.Gateway) Option {
+	return func(o *options) { o.gateway = g }
+}
+
 // New builds the fully-wired HTTP handler.
 func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	var o options
 	for _, fn := range opts {
 		fn(&o)
+	}
+	if o.gateway == nil {
+		o.gateway = gateway.Mock{} // deterministic card path by default
 	}
 
 	r := chi.NewRouter()
@@ -63,8 +81,8 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	customers.New(st.Queries()).Routes(r, authMW)
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
-	sales.New(st.Pool()).Routes(r, authMW)
-	otc.New(st.Pool(), o.pdf).Routes(r, authMW)
+	sales.New(st.Pool(), o.notifier).Routes(r, authMW)
+	otc.New(st.Pool(), o.pdf, o.notifier, o.gateway).Routes(r, authMW)
 	inventory.New(st.Pool()).Routes(r, authMW)
 
 	return r

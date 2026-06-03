@@ -19,12 +19,31 @@ import (
 	"b2bcommerce/internal/store/gen"
 )
 
-type Handler struct {
-	pool *pgxpool.Pool
-	q    *gen.Queries
+// Notifier schedules a transactional email (template key + data). Satisfied by
+// *queue.Enqueuer; may be nil (emails are then skipped).
+type Notifier interface {
+	EnqueueEmail(ctx context.Context, to, template string, data map[string]any) error
 }
 
-func New(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool, q: gen.New(pool)} }
+type Handler struct {
+	pool   *pgxpool.Pool
+	q      *gen.Queries
+	notify Notifier
+}
+
+func New(pool *pgxpool.Pool, notify Notifier) *Handler {
+	return &Handler{pool: pool, q: gen.New(pool), notify: notify}
+}
+
+// primaryContact returns the email + name of a customer's first user (the
+// notification recipient), or empty strings when the customer has no users.
+func (h *Handler) primaryContact(ctx context.Context, customerID int64) (email, name string) {
+	users, err := h.q.ListCustomerUsers(ctx, customerID)
+	if err != nil || len(users) == 0 {
+		return "", ""
+	}
+	return users[0].Email, users[0].FullName
+}
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	// Admin (sales rep) surface.

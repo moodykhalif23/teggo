@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"b2bcommerce/internal/payments/gateway"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
@@ -24,14 +25,22 @@ type PDFEnqueuer interface {
 	EnqueueInvoicePDF(ctx context.Context, invoiceID int64) error
 }
 
-type Handler struct {
-	pool *pgxpool.Pool
-	q    *gen.Queries
-	pdf  PDFEnqueuer
+// Notifier schedules a transactional email (template key + data). Satisfied by
+// *queue.Enqueuer; may be nil (emails are then skipped).
+type Notifier interface {
+	EnqueueEmail(ctx context.Context, to, template string, data map[string]any) error
 }
 
-func New(pool *pgxpool.Pool, pdf PDFEnqueuer) *Handler {
-	return &Handler{pool: pool, q: gen.New(pool), pdf: pdf}
+type Handler struct {
+	pool    *pgxpool.Pool
+	q       *gen.Queries
+	pdf     PDFEnqueuer
+	notify  Notifier
+	gateway gateway.Gateway
+}
+
+func New(pool *pgxpool.Pool, pdf PDFEnqueuer, notify Notifier, gw gateway.Gateway) *Handler {
+	return &Handler{pool: pool, q: gen.New(pool), pdf: pdf, notify: notify, gateway: gw}
 }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
@@ -65,6 +74,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 
 		sr.Get("/storefront/invoices", h.listMyInvoices)
 		sr.Get("/storefront/invoices/{publicID}", h.getMyInvoice)
+		sr.Post("/storefront/invoices/{publicID}/pay", h.payInvoiceByCard)
 	})
 }
 
