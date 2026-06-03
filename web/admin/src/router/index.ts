@@ -201,6 +201,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'erp.view' },
       },
       {
+        path: 'identity-providers',
+        name: 'identity-providers',
+        component: () => import('@/views/sso/IdentityProvidersView.vue'),
+        meta: { permission: 'sso.view' },
+      },
+      {
         path: 'configurator',
         name: 'configurator',
         component: () => import('@/views/cpq/ConfiguratorView.vue'),
