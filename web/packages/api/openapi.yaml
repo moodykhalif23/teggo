@@ -1436,6 +1436,74 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/TransformationPreset' } }
 
+    # ----- Punchout / EDI integration (Pack 3 §3) -----
+    TradingPartner:
+      type: object
+      required: [id, name, protocol, is_active]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        protocol: { type: string, enum: [cxml, oci, edi_x12, edifact] }
+        transport: { type: string, nullable: true, enum: [https, as2, sftp, van] }
+        customer_id: { type: integer, format: int64, nullable: true }
+        identity: { type: string, nullable: true }
+        has_secret: { type: boolean }
+        config: { type: object, additionalProperties: true }
+        is_active: { type: boolean }
+        created_at: { type: string }
+    TradingPartnerInput:
+      type: object
+      required: [name, protocol]
+      properties:
+        name: { type: string }
+        protocol: { type: string, enum: [cxml, oci, edi_x12, edifact] }
+        transport: { type: string, enum: [https, as2, sftp, van] }
+        customer_id: { type: integer, format: int64, nullable: true }
+        identity: { type: string, nullable: true }
+        shared_secret: { type: string, nullable: true }
+        config: { type: object, additionalProperties: true }
+        is_active: { type: boolean }
+    ListWrapperTradingPartner:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/TradingPartner' } }
+    EDIDocument:
+      type: object
+      required: [id, trading_partner_id, direction, doc_type, status]
+      properties:
+        id: { type: integer, format: int64 }
+        trading_partner_id: { type: integer, format: int64 }
+        direction: { type: string, enum: [inbound, outbound] }
+        doc_type: { type: string }
+        status: { type: string }
+        control_number: { type: string, nullable: true }
+        related_entity_type: { type: string, nullable: true }
+        related_entity_id: { type: integer, format: int64, nullable: true }
+        error: { type: string, nullable: true }
+        created_at: { type: string }
+    ListWrapperEDIDocument:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/EDIDocument' } }
+    EDI810Input:
+      type: object
+      required: [invoice_id, trading_partner_id]
+      properties:
+        invoice_id: { type: integer, format: int64 }
+        trading_partner_id: { type: integer, format: int64 }
+    EDI856Input:
+      type: object
+      required: [order_id, trading_partner_id]
+      properties:
+        order_id: { type: integer, format: int64 }
+        trading_partner_id: { type: integer, format: int64 }
+    EDIOutboundResult:
+      type: object
+      properties:
+        document_id: { type: integer, format: int64 }
+        control_number: { type: string }
+        payload: { type: string }
+
   responses:
     ErrorResponse:
       description: Error
