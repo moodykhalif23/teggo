@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Activity struct {
+	ID             int64              `json:"id"`
+	OrganizationID int64              `json:"organization_id"`
+	Type           string             `json:"type"`
+	Subject        string             `json:"subject"`
+	Body           *string            `json:"body"`
+	CustomerID     *int64             `json:"customer_id"`
+	ContactID      *int64             `json:"contact_id"`
+	OpportunityID  *int64             `json:"opportunity_id"`
+	LeadID         *int64             `json:"lead_id"`
+	OwnerUserID    *int64             `json:"owner_user_id"`
+	Status         string             `json:"status"`
+	DueAt          pgtype.Timestamptz `json:"due_at"`
+	OccurredAt     time.Time          `json:"occurred_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+}
+
 type Attribute struct {
 	ID             int64  `json:"id"`
 	OrganizationID int64  `json:"organization_id"`
@@ -83,6 +100,19 @@ type CombinedPrice struct {
 	Value             string    `json:"value"`
 	SourcePriceListID *int64    `json:"source_price_list_id"`
 	ComputedAt        time.Time `json:"computed_at"`
+}
+
+type Contact struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	CustomerID     *int64    `json:"customer_id"`
+	CustomerUserID *int64    `json:"customer_user_id"`
+	FullName       string    `json:"full_name"`
+	Email          *string   `json:"email"`
+	Phone          *string   `json:"phone"`
+	JobTitle       *string   `json:"job_title"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type Customer struct {
@@ -194,6 +224,50 @@ type InvoiceItem struct {
 	RowTotal    string `json:"row_total"`
 }
 
+type Lead struct {
+	ID                  int64     `json:"id"`
+	PublicID            uuid.UUID `json:"public_id"`
+	OrganizationID      int64     `json:"organization_id"`
+	Source              string    `json:"source"`
+	CompanyName         *string   `json:"company_name"`
+	ContactName         *string   `json:"contact_name"`
+	Email               *string   `json:"email"`
+	Phone               *string   `json:"phone"`
+	Notes               *string   `json:"notes"`
+	Status              string    `json:"status"`
+	OwnerUserID         *int64    `json:"owner_user_id"`
+	ConvertedCustomerID *int64    `json:"converted_customer_id"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+}
+
+type Opportunity struct {
+	ID             int64              `json:"id"`
+	PublicID       uuid.UUID          `json:"public_id"`
+	OrganizationID int64              `json:"organization_id"`
+	CustomerID     int64              `json:"customer_id"`
+	ContactID      *int64             `json:"contact_id"`
+	PipelineID     int64              `json:"pipeline_id"`
+	StageID        int64              `json:"stage_id"`
+	Name           string             `json:"name"`
+	Amount         string             `json:"amount"`
+	Currency       string             `json:"currency"`
+	ExpectedClose  pgtype.Date        `json:"expected_close"`
+	OwnerUserID    *int64             `json:"owner_user_id"`
+	ClosedAt       pgtype.Timestamptz `json:"closed_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type OpportunityStageHistory struct {
+	ID            int64     `json:"id"`
+	OpportunityID int64     `json:"opportunity_id"`
+	FromStageID   *int64    `json:"from_stage_id"`
+	ToStageID     int64     `json:"to_stage_id"`
+	ChangedBy     *int64    `json:"changed_by"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type Order struct {
 	ID                    int64       `json:"id"`
 	PublicID              uuid.UUID   `json:"public_id"`
@@ -263,6 +337,24 @@ type Payment struct {
 	CapturedAt       pgtype.Timestamptz `json:"captured_at"`
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
+type Pipeline struct {
+	ID             int64  `json:"id"`
+	OrganizationID int64  `json:"organization_id"`
+	Name           string `json:"name"`
+	IsDefault      bool   `json:"is_default"`
+}
+
+type PipelineStage struct {
+	ID          int64  `json:"id"`
+	PipelineID  int64  `json:"pipeline_id"`
+	Code        string `json:"code"`
+	Label       string `json:"label"`
+	Probability string `json:"probability"`
+	IsWon       bool   `json:"is_won"`
+	IsLost      bool   `json:"is_lost"`
+	SortOrder   int32  `json:"sort_order"`
 }
 
 type Price struct {

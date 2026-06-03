@@ -12,6 +12,7 @@ import (
 	authmod "b2bcommerce/internal/modules/auth"
 	"b2bcommerce/internal/modules/cart"
 	"b2bcommerce/internal/modules/catalog"
+	"b2bcommerce/internal/modules/crm"
 	"b2bcommerce/internal/modules/customers"
 	"b2bcommerce/internal/modules/health"
 	"b2bcommerce/internal/modules/otc"
@@ -84,6 +85,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)
 	otc.New(st.Pool(), o.pdf, o.notifier, o.gateway).Routes(r, authMW)
 	inventory.New(st.Pool()).Routes(r, authMW)
+	crm.New(st.Pool()).Routes(r, authMW)
 
 	return r
 }

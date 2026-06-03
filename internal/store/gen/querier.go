@@ -14,6 +14,7 @@ type Querier interface {
 	// ===== Movements ===========================================================
 	AddInventoryMovement(ctx context.Context, arg AddInventoryMovementParams) (InventoryMovement, error)
 	AddInvoiceItem(ctx context.Context, arg AddInvoiceItemParams) (InvoiceItem, error)
+	AddOpportunityStageHistory(ctx context.Context, arg AddOpportunityStageHistoryParams) error
 	AddOrderItem(ctx context.Context, arg AddOrderItemParams) (OrderItem, error)
 	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
@@ -32,12 +33,16 @@ type Querier interface {
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
 	CountProductsAdmin(ctx context.Context, organizationID int64) (int64, error)
 	CountSearchProductsAdmin(ctx context.Context, arg CountSearchProductsAdminParams) (int64, error)
+	// ===== Activities ==========================================================
+	CreateActivity(ctx context.Context, arg CreateActivityParams) (Activity, error)
 	// ===== Attributes & families ==============================================
 	CreateAttribute(ctx context.Context, arg CreateAttributeParams) (Attribute, error)
 	CreateAttributeFamily(ctx context.Context, arg CreateAttributeFamilyParams) (AttributeFamily, error)
 	CreateCart(ctx context.Context, arg CreateCartParams) (Cart, error)
 	// ===== Categories ==========================================================
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error)
+	// ===== Contacts ============================================================
+	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateCustomerAddress(ctx context.Context, arg CreateCustomerAddressParams) (CustomerAddress, error)
 	// Customers & accounts queries — Implementation Pack 1 §2 + §12.2.
@@ -46,6 +51,11 @@ type Querier interface {
 	CreateCustomerUser(ctx context.Context, arg CreateCustomerUserParams) (CreateCustomerUserRow, error)
 	// ===== Invoices ============================================================
 	CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (Invoice, error)
+	// CRM queries — Pack 2 §1. Admin/sales-rep facing; everything org-scoped.
+	// ===== Leads ===============================================================
+	CreateLead(ctx context.Context, arg CreateLeadParams) (Lead, error)
+	// ===== Opportunities =======================================================
+	CreateOpportunity(ctx context.Context, arg CreateOpportunityParams) (Opportunity, error)
 	// ===== Order ===============================================================
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	// ===== Payments ============================================================
@@ -82,6 +92,9 @@ type Querier interface {
 	// (cycle-safe recursive CTE — Pack 1 §12.2). Used to inherit price list /
 	// settings down the account tree.
 	CustomerAncestors(ctx context.Context, arg CustomerAncestorsParams) ([]CustomerAncestorsRow, error)
+	// CustomerTimeline aggregates activities linked to a customer directly, via its
+	// contacts, or via its opportunities (Pack 2 §1.4), newest first.
+	CustomerTimeline(ctx context.Context, arg CustomerTimelineParams) ([]Activity, error)
 	// CustomersAffectedByPriceList returns every customer whose resolved price may
 	// change when this price list changes (direct, via group, or via any website
 	// assignment of the list). Used to fan out recompute jobs.
@@ -96,6 +109,8 @@ type Querier interface {
 	// backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like
 	// {"color":"red","voltage":"24"}.
 	FilterActiveProductsByAttributes(ctx context.Context, arg FilterActiveProductsByAttributesParams) ([]Product, error)
+	// FirstStage returns the lowest-sort_order stage of a pipeline (the entry stage).
+	FirstStage(ctx context.Context, pipelineID int64) (PipelineStage, error)
 	// Cart & shopping list queries — Implementation Pack 1 §5.
 	// ===== Carts ===============================================================
 	GetActiveCart(ctx context.Context, arg GetActiveCartParams) (Cart, error)
@@ -107,6 +122,7 @@ type Querier interface {
 	// GetCombinedPrice is the O(1) storefront read: the resolved tier for a qty.
 	// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency
 	GetCombinedPrice(ctx context.Context, arg GetCombinedPriceParams) (GetCombinedPriceRow, error)
+	GetContact(ctx context.Context, arg GetContactParams) (Contact, error)
 	GetCustomer(ctx context.Context, arg GetCustomerParams) (Customer, error)
 	// ===== Customer billing terms =============================================
 	GetCustomerBilling(ctx context.Context, id int64) (GetCustomerBillingRow, error)
@@ -118,6 +134,8 @@ type Querier interface {
 	// GetCustomerUserForLogin resolves a customer-user by email within an org for
 	// storefront authentication (email is citext, so case-insensitive).
 	GetCustomerUserForLogin(ctx context.Context, arg GetCustomerUserForLoginParams) (GetCustomerUserForLoginRow, error)
+	// ===== Pipelines & stages ==================================================
+	GetDefaultPipeline(ctx context.Context, organizationID int64) (Pipeline, error)
 	GetDefaultWarehouse(ctx context.Context, organizationID int64) (Warehouse, error)
 	GetDefaultWebsite(ctx context.Context, organizationID int64) (GetDefaultWebsiteRow, error)
 	GetInventoryLevel(ctx context.Context, arg GetInventoryLevelParams) (InventoryLevel, error)
@@ -130,10 +148,13 @@ type Querier interface {
 	// GetInvoiceForRender gathers everything the PDF template needs in one row:
 	// the invoice, its order context, and the customer/organization names.
 	GetInvoiceForRender(ctx context.Context, id int64) (GetInvoiceForRenderRow, error)
+	GetLead(ctx context.Context, arg GetLeadParams) (Lead, error)
+	GetOpportunity(ctx context.Context, arg GetOpportunityParams) (Opportunity, error)
 	GetOrderByID(ctx context.Context, arg GetOrderByIDParams) (Order, error)
 	GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (Order, error)
 	GetOrderItem(ctx context.Context, arg GetOrderItemParams) (OrderItem, error)
 	GetPayment(ctx context.Context, id int64) (Payment, error)
+	GetPipeline(ctx context.Context, arg GetPipelineParams) (Pipeline, error)
 	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
 	GetProductBySlug(ctx context.Context, arg GetProductBySlugParams) (GetProductBySlugRow, error)
@@ -144,6 +165,7 @@ type Querier interface {
 	GetRFQByPublicID(ctx context.Context, arg GetRFQByPublicIDParams) (Rfq, error)
 	GetShipment(ctx context.Context, id int64) (Shipment, error)
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
+	GetStage(ctx context.Context, id int64) (PipelineStage, error)
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
 	GetUserPermissions(ctx context.Context, userID int64) ([]string, error)
 	GetWarehouse(ctx context.Context, arg GetWarehouseParams) (Warehouse, error)
@@ -157,6 +179,7 @@ type Querier interface {
 	ListCartItems(ctx context.Context, cartID int64) ([]ListCartItemsRow, error)
 	ListCategories(ctx context.Context, organizationID int64) ([]Category, error)
 	ListCombinedPricesForCustomer(ctx context.Context, arg ListCombinedPricesForCustomerParams) ([]CombinedPrice, error)
+	ListContactsForCustomer(ctx context.Context, arg ListContactsForCustomerParams) ([]Contact, error)
 	ListCustomerAddresses(ctx context.Context, customerID int64) ([]CustomerAddress, error)
 	ListCustomerGroups(ctx context.Context, organizationID int64) ([]CustomerGroup, error)
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
@@ -168,11 +191,14 @@ type Querier interface {
 	ListInvoicesAdmin(ctx context.Context, arg ListInvoicesAdminParams) ([]Invoice, error)
 	ListInvoicesForCustomer(ctx context.Context, customerID int64) ([]Invoice, error)
 	ListInvoicesForOrder(ctx context.Context, orderID int64) ([]Invoice, error)
+	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
+	ListOpportunities(ctx context.Context, arg ListOpportunitiesParams) ([]Opportunity, error)
 	ListOrderItems(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderStatusHistory(ctx context.Context, orderID int64) ([]ListOrderStatusHistoryRow, error)
 	ListOrdersAdmin(ctx context.Context, arg ListOrdersAdminParams) ([]Order, error)
 	ListOrdersForCustomer(ctx context.Context, customerID int64) ([]Order, error)
 	ListPaymentsForInvoice(ctx context.Context, invoiceID *int64) ([]Payment, error)
+	ListPipelineStages(ctx context.Context, pipelineID int64) ([]PipelineStage, error)
 	ListPriceLists(ctx context.Context, organizationID int64) ([]PriceList, error)
 	ListPricesForList(ctx context.Context, priceListID int64) ([]Price, error)
 	ListProductCategoryIDs(ctx context.Context, productID int64) ([]int64, error)
@@ -193,6 +219,12 @@ type Querier interface {
 	ListShoppingLists(ctx context.Context, customerID int64) ([]ShoppingList, error)
 	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
 	MarkCartConverted(ctx context.Context, id int64) error
+	// MarkLeadConverted records the conversion result; only converts a not-yet-
+	// converted lead (idempotency guard at the DB level).
+	MarkLeadConverted(ctx context.Context, arg MarkLeadConvertedParams) (Lead, error)
+	// PipelineBoard: per-stage open count, total and probability-weighted amounts
+	// (Pack 2 §1.4). Sums cast to text via the numeric override; count is bigint.
+	PipelineBoard(ctx context.Context, pipelineID int64) ([]PipelineBoardRow, error)
 	// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
 	// currency: for each product it picks the winning candidate list (highest
 	// level, then priority) that has a valid price, and flattens that list's tiers.
@@ -220,6 +252,8 @@ type Querier interface {
 	SetInventoryLevelConfig(ctx context.Context, arg SetInventoryLevelConfigParams) (InventoryLevel, error)
 	SetInvoicePDFURL(ctx context.Context, arg SetInvoicePDFURLParams) error
 	SetInvoiceStatus(ctx context.Context, arg SetInvoiceStatusParams) (Invoice, error)
+	SetLeadStatus(ctx context.Context, arg SetLeadStatusParams) (Lead, error)
+	SetOpportunityStage(ctx context.Context, arg SetOpportunityStageParams) (Opportunity, error)
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
 	SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) (Quote, error)
