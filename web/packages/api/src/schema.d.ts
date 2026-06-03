@@ -1450,22 +1450,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/media": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["adminListMedia"];
-        put?: never;
-        post: operations["adminCreateMedia"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/storefront/pages/{slug}": {
         parameters: {
             query?: {
@@ -1630,6 +1614,56 @@ export interface paths {
         get: operations["adminGetWebsite"];
         put: operations["adminUpdateWebsite"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListMedia"];
+        put?: never;
+        post: operations["adminUploadMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetMedia"];
+        put: operations["adminUpdateMedia"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/transformation-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListPresets"];
+        put?: never;
+        post: operations["adminCreatePreset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2729,27 +2763,6 @@ export interface components {
         ListWrapperPage: {
             items?: components["schemas"]["ContentPage"][];
         };
-        MediaAsset: {
-            /** Format: int64 */
-            id: number;
-            url: string;
-            mime_type?: string | null;
-            width?: number | null;
-            height?: number | null;
-            alt?: string | null;
-            folder?: string | null;
-        };
-        MediaInput: {
-            url: string;
-            mime_type?: string | null;
-            width?: number | null;
-            height?: number | null;
-            alt?: string | null;
-            folder?: string | null;
-        };
-        ListWrapperMedia: {
-            items?: components["schemas"]["MediaAsset"][];
-        };
         MenuItem: {
             /** Format: int64 */
             id: number;
@@ -2837,6 +2850,78 @@ export interface components {
         };
         ListWrapperWebsite: {
             items?: components["schemas"]["Website"][];
+        };
+        MediaRendition: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            media_asset_id: number;
+            preset: string;
+            url: string;
+            width?: number | null;
+            height?: number | null;
+            format?: string | null;
+            /** Format: int64 */
+            size_bytes?: number | null;
+        };
+        MediaAsset: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            organization_id?: number;
+            url: string;
+            mime_type?: string | null;
+            width?: number | null;
+            height?: number | null;
+            alt?: string | null;
+            folder?: string | null;
+            /** @enum {string} */
+            status: "uploading" | "processing" | "ready" | "error";
+            checksum?: string | null;
+            /** Format: int64 */
+            size_bytes?: number | null;
+            tags?: string[];
+            renditions?: components["schemas"]["MediaRendition"][];
+            transforms?: {
+                [key: string]: string;
+            };
+        };
+        MediaUpdateInput: {
+            alt?: string | null;
+            folder?: string | null;
+            tags?: string[];
+        };
+        TransformationPreset: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            organization_id: number;
+            name: string;
+            width?: number | null;
+            height?: number | null;
+            /** @enum {string} */
+            fit: "cover" | "contain" | "fill" | "inside";
+            /** @enum {string} */
+            format: "webp" | "avif" | "jpeg" | "png";
+            quality: number;
+        };
+        PresetInput: {
+            name: string;
+            width?: number | null;
+            height?: number | null;
+            /** @enum {string} */
+            fit?: "cover" | "contain" | "fill" | "inside";
+            /** @enum {string} */
+            format?: "webp" | "avif" | "jpeg" | "png";
+            quality?: number;
+        };
+        ListWrapperMediaAsset: {
+            items?: components["schemas"]["MediaAsset"][];
+        };
+        ListWrapperTransformationPreset: {
+            items?: components["schemas"]["TransformationPreset"][];
         };
     };
     responses: {
@@ -5586,50 +5671,6 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
         };
     };
-    adminListMedia: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListWrapperMedia"];
-                };
-            };
-        };
-    };
-    adminCreateMedia: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MediaInput"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaAsset"];
-                };
-            };
-        };
-    };
     storefrontGetPage: {
         parameters: {
             query?: {
@@ -5908,6 +5949,165 @@ export interface operations {
             };
             400: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListMedia: {
+        parameters: {
+            query?: {
+                folder?: string;
+                tag?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperMediaAsset"];
+                };
+            };
+        };
+    };
+    adminUploadMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    alt?: string;
+                    folder?: string;
+                    tags?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing (deduped) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminGetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpdateMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperTransformationPreset"];
+                };
+            };
+        };
+    };
+    adminCreatePreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransformationPreset"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
         };
     };
 }

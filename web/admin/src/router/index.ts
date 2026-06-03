@@ -159,6 +159,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'cms.view' },
       },
       {
+        path: 'media',
+        name: 'media',
+        component: () => import('@/views/dam/MediaView.vue'),
+        meta: { permission: 'cms.view' },
+      },
+      {
         path: 'analytics',
         name: 'analytics',
         component: () => import('@/views/reporting/ReportsView.vue'),

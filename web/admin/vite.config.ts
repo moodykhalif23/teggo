@@ -20,6 +20,8 @@ export default defineConfig({
       '/storefront': { target: 'http://localhost:8080', changeOrigin: true },
       // Invoice PDF capability URLs are served by the API.
       '/files': { target: 'http://localhost:8080', changeOrigin: true },
+      // DAM blobs + signed transforms are served by the API.
+      '/media': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },
 })

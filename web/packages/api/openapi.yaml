@@ -1165,31 +1165,6 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/ContentPage' } }
-    MediaAsset:
-      type: object
-      required: [id, url]
-      properties:
-        id: { type: integer, format: int64 }
-        url: { type: string }
-        mime_type: { type: string, nullable: true }
-        width: { type: integer, nullable: true }
-        height: { type: integer, nullable: true }
-        alt: { type: string, nullable: true }
-        folder: { type: string, nullable: true }
-    MediaInput:
-      type: object
-      required: [url]
-      properties:
-        url: { type: string }
-        mime_type: { type: string, nullable: true }
-        width: { type: integer, nullable: true }
-        height: { type: integer, nullable: true }
-        alt: { type: string, nullable: true }
-        folder: { type: string, nullable: true }
-    ListWrapperMedia:
-      type: object
-      properties:
-        items: { type: array, items: { $ref: '#/components/schemas/MediaAsset' } }
     MenuItem:
       type: object
       required: [id, label]
@@ -1298,6 +1273,74 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Website' } }
+
+    MediaRendition:
+      type: object
+      required: [id, media_asset_id, preset, url]
+      properties:
+        id: { type: integer, format: int64 }
+        media_asset_id: { type: integer, format: int64 }
+        preset: { type: string }
+        url: { type: string }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        format: { type: string, nullable: true }
+        size_bytes: { type: integer, format: int64, nullable: true }
+    MediaAsset:
+      type: object
+      required: [id, public_id, url, status]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        organization_id: { type: integer, format: int64 }
+        url: { type: string }
+        mime_type: { type: string, nullable: true }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        alt: { type: string, nullable: true }
+        folder: { type: string, nullable: true }
+        status: { type: string, enum: [uploading, processing, ready, error] }
+        checksum: { type: string, nullable: true }
+        size_bytes: { type: integer, format: int64, nullable: true }
+        tags: { type: array, items: { type: string } }
+        renditions: { type: array, items: { $ref: '#/components/schemas/MediaRendition' } }
+        transforms: { type: object, additionalProperties: { type: string } }
+    MediaUpdateInput:
+      type: object
+      properties:
+        alt: { type: string, nullable: true }
+        folder: { type: string, nullable: true }
+        tags: { type: array, items: { type: string } }
+    TransformationPreset:
+      type: object
+      required: [id, organization_id, name, fit, format, quality]
+      properties:
+        id: { type: integer, format: int64 }
+        organization_id: { type: integer, format: int64 }
+        name: { type: string }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        fit: { type: string, enum: [cover, contain, fill, inside] }
+        format: { type: string, enum: [webp, avif, jpeg, png] }
+        quality: { type: integer }
+    PresetInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        fit: { type: string, enum: [cover, contain, fill, inside] }
+        format: { type: string, enum: [webp, avif, jpeg, png] }
+        quality: { type: integer }
+    ListWrapperMediaAsset:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MediaAsset' } }
+    ListWrapperTransformationPreset:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/TransformationPreset' } }
 
   responses:
     ErrorResponse:
@@ -2555,21 +2598,6 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
-  /admin/media:
-    get:
-      tags: [CMS]
-      operationId: adminListMedia
-      security: [{ adminAuth: [] }]
-      responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperMedia' } } } }
-    post:
-      tags: [CMS]
-      operationId: adminCreateMedia
-      security: [{ adminAuth: [] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MediaInput' } } } }
-      responses:
-        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/MediaAsset' } } } }
-
   /storefront/pages/{slug}:
     parameters:
       - { name: slug, in: path, required: true, schema: { type: string } }
@@ -2692,3 +2720,67 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Website' } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/media:
+    get:
+      tags: [DAM]
+      operationId: adminListMedia
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: folder, in: query, required: false, schema: { type: string } }
+        - { name: tag, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperMediaAsset' } } } }
+    post:
+      tags: [DAM]
+      operationId: adminUploadMedia
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                alt: { type: string }
+                folder: { type: string }
+                tags: { type: string }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/MediaAsset' } } } }
+        '200': { description: Existing (deduped), content: { application/json: { schema: { $ref: '#/components/schemas/MediaAsset' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '415': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/media/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [DAM]
+      operationId: adminGetMedia
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MediaAsset' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [DAM]
+      operationId: adminUpdateMedia
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MediaUpdateInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MediaAsset' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/transformation-presets:
+    get:
+      tags: [DAM]
+      operationId: adminListPresets
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperTransformationPreset' } } } }
+    post:
+      tags: [DAM]
+      operationId: adminCreatePreset
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PresetInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/TransformationPreset' } } } }
+        '409': { $ref: '#/components/responses/ErrorResponse' }

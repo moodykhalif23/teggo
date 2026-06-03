@@ -35,6 +35,7 @@ const allItems: NavItem[] = [
   { label: 'Workflows', icon: 'pi pi-sitemap', routeName: 'workflows', permission: 'workflow.view' },
   { label: 'Automation', icon: 'pi pi-bolt', routeName: 'automation-rules', permission: 'workflow.view' },
   { label: 'Pages', icon: 'pi pi-file', routeName: 'pages', permission: 'cms.view' },
+  { label: 'Media', icon: 'pi pi-images', routeName: 'media', permission: 'cms.view' },
   { label: 'Analytics', icon: 'pi pi-chart-line', routeName: 'analytics', permission: 'report.view' },
   { label: 'Websites', icon: 'pi pi-globe', routeName: 'websites', permission: 'tenant.view' },
 ]
