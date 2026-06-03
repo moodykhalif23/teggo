@@ -172,6 +172,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	taxmod.New(st.Pool()).Routes(r, authMW)
 	shippingmod.New(st.Pool()).Routes(r, authMW)
 	erpmod.New(st.Pool()).Routes(r, authMW)
+	ssomod.New(st.Pool(), issuer).Routes(r, authMW)
 
 	// Wrap the router so HTTP server metrics (request count, duration) flow to
 	// the configured OpenTelemetry MeterProvider. No-op when telemetry is off.
