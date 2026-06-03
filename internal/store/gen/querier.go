@@ -15,6 +15,7 @@ type Querier interface {
 	// ===== Movements ===========================================================
 	AddInventoryMovement(ctx context.Context, arg AddInventoryMovementParams) (InventoryMovement, error)
 	AddInvoiceItem(ctx context.Context, arg AddInvoiceItemParams) (InvoiceItem, error)
+	AddMenuItem(ctx context.Context, arg AddMenuItemParams) (MenuItem, error)
 	AddOpportunityStageHistory(ctx context.Context, arg AddOpportunityStageHistoryParams) error
 	AddOrderItem(ctx context.Context, arg AddOrderItemParams) (OrderItem, error)
 	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
@@ -59,10 +60,17 @@ type Querier interface {
 	// CRM queries — Pack 2 §1. Admin/sales-rep facing; everything org-scoped.
 	// ===== Leads ===============================================================
 	CreateLead(ctx context.Context, arg CreateLeadParams) (Lead, error)
+	// ===== Media ===============================================================
+	CreateMediaAsset(ctx context.Context, arg CreateMediaAssetParams) (MediaAsset, error)
+	// ===== Menus ===============================================================
+	CreateMenu(ctx context.Context, arg CreateMenuParams) (Menu, error)
 	// ===== Opportunities =======================================================
 	CreateOpportunity(ctx context.Context, arg CreateOpportunityParams) (Opportunity, error)
 	// ===== Order ===============================================================
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	// CMS queries — Pack 2 §2.
+	// ===== Pages ===============================================================
+	CreatePage(ctx context.Context, arg CreatePageParams) (ContentPage, error)
 	// ===== Payments ============================================================
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	// Pricing engine queries — Implementation Pack 1 §4 + §12.1.
@@ -85,6 +93,7 @@ type Querier interface {
 	// are the primitives. Money columns are decimal strings (sqlc money override).
 	// ===== RFQ =================================================================
 	CreateRFQ(ctx context.Context, arg CreateRFQParams) (Rfq, error)
+	CreateRedirect(ctx context.Context, arg CreateRedirectParams) (Redirect, error)
 	// Order-to-cash queries — Implementation Pack 1 §7.
 	// ===== Shipments ===========================================================
 	CreateShipment(ctx context.Context, arg CreateShipmentParams) (Shipment, error)
@@ -160,20 +169,28 @@ type Querier interface {
 	// the invoice, its order context, and the customer/organization names.
 	GetInvoiceForRender(ctx context.Context, id int64) (GetInvoiceForRenderRow, error)
 	GetLead(ctx context.Context, arg GetLeadParams) (Lead, error)
+	GetMenuByCode(ctx context.Context, arg GetMenuByCodeParams) (Menu, error)
 	GetOpportunity(ctx context.Context, arg GetOpportunityParams) (Opportunity, error)
 	GetOrderByID(ctx context.Context, arg GetOrderByIDParams) (Order, error)
 	GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (Order, error)
 	GetOrderItem(ctx context.Context, arg GetOrderItemParams) (OrderItem, error)
+	// GetPageAdmin fetches any page (any status) by id, org-scoped via its website.
+	GetPageAdmin(ctx context.Context, arg GetPageAdminParams) (ContentPage, error)
 	GetPayment(ctx context.Context, id int64) (Payment, error)
 	GetPipeline(ctx context.Context, arg GetPipelineParams) (Pipeline, error)
 	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
 	GetProductBySlug(ctx context.Context, arg GetProductBySlugParams) (GetProductBySlugRow, error)
 	GetProductIDByPublicID(ctx context.Context, arg GetProductIDByPublicIDParams) (int64, error)
+	// GetPublishedPage resolves a published page by website + locale + slug (the
+	// storefront read path).
+	GetPublishedPage(ctx context.Context, arg GetPublishedPageParams) (ContentPage, error)
 	GetQuoteByID(ctx context.Context, arg GetQuoteByIDParams) (Quote, error)
 	GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Quote, error)
 	GetRFQByID(ctx context.Context, arg GetRFQByIDParams) (Rfq, error)
 	GetRFQByPublicID(ctx context.Context, arg GetRFQByPublicIDParams) (Rfq, error)
+	// ===== Redirects ===========================================================
+	GetRedirect(ctx context.Context, arg GetRedirectParams) (Redirect, error)
 	GetShipment(ctx context.Context, id int64) (Shipment, error)
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
 	GetStage(ctx context.Context, id int64) (PipelineStage, error)
@@ -225,11 +242,16 @@ type Querier interface {
 	ListInvoicesForCustomer(ctx context.Context, customerID int64) ([]Invoice, error)
 	ListInvoicesForOrder(ctx context.Context, orderID int64) ([]Invoice, error)
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
+	ListMediaAssets(ctx context.Context, arg ListMediaAssetsParams) ([]MediaAsset, error)
+	ListMenuItems(ctx context.Context, menuID int64) ([]MenuItem, error)
+	ListMenusForWebsite(ctx context.Context, websiteID int64) ([]Menu, error)
 	ListOpportunities(ctx context.Context, arg ListOpportunitiesParams) ([]Opportunity, error)
 	ListOrderItems(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderStatusHistory(ctx context.Context, orderID int64) ([]ListOrderStatusHistoryRow, error)
 	ListOrdersAdmin(ctx context.Context, arg ListOrdersAdminParams) ([]Order, error)
 	ListOrdersForCustomer(ctx context.Context, customerID int64) ([]Order, error)
+	// ListPagesAdmin lists all pages for the org's websites.
+	ListPagesAdmin(ctx context.Context, organizationID int64) ([]ContentPage, error)
 	ListPaymentsForInvoice(ctx context.Context, invoiceID *int64) ([]Payment, error)
 	ListPipelineStages(ctx context.Context, pipelineID int64) ([]PipelineStage, error)
 	ListPriceLists(ctx context.Context, organizationID int64) ([]PriceList, error)
@@ -243,6 +265,7 @@ type Querier interface {
 	ListRFQItems(ctx context.Context, rfqID int64) ([]ListRFQItemsRow, error)
 	ListRFQsAdmin(ctx context.Context, arg ListRFQsAdminParams) ([]Rfq, error)
 	ListRFQsForCustomer(ctx context.Context, customerID int64) ([]Rfq, error)
+	ListRedirects(ctx context.Context, websiteID int64) ([]Redirect, error)
 	// ListShipmentItemProducts resolves a shipment's lines to product + quantity
 	// (for converting reservations to fulfilment on ship).
 	ListShipmentItemProducts(ctx context.Context, shipmentID int64) ([]ListShipmentItemProductsRow, error)
@@ -292,6 +315,7 @@ type Querier interface {
 	SetLeadStatus(ctx context.Context, arg SetLeadStatusParams) (Lead, error)
 	SetOpportunityStage(ctx context.Context, arg SetOpportunityStageParams) (Opportunity, error)
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
+	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
 	SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) (Quote, error)
 	SetQuoteSubtotal(ctx context.Context, arg SetQuoteSubtotalParams) error
@@ -313,6 +337,7 @@ type Querier interface {
 	UpdateCartItemPrice(ctx context.Context, arg UpdateCartItemPriceParams) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
+	UpdatePage(ctx context.Context, arg UpdatePageParams) (ContentPage, error)
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	// UpdateWorkflowTransitionConfig edits a transition's guards/actions JSONB,

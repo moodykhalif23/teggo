@@ -1135,6 +1135,79 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AutomationRule' } }
 
+    # ----- CMS (Pack 2 §2) -----
+    ContentPage:
+      type: object
+      required: [id, public_id, website_id, locale, slug, title, status, blocks, seo]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        website_id: { type: integer, format: int64 }
+        locale: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [draft, published, archived] }
+        blocks: { type: array, items: { type: object, additionalProperties: true } }
+        seo: { type: object, additionalProperties: true }
+        target_customer_group_id: { type: integer, format: int64, nullable: true }
+        published_at: { type: string, format: date-time, nullable: true }
+    PageInput:
+      type: object
+      required: [title, slug]
+      properties:
+        title: { type: string }
+        slug: { type: string }
+        locale: { type: string }
+        blocks: { type: array, items: { type: object, additionalProperties: true } }
+        seo: { type: object, additionalProperties: true }
+        target_customer_group_id: { type: integer, format: int64, nullable: true }
+    ListWrapperPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ContentPage' } }
+    MediaAsset:
+      type: object
+      required: [id, url]
+      properties:
+        id: { type: integer, format: int64 }
+        url: { type: string }
+        mime_type: { type: string, nullable: true }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        alt: { type: string, nullable: true }
+        folder: { type: string, nullable: true }
+    MediaInput:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+        mime_type: { type: string, nullable: true }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        alt: { type: string, nullable: true }
+        folder: { type: string, nullable: true }
+    ListWrapperMedia:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MediaAsset' } }
+    MenuItem:
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: integer, format: int64 }
+        label: { type: string }
+        url: { type: string, nullable: true }
+        category_id: { type: integer, format: int64, nullable: true }
+        page_id: { type: integer, format: int64, nullable: true }
+        sort_order: { type: integer }
+    Menu:
+      type: object
+      required: [code, name, items]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/MenuItem' } }
+
   responses:
     ErrorResponse:
       description: Error
@@ -2332,4 +2405,98 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationRule' } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ----- CMS (Pack 2 §2) -----
+  /admin/pages:
+    get:
+      tags: [CMS]
+      operationId: adminListPages
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperPage' } } } }
+    post:
+      tags: [CMS]
+      operationId: adminCreatePage
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PageInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/pages/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [CMS]
+      operationId: adminGetPage
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [CMS]
+      operationId: adminUpdatePage
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PageInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/pages/{id}/publish:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [CMS]
+      operationId: adminPublishPage
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/pages/{id}/archive:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [CMS]
+      operationId: adminArchivePage
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/media:
+    get:
+      tags: [CMS]
+      operationId: adminListMedia
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperMedia' } } } }
+    post:
+      tags: [CMS]
+      operationId: adminCreateMedia
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MediaInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/MediaAsset' } } } }
+
+  /storefront/pages/{slug}:
+    parameters:
+      - { name: slug, in: path, required: true, schema: { type: string } }
+      - { name: locale, in: query, schema: { type: string } }
+    get:
+      tags: [CMS]
+      operationId: storefrontGetPage
+      security: []
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /storefront/menus/{code}:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [CMS]
+      operationId: storefrontGetMenu
+      security: []
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Menu' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }

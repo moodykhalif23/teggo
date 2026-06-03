@@ -13,6 +13,7 @@ import (
 	authmod "b2bcommerce/internal/modules/auth"
 	"b2bcommerce/internal/modules/cart"
 	"b2bcommerce/internal/modules/catalog"
+	"b2bcommerce/internal/modules/cms"
 	"b2bcommerce/internal/modules/crm"
 	"b2bcommerce/internal/modules/customers"
 	"b2bcommerce/internal/modules/health"
@@ -97,6 +98,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	inventory.New(st.Pool()).Routes(r, authMW)
 	crm.New(st.Pool()).Routes(r, authMW)
 	wfadmin.New(st.Pool()).Routes(r, authMW)
+	cms.New(st.Pool(), issuer).Routes(r, authMW)
 
 	return r
 }

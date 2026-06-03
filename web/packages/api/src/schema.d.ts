@@ -1380,6 +1380,130 @@ export interface paths {
         patch: operations["adminUpdateAutomationRule"];
         trace?: never;
     };
+    "/admin/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListPages"];
+        put?: never;
+        post: operations["adminCreatePage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/pages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetPage"];
+        put: operations["adminUpdatePage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/pages/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminPublishPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/pages/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminArchivePage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListMedia"];
+        put?: never;
+        post: operations["adminCreateMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/pages/{slug}": {
+        parameters: {
+            query?: {
+                locale?: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        get: operations["storefrontGetPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/menus/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        get: operations["storefrontGetMenu"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2433,6 +2557,82 @@ export interface components {
         };
         ListWrapperAutomationRule: {
             items?: components["schemas"]["AutomationRule"][];
+        };
+        ContentPage: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            website_id: number;
+            locale: string;
+            slug: string;
+            title: string;
+            /** @enum {string} */
+            status: "draft" | "published" | "archived";
+            blocks: {
+                [key: string]: unknown;
+            }[];
+            seo: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            target_customer_group_id?: number | null;
+            /** Format: date-time */
+            published_at?: string | null;
+        };
+        PageInput: {
+            title: string;
+            slug: string;
+            locale?: string;
+            blocks?: {
+                [key: string]: unknown;
+            }[];
+            seo?: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            target_customer_group_id?: number | null;
+        };
+        ListWrapperPage: {
+            items?: components["schemas"]["ContentPage"][];
+        };
+        MediaAsset: {
+            /** Format: int64 */
+            id: number;
+            url: string;
+            mime_type?: string | null;
+            width?: number | null;
+            height?: number | null;
+            alt?: string | null;
+            folder?: string | null;
+        };
+        MediaInput: {
+            url: string;
+            mime_type?: string | null;
+            width?: number | null;
+            height?: number | null;
+            alt?: string | null;
+            folder?: string | null;
+        };
+        ListWrapperMedia: {
+            items?: components["schemas"]["MediaAsset"][];
+        };
+        MenuItem: {
+            /** Format: int64 */
+            id: number;
+            label: string;
+            url?: string | null;
+            /** Format: int64 */
+            category_id?: number | null;
+            /** Format: int64 */
+            page_id?: number | null;
+            sort_order?: number;
+        };
+        Menu: {
+            code: string;
+            name: string;
+            items: components["schemas"]["MenuItem"][];
         };
     };
     responses: {
@@ -5036,6 +5236,241 @@ export interface operations {
                 };
             };
             400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListPages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperPage"];
+                };
+            };
+        };
+    };
+    adminCreatePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminGetPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpdatePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminPublishPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminArchivePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperMedia"];
+                };
+            };
+        };
+    };
+    adminCreateMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+        };
+    };
+    storefrontGetPage: {
+        parameters: {
+            query?: {
+                locale?: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontGetMenu: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Menu"];
+                };
+            };
             404: components["responses"]["ErrorResponse"];
         };
     };

@@ -152,6 +152,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/workflow/AutomationRulesView.vue'),
         meta: { permission: 'workflow.view' },
       },
+      {
+        path: 'pages',
+        name: 'pages',
+        component: () => import('@/views/cms/PagesView.vue'),
+        meta: { permission: 'cms.view' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -34,6 +34,7 @@ const allItems: NavItem[] = [
   { label: 'Opportunities', icon: 'pi pi-briefcase', routeName: 'opportunities', permission: 'crm.view' },
   { label: 'Workflows', icon: 'pi pi-sitemap', routeName: 'workflows', permission: 'workflow.view' },
   { label: 'Automation', icon: 'pi pi-bolt', routeName: 'automation-rules', permission: 'workflow.view' },
+  { label: 'Pages', icon: 'pi pi-file', routeName: 'pages', permission: 'cms.view' },
 ]
 
 const navItems = computed<MenuItem[]>(() =>

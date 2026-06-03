@@ -135,6 +135,22 @@ type Contact struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+type ContentPage struct {
+	ID                    int64              `json:"id"`
+	PublicID              uuid.UUID          `json:"public_id"`
+	WebsiteID             int64              `json:"website_id"`
+	Locale                string             `json:"locale"`
+	Slug                  string             `json:"slug"`
+	Title                 string             `json:"title"`
+	Status                string             `json:"status"`
+	Blocks                []byte             `json:"blocks"`
+	Seo                   []byte             `json:"seo"`
+	TargetCustomerGroupID *int64             `json:"target_customer_group_id"`
+	PublishedAt           pgtype.Timestamptz `json:"published_at"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+}
+
 type Customer struct {
 	ID                 int64              `json:"id"`
 	PublicID           uuid.UUID          `json:"public_id"`
@@ -259,6 +275,36 @@ type Lead struct {
 	ConvertedCustomerID *int64    `json:"converted_customer_id"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
+}
+
+type MediaAsset struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	Url            string    `json:"url"`
+	MimeType       *string   `json:"mime_type"`
+	Width          *int32    `json:"width"`
+	Height         *int32    `json:"height"`
+	Alt            *string   `json:"alt"`
+	Folder         *string   `json:"folder"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type Menu struct {
+	ID        int64  `json:"id"`
+	WebsiteID int64  `json:"website_id"`
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+}
+
+type MenuItem struct {
+	ID         int64   `json:"id"`
+	MenuID     int64   `json:"menu_id"`
+	ParentID   *int64  `json:"parent_id"`
+	Label      string  `json:"label"`
+	Url        *string `json:"url"`
+	CategoryID *int64  `json:"category_id"`
+	PageID     *int64  `json:"page_id"`
+	SortOrder  int32   `json:"sort_order"`
 }
 
 type Opportunity struct {
@@ -486,6 +532,14 @@ type QuoteRevision struct {
 	Snapshot  []byte    `json:"snapshot"`
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Redirect struct {
+	ID         int64  `json:"id"`
+	WebsiteID  int64  `json:"website_id"`
+	FromPath   string `json:"from_path"`
+	ToPath     string `json:"to_path"`
+	StatusCode int32  `json:"status_code"`
 }
 
 type Rfq struct {
