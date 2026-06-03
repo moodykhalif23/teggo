@@ -62,16 +62,18 @@ func (h *Handler) inbound(w http.ResponseWriter, r *http.Request) {
 		status = "skipped" // unsupported inbound entity
 	}
 
-	// Dedupe + audit: the unique (connection, idempotency_key) inbound index
-	// makes a replayed event_id a no-op.
 	var ep *string
 	if applyErr != "" {
 		ep = &applyErr
 	}
+	var key *string
+	if status != "error" {
+		key = &ev.EventID
+	}
 	if _, err := h.q.CreateSyncLog(r.Context(), gen.CreateSyncLogParams{
 		OrganizationID: conn.OrganizationID, ConnectionID: conn.ID, Direction: "inbound",
 		EntityType: ev.EntityType, Operation: "upsert", Status: status,
-		IdempotencyKey: &ev.EventID, Error: ep,
+		IdempotencyKey: key, Error: ep,
 	}); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
