@@ -29,6 +29,20 @@ LIMIT $2 OFFSET $3;
 SELECT count(*) FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL;
 
+-- SearchProductsAdmin: admin product search over the FTS vector (PRD §14),
+-- ranked by relevance. Includes all statuses (admins manage drafts too).
+-- name: SearchProductsAdmin :many
+SELECT * FROM products
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND search_vector @@ websearch_to_tsquery('english', $2)
+ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $2)) DESC, name
+LIMIT $3 OFFSET $4;
+
+-- name: CountSearchProductsAdmin :one
+SELECT count(*) FROM products
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND search_vector @@ websearch_to_tsquery('english', $2);
+
 -- name: UpdateProduct :one
 UPDATE products
 SET sku                 = $3,
@@ -48,6 +62,19 @@ RETURNING *;
 UPDATE products
 SET deleted_at = now()
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL;
+
+-- SearchActiveProducts: full-text product search (PRD §14, Postgres FTS).
+-- $2 is the raw user query in websearch syntax (e.g. `brass valve`, `"ball valve"`,
+-- `valve -plastic`); results are ranked by relevance, then name as a tiebreak.
+-- name: SearchActiveProducts :many
+SELECT p.id, p.public_id, p.sku, p.name, p.slug, p.description,
+       p.status, p.attributes, p.unit
+FROM products p
+WHERE p.organization_id = $1
+  AND p.status = 'active' AND p.deleted_at IS NULL
+  AND p.search_vector @@ websearch_to_tsquery('english', $2)
+ORDER BY ts_rank(p.search_vector, websearch_to_tsquery('english', $2)) DESC, p.name
+LIMIT $3 OFFSET $4;
 
 -- FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
 -- backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like

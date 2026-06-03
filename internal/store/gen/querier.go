@@ -31,6 +31,7 @@ type Querier interface {
 	CountActiveProducts(ctx context.Context, organizationID int64) (int64, error)
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
 	CountProductsAdmin(ctx context.Context, organizationID int64) (int64, error)
+	CountSearchProductsAdmin(ctx context.Context, arg CountSearchProductsAdminParams) (int64, error)
 	// ===== Attributes & families ==============================================
 	CreateAttribute(ctx context.Context, arg CreateAttributeParams) (Attribute, error)
 	CreateAttributeFamily(ctx context.Context, arg CreateAttributeFamilyParams) (AttributeFamily, error)
@@ -206,6 +207,13 @@ type Querier interface {
 	// broken by the most specific qty tier <= requested.
 	// params: $1 customer_id, $2 product_id, $3 quantity, $4 currency, $5 website_id, $6 at
 	ResolvePrice(ctx context.Context, arg ResolvePriceParams) (ResolvePriceRow, error)
+	// SearchActiveProducts: full-text product search (PRD §14, Postgres FTS).
+	// $2 is the raw user query in websearch syntax (e.g. `brass valve`, `"ball valve"`,
+	// `valve -plastic`); results are ranked by relevance, then name as a tiebreak.
+	SearchActiveProducts(ctx context.Context, arg SearchActiveProductsParams) ([]SearchActiveProductsRow, error)
+	// SearchProductsAdmin: admin product search over the FTS vector (PRD §14),
+	// ranked by relevance. Includes all statuses (admins manage drafts too).
+	SearchProductsAdmin(ctx context.Context, arg SearchProductsAdminParams) ([]Product, error)
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)

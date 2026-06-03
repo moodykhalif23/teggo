@@ -6,6 +6,7 @@ import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
 import type { components } from '@teggo/api/schema'
@@ -20,6 +21,7 @@ const error = ref('')
 
 const dialogOpen = ref(false)
 const editing = ref<AdminProduct | null>(null)
+const term = ref('')
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -27,9 +29,10 @@ const confirm = useConfirm()
 async function load() {
   loading.value = true
   error.value = ''
-  const { data, error: err } = await api.GET('/admin/products', {
-    params: { query: { page: 1, page_size: 100 } },
-  })
+  const query: { page: number; page_size: number; q?: string } = { page: 1, page_size: 100 }
+  const q = term.value.trim()
+  if (q) query.q = q
+  const { data, error: err } = await api.GET('/admin/products', { params: { query } })
   loading.value = false
   if (err || !data) {
     error.value = errMessage(err, 'Failed to load products')
@@ -86,7 +89,14 @@ onMounted(load)
     <div class="header">
       <h1>Products <span class="muted">({{ total }})</span></h1>
       <div class="actions">
-        <Button icon="pi pi-refresh" severity="secondary" text @click="load" />
+        <span class="p-input-icon-left search">
+          <InputText
+            v-model="term"
+            placeholder="Search products…"
+            @keyup.enter="load"
+          />
+          <Button icon="pi pi-search" severity="secondary" text @click="load" />
+        </span>
         <Button icon="pi pi-plus" label="New product" @click="openCreate" />
       </div>
     </div>

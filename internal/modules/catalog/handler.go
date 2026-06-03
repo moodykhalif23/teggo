@@ -124,6 +124,23 @@ func (h *Handler) storefrontList(w http.ResponseWriter, r *http.Request) {
 	var items []storefrontProduct
 
 	switch {
+	case r.URL.Query().Get("q") != "":
+		// Full-text keyword search, ranked by relevance (PRD §14).
+		rows, err := h.q.SearchActiveProducts(r.Context(), gen.SearchActiveProductsParams{
+			OrganizationID: orgID, WebsearchToTsquery: r.URL.Query().Get("q"),
+			Limit: int32(limit), Offset: int32(offset),
+		})
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not search products")
+			return
+		}
+		for _, p := range rows {
+			items = append(items, storefrontProduct{
+				PublicID: p.PublicID.String(), SKU: p.Sku, Name: p.Name, Slug: p.Slug,
+				Description: p.Description, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
+			})
+		}
+
 	case r.URL.Query().Get("category") != "":
 		cat, err := h.q.GetCategoryBySlug(r.Context(), gen.GetCategoryBySlugParams{
 			OrganizationID: orgID, Slug: r.URL.Query().Get("category"),
@@ -246,17 +263,40 @@ func (h *Handler) adminList(w http.ResponseWriter, r *http.Request) {
 	if page < 1 {
 		page = 1
 	}
-	rows, err := h.q.ListProductsAdmin(r.Context(), gen.ListProductsAdminParams{
-		OrganizationID: org, Limit: int32(limit), Offset: int32((page - 1) * limit),
-	})
-	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not list products")
-		return
-	}
-	total, err := h.q.CountProductsAdmin(r.Context(), org)
-	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not count products")
-		return
+	offset := int32((page - 1) * limit)
+	q := r.URL.Query().Get("q")
+
+	var rows []gen.Product
+	var total int64
+	if q != "" {
+		// Full-text search (PRD §14), ranked by relevance.
+		var err error
+		rows, err = h.q.SearchProductsAdmin(r.Context(), gen.SearchProductsAdminParams{
+			OrganizationID: org, WebsearchToTsquery: q, Limit: int32(limit), Offset: offset,
+		})
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not search products")
+			return
+		}
+		if total, err = h.q.CountSearchProductsAdmin(r.Context(), gen.CountSearchProductsAdminParams{
+			OrganizationID: org, WebsearchToTsquery: q,
+		}); err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not count products")
+			return
+		}
+	} else {
+		var err error
+		rows, err = h.q.ListProductsAdmin(r.Context(), gen.ListProductsAdminParams{
+			OrganizationID: org, Limit: int32(limit), Offset: offset,
+		})
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not list products")
+			return
+		}
+		if total, err = h.q.CountProductsAdmin(r.Context(), org); err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not count products")
+			return
+		}
 	}
 	items := make([]adminProduct, 0, len(rows))
 	for _, p := range rows {

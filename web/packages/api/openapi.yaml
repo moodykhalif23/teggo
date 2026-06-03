@@ -963,6 +963,7 @@ paths:
       operationId: adminListProducts
       security: [{ adminAuth: [] }]
       parameters:
+        - { name: q, in: query, description: 'Full-text search term (relevance-ranked)', schema: { type: string } }
         - { name: page, in: query, schema: { type: integer, default: 1 } }
         - { name: page_size, in: query, schema: { type: integer, default: 24 } }
       responses:

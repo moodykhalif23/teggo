@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 
 const { isAuthenticated, logout } = useAuth()
 const router = useRouter()
+const route = useRoute()
+
+const term = ref((route.query.q as string) ?? '')
+
+function search() {
+  const q = term.value.trim()
+  if (q) router.push({ path: '/search', query: { q } })
+}
 
 function signOut() {
   logout()
@@ -23,6 +32,15 @@ function signOut() {
         <NuxtLink v-if="isAuthenticated" to="/account/invoices">Invoices</NuxtLink>
       </nav>
       <span class="spacer" />
+      <span class="search">
+        <i class="pi pi-search" />
+        <InputText
+          v-model="term"
+          placeholder="Search products…"
+          class="search-input"
+          @keyup.enter="search"
+        />
+      </span>
       <NuxtLink to="/cart">
         <Button icon="pi pi-shopping-cart" label="Cart" severity="secondary" outlined />
       </NuxtLink>
@@ -79,6 +97,16 @@ function signOut() {
 }
 .spacer {
   flex: 1;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--p-text-muted-color, #64748b);
+}
+.search-input {
+  width: 16rem;
+  max-width: 30vw;
 }
 .content {
   flex: 1;

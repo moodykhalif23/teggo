@@ -99,6 +99,24 @@ func (q *Queries) CountProductsAdmin(ctx context.Context, organizationID int64) 
 	return count, err
 }
 
+const countSearchProductsAdmin = `-- name: CountSearchProductsAdmin :one
+SELECT count(*) FROM products
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND search_vector @@ websearch_to_tsquery('english', $2)
+`
+
+type CountSearchProductsAdminParams struct {
+	OrganizationID     int64  `json:"organization_id"`
+	WebsearchToTsquery string `json:"websearch_to_tsquery"`
+}
+
+func (q *Queries) CountSearchProductsAdmin(ctx context.Context, arg CountSearchProductsAdminParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchProductsAdmin, arg.OrganizationID, arg.WebsearchToTsquery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAttribute = `-- name: CreateAttribute :one
 
 INSERT INTO attributes (
@@ -203,7 +221,7 @@ INSERT INTO products (
   organization_id, sku, type, name, slug, description, status,
   attributes, unit, parent_id, attribute_family_id
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id
+RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector
 `
 
 type CreateProductParams struct {
@@ -256,12 +274,13 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.DeletedAt,
 		&i.ParentID,
 		&i.AttributeFamilyID,
+		&i.SearchVector,
 	)
 	return i, err
 }
 
 const filterActiveProductsByAttributes = `-- name: FilterActiveProductsByAttributes :many
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector FROM products
 WHERE organization_id = $1
   AND status = 'active' AND deleted_at IS NULL
   AND attributes @> $2
@@ -310,6 +329,7 @@ func (q *Queries) FilterActiveProductsByAttributes(ctx context.Context, arg Filt
 			&i.DeletedAt,
 			&i.ParentID,
 			&i.AttributeFamilyID,
+			&i.SearchVector,
 		); err != nil {
 			return nil, err
 		}
@@ -368,7 +388,7 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, arg GetCategoryBySlugPa
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector FROM products
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
 `
 
@@ -397,6 +417,7 @@ func (q *Queries) GetProductByID(ctx context.Context, arg GetProductByIDParams) 
 		&i.DeletedAt,
 		&i.ParentID,
 		&i.AttributeFamilyID,
+		&i.SearchVector,
 	)
 	return i, err
 }
@@ -657,7 +678,7 @@ func (q *Queries) ListProductCategoryIDs(ctx context.Context, productID int64) (
 }
 
 const listProductsAdmin = `-- name: ListProductsAdmin :many
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL
 ORDER BY name
 LIMIT $2 OFFSET $3
@@ -695,6 +716,7 @@ func (q *Queries) ListProductsAdmin(ctx context.Context, arg ListProductsAdminPa
 			&i.DeletedAt,
 			&i.ParentID,
 			&i.AttributeFamilyID,
+			&i.SearchVector,
 		); err != nil {
 			return nil, err
 		}
@@ -718,6 +740,134 @@ type RemoveProductFromCategoryParams struct {
 func (q *Queries) RemoveProductFromCategory(ctx context.Context, arg RemoveProductFromCategoryParams) error {
 	_, err := q.db.Exec(ctx, removeProductFromCategory, arg.ProductID, arg.CategoryID)
 	return err
+}
+
+const searchActiveProducts = `-- name: SearchActiveProducts :many
+SELECT p.id, p.public_id, p.sku, p.name, p.slug, p.description,
+       p.status, p.attributes, p.unit
+FROM products p
+WHERE p.organization_id = $1
+  AND p.status = 'active' AND p.deleted_at IS NULL
+  AND p.search_vector @@ websearch_to_tsquery('english', $2)
+ORDER BY ts_rank(p.search_vector, websearch_to_tsquery('english', $2)) DESC, p.name
+LIMIT $3 OFFSET $4
+`
+
+type SearchActiveProductsParams struct {
+	OrganizationID     int64  `json:"organization_id"`
+	WebsearchToTsquery string `json:"websearch_to_tsquery"`
+	Limit              int32  `json:"limit"`
+	Offset             int32  `json:"offset"`
+}
+
+type SearchActiveProductsRow struct {
+	ID          int64     `json:"id"`
+	PublicID    uuid.UUID `json:"public_id"`
+	Sku         string    `json:"sku"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description"`
+	Status      string    `json:"status"`
+	Attributes  []byte    `json:"attributes"`
+	Unit        string    `json:"unit"`
+}
+
+// SearchActiveProducts: full-text product search (PRD §14, Postgres FTS).
+// $2 is the raw user query in websearch syntax (e.g. `brass valve`, `"ball valve"`,
+// `valve -plastic`); results are ranked by relevance, then name as a tiebreak.
+func (q *Queries) SearchActiveProducts(ctx context.Context, arg SearchActiveProductsParams) ([]SearchActiveProductsRow, error) {
+	rows, err := q.db.Query(ctx, searchActiveProducts,
+		arg.OrganizationID,
+		arg.WebsearchToTsquery,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchActiveProductsRow
+	for rows.Next() {
+		var i SearchActiveProductsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.Sku,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.Status,
+			&i.Attributes,
+			&i.Unit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchProductsAdmin = `-- name: SearchProductsAdmin :many
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector FROM products
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND search_vector @@ websearch_to_tsquery('english', $2)
+ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $2)) DESC, name
+LIMIT $3 OFFSET $4
+`
+
+type SearchProductsAdminParams struct {
+	OrganizationID     int64  `json:"organization_id"`
+	WebsearchToTsquery string `json:"websearch_to_tsquery"`
+	Limit              int32  `json:"limit"`
+	Offset             int32  `json:"offset"`
+}
+
+// SearchProductsAdmin: admin product search over the FTS vector (PRD §14),
+// ranked by relevance. Includes all statuses (admins manage drafts too).
+func (q *Queries) SearchProductsAdmin(ctx context.Context, arg SearchProductsAdminParams) ([]Product, error) {
+	rows, err := q.db.Query(ctx, searchProductsAdmin,
+		arg.OrganizationID,
+		arg.WebsearchToTsquery,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Product
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.Sku,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.Status,
+			&i.Attributes,
+			&i.Unit,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ParentID,
+			&i.AttributeFamilyID,
+			&i.SearchVector,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeleteProduct = `-- name: SoftDeleteProduct :execrows
@@ -752,7 +902,7 @@ SET sku                 = $3,
     parent_id           = $11,
     attribute_family_id = $12
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
-RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id
+RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector
 `
 
 type UpdateProductParams struct {
@@ -803,6 +953,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.DeletedAt,
 		&i.ParentID,
 		&i.AttributeFamilyID,
+		&i.SearchVector,
 	)
 	return i, err
 }

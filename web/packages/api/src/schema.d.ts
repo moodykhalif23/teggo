@@ -1989,6 +1989,8 @@ export interface operations {
     adminListProducts: {
         parameters: {
             query?: {
+                /** @description Full-text search term (relevance-ranked) */
+                q?: string;
                 page?: number;
                 page_size?: number;
             };

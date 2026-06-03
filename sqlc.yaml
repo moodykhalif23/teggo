@@ -24,3 +24,7 @@ sql:
             go_type:
               type: "string"
               pointer: true
+          # tsvector (FTS, PRD §14) has no native Go type; map the generated
+          # column to string so SELECT */RETURNING * on products scans cleanly.
+          - column: "products.search_vector"
+            go_type: "string"

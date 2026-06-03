@@ -287,3 +287,106 @@ func TestTenantIsolation_Products(t *testing.T) {
 		}
 	}
 }
+
+// --- Full-text search (PRD §14) -------------------------------------------
+
+// searchResp captures the fields needed to assert search relevance + scoping.
+type searchResp struct {
+	Items []struct {
+		Sku    string `json:"sku"`
+		Name   string `json:"name"`
+		Slug   string `json:"slug"`
+		Status string `json:"status"`
+	} `json:"items"`
+	Total int64 `json:"total"`
+}
+
+func seedSearchProducts(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	q := gen.New(pool)
+	ctx := context.Background()
+	desc := "compatible with zorptron systems"
+	mk := func(org int64, sku, name, slug, status string, description *string) {
+		if _, err := q.CreateProduct(ctx, gen.CreateProductParams{
+			OrganizationID: org, Sku: sku, Type: "simple", Name: name, Slug: slug,
+			Description: description, Status: status, Attributes: []byte("{}"), Unit: "each",
+		}); err != nil {
+			t.Fatalf("seed %s: %v", sku, err)
+		}
+	}
+	// org 1: two active matches (name-weighted beats description-weighted),
+	// one draft (excluded from storefront), one non-match.
+	mk(1, "ZW-1", "Zorptron Widget", "zorptron-widget", "active", nil)
+	mk(1, "SB-2", "Standard Bolt", "standard-bolt", "active", &desc)
+	mk(1, "ZG-3", "Zorptron Gadget", "zorptron-gadget", "draft", nil)
+	mk(1, "PB-9", "Plastic Bucket", "plastic-bucket", "active", nil)
+	// A second org with a match that must never leak into org-1 results.
+	var org2 int64
+	if err := pool.QueryRow(ctx, `INSERT INTO organizations (name) VALUES ('Org Two') RETURNING id`).Scan(&org2); err != nil {
+		t.Fatalf("create org2: %v", err)
+	}
+	mk(org2, "ZT-4", "Zorptron Thing", "zorptron-thing", "active", nil)
+}
+
+func TestStorefrontSearch_RelevanceAndScope(t *testing.T) {
+	h, _, pool := newServer(t)
+	seedSearchProducts(t, pool)
+
+	rr := do(t, h, http.MethodGet, "/storefront/products?q=zorptron", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var resp searchResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Active org-1 matches only: the name match + the description match.
+	// The draft (ZG-3) and the org-2 product (ZT-4) must be absent.
+	if len(resp.Items) != 2 {
+		t.Fatalf("want 2 results, got %d: %+v", len(resp.Items), resp.Items)
+	}
+	for _, it := range resp.Items {
+		if it.Sku == "ZG-3" {
+			t.Error("draft product leaked into storefront search")
+		}
+		if it.Sku == "ZT-4" {
+			t.Error("tenant isolation breach: org-2 product in org-1 search")
+		}
+	}
+	// Relevance: a name hit (weight A) ranks above a description-only hit (weight B).
+	if resp.Items[0].Sku != "ZW-1" {
+		t.Errorf("relevance: want name-match ZW-1 first, got %s", resp.Items[0].Sku)
+	}
+
+	// A term that matches nothing returns an empty list (not an error).
+	empty := do(t, h, http.MethodGet, "/storefront/products?q=nonexistentxyz", "", nil)
+	var er searchResp
+	_ = json.Unmarshal(empty.Body.Bytes(), &er)
+	if empty.Code != http.StatusOK || len(er.Items) != 0 {
+		t.Errorf("no-match search: want 200 + 0 items, got %d / %d", empty.Code, len(er.Items))
+	}
+}
+
+func TestAdminSearch_IncludesDraftsScoped(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	seedSearchProducts(t, pool)
+	tok := catalogToken(t, issuer)
+
+	rr := do(t, h, http.MethodGet, "/admin/products?q=zorptron", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var resp searchResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Admin sees all org-1 statuses (incl. the draft ZG-3) but never org-2's.
+	if resp.Total != 3 || len(resp.Items) != 3 {
+		t.Fatalf("want 3 org-1 matches (incl. draft), got total=%d items=%d", resp.Total, len(resp.Items))
+	}
+	for _, it := range resp.Items {
+		if it.Sku == "ZT-4" {
+			t.Error("tenant isolation breach: org-2 product in org-1 admin search")
+		}
+	}
+}

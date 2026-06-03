@@ -315,6 +315,7 @@ type Product struct {
 	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
 	ParentID          *int64             `json:"parent_id"`
 	AttributeFamilyID *int64             `json:"attribute_family_id"`
+	SearchVector      string             `json:"search_vector"`
 }
 
 type ProductCategory struct {
