@@ -13,6 +13,7 @@ import (
 	"b2bcommerce/internal/logging"
 	"b2bcommerce/internal/pdf"
 	"b2bcommerce/internal/queue"
+	"b2bcommerce/internal/telemetry"
 )
 
 func main() {
@@ -31,6 +32,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+
+	shutdownTel, err := telemetry.Setup(ctx, "teggo-worker", "dev")
+	if err != nil {
+		logger.Error("telemetry init failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = shutdownTel(context.Background()) }()
+	if err := telemetry.RegisterPoolMetrics(pool); err != nil {
+		logger.Warn("pool metrics registration failed", "err", err)
+	}
 
 	var renderer pdf.Renderer
 	if cfg.GotenbergURL != "" {

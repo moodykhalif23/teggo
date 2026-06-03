@@ -206,13 +206,22 @@ func (h *Handler) regeneratePDF(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveInvoicePDF streams the stored PDF for an invoice's public_id. The route
-// is unauthenticated by design (capability URL); a missing document — not yet
-// generated, or unknown id — is a 404.
+// takes no bearer token so a browser can open it directly, but the URL must
+// carry a valid exp+sig minted by renderInvoice for the owning/authorised
+// caller — a bare or guessed public_id is rejected (403). A missing document
+// (not yet generated, or unknown id) is a 404.
 func (h *Handler) serveInvoicePDF(w http.ResponseWriter, r *http.Request) {
 	pid, err := uuid.Parse(chi.URLParam(r, "publicID"))
 	if err != nil {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
 		return
+	}
+	if h.signer != nil {
+		q := r.URL.Query()
+		if !h.signer.VerifyURL(r.URL.Path, q.Get("exp"), q.Get("sig")) {
+			response.Fail(w, http.StatusForbidden, "forbidden", "missing or expired signature")
+			return
+		}
 	}
 	doc, err := h.q.GetInvoiceDocument(r.Context(), pid)
 	if err != nil {
@@ -272,6 +281,14 @@ func (h *Handler) renderInvoice(w http.ResponseWriter, r *http.Request, inv gen.
 	if items == nil {
 		items = []gen.InvoiceItem{}
 	}
+	// Mint a signed, time-limited download link. renderInvoice is only reached
+	// after the caller has passed the ownership (storefront) or org/permission
+	// (admin) check, so the link is only ever handed to an authorised party.
+	pdfURL := inv.PdfUrl
+	if pdfURL != nil && h.signer != nil {
+		signed := h.signer.SignURL(*pdfURL, pdfURLTTL)
+		pdfURL = &signed
+	}
 	response.JSON(w, http.StatusOK, map[string]any{
 		"id":          inv.ID,
 		"public_id":   inv.PublicID.String(),
@@ -281,7 +298,7 @@ func (h *Handler) renderInvoice(w http.ResponseWriter, r *http.Request, inv gen.
 		"tax_total":   inv.TaxTotal,
 		"grand_total": inv.GrandTotal,
 		"due_at":      inv.DueAt,
-		"pdf_url":     inv.PdfUrl,
+		"pdf_url":     pdfURL,
 		"items":       items,
 	})
 }

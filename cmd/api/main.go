@@ -18,6 +18,7 @@ import (
 	"b2bcommerce/internal/queue"
 	"b2bcommerce/internal/server"
 	"b2bcommerce/internal/store"
+	"b2bcommerce/internal/telemetry"
 )
 
 func main() {
@@ -36,6 +37,23 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+
+	// OpenTelemetry metrics (opt-in via OTEL_EXPORTER_OTLP_ENDPOINT).
+	shutdownTel, err := telemetry.Setup(ctx, "teggo-api", "dev")
+	if err != nil {
+		logger.Error("telemetry init failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		sdctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTel(sdctx); err != nil {
+			logger.Error("telemetry shutdown error", "err", err)
+		}
+	}()
+	if err := telemetry.RegisterPoolMetrics(pool); err != nil {
+		logger.Warn("pool metrics registration failed", "err", err)
+	}
 
 	st := store.New(pool)
 	issuer := auth.NewIssuer(cfg.JWTSecret, cfg.JWTTTL)

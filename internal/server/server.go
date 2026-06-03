@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/inventory"
@@ -120,7 +121,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)
-	otc.New(st.Pool(), o.pdf, o.notifier, o.gateway).Routes(r, authMW)
+	otc.New(st.Pool(), o.pdf, o.notifier, o.gateway, issuer).Routes(r, authMW)
 	inventory.New(st.Pool()).Routes(r, authMW)
 	crm.New(st.Pool()).Routes(r, authMW)
 	wfadmin.New(st.Pool()).Routes(r, authMW)
@@ -128,5 +129,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	reporting.New(st.Pool()).Routes(r, authMW)
 	tenancy.New(st.Pool()).Routes(r, authMW)
 
-	return r
+	// Wrap the router so HTTP server metrics (request count, duration) flow to
+	// the configured OpenTelemetry MeterProvider. No-op when telemetry is off.
+	return otelhttp.NewHandler(r, "teggo.http")
 }

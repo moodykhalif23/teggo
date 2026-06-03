@@ -9,6 +9,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +20,17 @@ import (
 	"b2bcommerce/internal/store/gen"
 	"b2bcommerce/internal/workflow"
 )
+
+// URLSigner mints and verifies signed, time-limited capability URLs for invoice
+// PDFs. *auth.Issuer satisfies it. When nil, PDF links fall back to unsigned
+// (legacy) behaviour.
+type URLSigner interface {
+	SignURL(path string, ttl time.Duration) string
+	VerifyURL(path, exp, sig string) bool
+}
+
+// pdfURLTTL bounds how long a minted invoice-PDF link stays valid.
+const pdfURLTTL = time.Hour
 
 // PDFEnqueuer schedules async invoice-PDF generation. Satisfied by
 // *queue.Enqueuer in production and a synchronous shim in tests; may be nil.
@@ -38,13 +50,14 @@ type Handler struct {
 	pdf     PDFEnqueuer
 	notify  Notifier
 	gateway gateway.Gateway
+	signer  URLSigner
 	wf      *workflow.Engine
 }
 
-func New(pool *pgxpool.Pool, pdf PDFEnqueuer, notify Notifier, gw gateway.Gateway) *Handler {
+func New(pool *pgxpool.Pool, pdf PDFEnqueuer, notify Notifier, gw gateway.Gateway, signer URLSigner) *Handler {
 	// Shipment transitions are governed by the DB-defined `shipment_default`
 	// workflow (no guards/actions configured → an empty registry suffices).
-	return &Handler{pool: pool, q: gen.New(pool), pdf: pdf, notify: notify, gateway: gw, wf: workflow.New(pool, nil)}
+	return &Handler{pool: pool, q: gen.New(pool), pdf: pdf, notify: notify, gateway: gw, signer: signer, wf: workflow.New(pool, nil)}
 }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {

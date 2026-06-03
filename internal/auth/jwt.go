@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"time"
@@ -82,4 +85,32 @@ func (i *Issuer) Parse(tokenStr string) (*Claims, error) {
 		return nil, err
 	}
 	return claims, nil
+}
+
+// SignURL turns a bare path into a signed, time-limited capability URL of the
+// form "<path>?exp=<unix>&sig=<hex-hmac>". The signature binds the path and
+// expiry to the issuer secret, so only the server can mint a working link and
+// it stops working after ttl. Used for invoice-PDF downloads, which a browser
+// opens directly (no bearer token), but which must not be reachable by merely
+// guessing the public_id.
+func (i *Issuer) SignURL(path string, ttl time.Duration) string {
+	exp := strconv.FormatInt(time.Now().Add(ttl).Unix(), 10)
+	return fmt.Sprintf("%s?exp=%s&sig=%s", path, exp, i.urlMAC(path, exp))
+}
+
+// VerifyURL checks the exp+sig pair minted by SignURL against the given path.
+// It returns false on a tampered signature or an elapsed expiry.
+func (i *Issuer) VerifyURL(path, exp, sig string) bool {
+	expUnix, err := strconv.ParseInt(exp, 10, 64)
+	if err != nil || time.Now().Unix() > expUnix {
+		return false
+	}
+	want := i.urlMAC(path, exp)
+	return hmac.Equal([]byte(want), []byte(sig))
+}
+
+func (i *Issuer) urlMAC(path, exp string) string {
+	m := hmac.New(sha256.New, i.secret)
+	m.Write([]byte(path + "\n" + exp))
+	return hex.EncodeToString(m.Sum(nil))
 }

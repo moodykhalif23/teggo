@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,8 +196,11 @@ func TestInvoiceIssueFreezesAndGeneratesPDF(t *testing.T) {
 		t.Errorf("invoice items frozen from order: want 1, got %d", len(got.Items))
 	}
 
-	// The capability URL serves a real PDF, unauthenticated, to anyone with the
-	// (unguessable) link.
+	// The rendered pdf_url is a signed capability URL (carries exp+sig); opening
+	// it (no bearer token) serves a real PDF.
+	if !strings.Contains(*got.PdfURL, "sig=") {
+		t.Fatalf("pdf_url should be signed, got %q", *got.PdfURL)
+	}
 	dl := do(t, h, http.MethodGet, *got.PdfURL, "", nil)
 	if dl.Code != http.StatusOK {
 		t.Fatalf("download PDF: want 200, got %d (%s)", dl.Code, dl.Body.String())
@@ -208,8 +212,20 @@ func TestInvoiceIssueFreezesAndGeneratesPDF(t *testing.T) {
 		t.Errorf("downloaded body is not a PDF (prefix %q)", body[:min(4, len(body))])
 	}
 
-	// An unknown invoice id is a 404.
-	if nf := do(t, h, http.MethodGet, "/files/invoices/00000000-0000-0000-0000-000000000000.pdf", "", nil); nf.Code != http.StatusNotFound {
+	// A bare (unsigned) capability URL is rejected — guessing the public_id is
+	// no longer enough.
+	base := (*got.PdfURL)[:strings.IndexByte(*got.PdfURL, '?')]
+	if bare := do(t, h, http.MethodGet, base, "", nil); bare.Code != http.StatusForbidden {
+		t.Errorf("unsigned PDF: want 403, got %d", bare.Code)
+	}
+	// A tampered signature is rejected.
+	if tampered := do(t, h, http.MethodGet, base+"?exp=99999999999&sig=deadbeef", "", nil); tampered.Code != http.StatusForbidden {
+		t.Errorf("tampered PDF: want 403, got %d", tampered.Code)
+	}
+	// A validly-signed but unknown invoice id is a 404 (signature passes, doc
+	// lookup misses).
+	unknown := issuer.SignURL("/files/invoices/00000000-0000-0000-0000-000000000000.pdf", time.Hour)
+	if nf := do(t, h, http.MethodGet, unknown, "", nil); nf.Code != http.StatusNotFound {
 		t.Errorf("unknown PDF: want 404, got %d", nf.Code)
 	}
 }
