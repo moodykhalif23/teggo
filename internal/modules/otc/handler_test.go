@@ -389,3 +389,61 @@ func TestAdminListInvoices(t *testing.T) {
 	}
 	_ = pubID
 }
+
+// --- Card payment (PRD §11, mock gateway) ---------------------------------
+
+func TestPayInvoiceByCard(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	tok := adminToken(t, issuer)
+	q := gen.New(pool)
+	ctx := context.Background()
+
+	custID, orderID, _ := seedOrder(t, pool, 30, "100000")
+	invID, pubID, _, _ := issueInvoice(t, h, tok, orderID)
+
+	hash, _ := auth.HashPassword(custPassword)
+	if _, err := q.CreateCustomerUser(ctx, gen.CreateCustomerUserParams{CustomerID: custID, Email: "buyer@acme.test", PasswordHash: hash, FullName: "Buyer", Role: "buyer"}); err != nil {
+		t.Fatalf("customer user: %v", err)
+	}
+	custTok, _ := issuer.IssueStorefront(0, 1, custID)
+
+	// A declining token (mock gateway) → 402, invoice stays unpaid.
+	dec := do(t, h, http.MethodPost, "/storefront/invoices/"+pubID+"/pay", custTok, map[string]any{"token": "tok_decline"})
+	if dec.Code != http.StatusPaymentRequired {
+		t.Fatalf("declined pay: want 402, got %d (%s)", dec.Code, dec.Body.String())
+	}
+
+	// A good token → 200 and the invoice flips to paid.
+	ok := do(t, h, http.MethodPost, "/storefront/invoices/"+pubID+"/pay", custTok, map[string]any{"token": "tok_ok"})
+	if ok.Code != http.StatusOK {
+		t.Fatalf("pay: want 200, got %d (%s)", ok.Code, ok.Body.String())
+	}
+	var inv struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(ok.Body.Bytes(), &inv)
+	if inv.Status != "paid" {
+		t.Errorf("invoice status after pay: want paid, got %s", inv.Status)
+	}
+
+	// A captured card payment was recorded against the invoice.
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM payments WHERE invoice_id=$1 AND method='card' AND status='captured'`, invID).Scan(&n); err != nil {
+		t.Fatalf("payments count: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("captured card payments: want 1, got %d", n)
+	}
+
+	// Paying again is a 409 (already paid).
+	again := do(t, h, http.MethodPost, "/storefront/invoices/"+pubID+"/pay", custTok, map[string]any{"token": "tok_ok"})
+	if again.Code != http.StatusConflict {
+		t.Errorf("double pay: want 409, got %d", again.Code)
+	}
+
+	// Another customer cannot pay this invoice.
+	otherTok, _ := issuer.IssueStorefront(0, 1, custID+99999)
+	if rr := do(t, h, http.MethodPost, "/storefront/invoices/"+pubID+"/pay", otherTok, map[string]any{"token": "tok_ok"}); rr.Code != http.StatusNotFound {
+		t.Errorf("cross-customer pay: want 404, got %d", rr.Code)
+	}
+}

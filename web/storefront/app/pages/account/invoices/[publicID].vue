@@ -4,6 +4,7 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
+import { ref } from 'vue'
 import type { components } from '@teggo/api/schema'
 
 definePageMeta({ middleware: 'auth' })
@@ -31,6 +32,27 @@ const pdfHref = computed(() => (invoice.value?.pdf_url ? `${apiBase}${invoice.va
 function sev(s?: string) {
   return s === 'paid' ? 'success' : s === 'overdue' ? 'danger' : s === 'void' ? 'secondary' : 'info'
 }
+
+const paying = ref(false)
+const payError = ref('')
+
+async function payByCard() {
+  if (!invoice.value) return
+  paying.value = true
+  payError.value = ''
+  // A real integration collects a gateway token client-side (Stripe.js etc.);
+  // the demo gateway accepts any token (use one containing "decline" to test it).
+  const { data, error: err } = await client.POST('/storefront/invoices/{publicID}/pay', {
+    params: { path: { publicID } },
+    body: { token: 'tok_demo' },
+  })
+  paying.value = false
+  if (err || !data) {
+    payError.value = (err as { error?: { message?: string } })?.error?.message ?? 'Payment failed. Please try again.'
+    return
+  }
+  invoice.value = data
+}
 </script>
 
 <template>
@@ -47,6 +69,14 @@ function sev(s?: string) {
         <span v-if="invoice.due_at">Due {{ new Date(invoice.due_at).toLocaleDateString() }}</span>
         <a v-if="pdfHref" :href="pdfHref" target="_blank" rel="noopener"><i class="pi pi-file-pdf" /> Download PDF</a>
       </div>
+
+      <Message v-if="payError" severity="error" :closable="true" class="mb">{{ payError }}</Message>
+      <div v-if="invoice.status !== 'paid' && invoice.status !== 'void'" class="paybar">
+        <Button label="Pay by card" icon="pi pi-credit-card" :loading="paying" @click="payByCard" />
+      </div>
+      <Message v-else-if="invoice.status === 'paid'" severity="success" :closable="false" class="mb">
+        This invoice is paid. Thank you.
+      </Message>
 
       <DataTable :value="invoice.items" dataKey="id" stripedRows>
         <Column field="description" header="Description" />
@@ -71,5 +101,7 @@ function sev(s?: string) {
 .muted { color: var(--p-text-muted-color, #64748b); font-weight: 400; font-size: 1rem; }
 .total { font-size: 1.3rem; font-weight: 700; }
 .meta { display: flex; gap: 1.5rem; align-items: center; color: var(--p-text-muted-color, #64748b); margin-bottom: 1rem; }
+.mb { margin-bottom: 1rem; }
+.paybar { margin-bottom: 1rem; }
 .totals { display: flex; gap: 1.5rem; justify-content: flex-end; margin-top: 1rem; }
 </style>

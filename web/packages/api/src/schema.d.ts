@@ -968,6 +968,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/invoices/{publicID}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pay an invoice by card via the configured gateway */
+        post: operations["storefrontPayInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/invoices": {
         parameters: {
             query?: never;
@@ -3766,6 +3785,38 @@ export interface operations {
                 };
             };
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontPayInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Gateway card token / nonce (no raw card data) */
+                    token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Paid */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            402: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
         };
     };
     adminListInvoices: {

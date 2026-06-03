@@ -1797,6 +1797,27 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /storefront/invoices/{publicID}/pay:
+    parameters:
+      - { name: publicID, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [OrderToCash]
+      operationId: storefrontPayInvoice
+      summary: Pay an invoice by card via the configured gateway
+      security: [{ storefrontAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string, description: 'Gateway card token / nonce (no raw card data)' }
+      responses:
+        '200': { description: Paid, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
+        '402': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /admin/invoices:
     get:
       tags: [OrderToCash]

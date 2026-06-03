@@ -90,6 +90,7 @@ func (h *Handler) acceptQuote(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not create order from quote")
 		return
 	}
+	h.emailOrderConfirmation(r.Context(), order)
 	h.renderOrder(w, r, order)
 }
 
@@ -197,6 +198,7 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not place order")
 		return
 	}
+	h.emailOrderConfirmation(r.Context(), order)
 	h.renderOrder(w, r, order)
 }
 
@@ -488,6 +490,24 @@ func (h *Handler) renderOrder(w http.ResponseWriter, r *http.Request, order gen.
 		"grand_total": order.GrandTotal,
 		"quote_id":    order.QuoteID,
 		"items":       items,
+	})
+}
+
+// emailOrderConfirmation enqueues an order-confirmation email to the customer's
+// primary contact (no-op when no notifier is wired or the customer has no users).
+func (h *Handler) emailOrderConfirmation(ctx context.Context, order gen.Order) {
+	if h.notify == nil {
+		return
+	}
+	to, name := h.primaryContact(ctx, order.CustomerID)
+	if to == "" {
+		return
+	}
+	_ = h.notify.EnqueueEmail(ctx, to, "order_confirmation", map[string]any{
+		"name":         name,
+		"order_number": "ORD-" + order.PublicID.String()[:8],
+		"total":        order.GrandTotal,
+		"currency":     order.Currency,
 	})
 }
 

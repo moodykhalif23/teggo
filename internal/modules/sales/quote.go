@@ -222,6 +222,16 @@ func (h *Handler) sendQuote(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not send quote")
 		return
 	}
+	if h.notify != nil {
+		if to, name := h.primaryContact(r.Context(), sent.CustomerID); to != "" {
+			_ = h.notify.EnqueueEmail(r.Context(), to, "quote_sent", map[string]any{
+				"name":         name,
+				"quote_number": "Q-" + sent.PublicID.String()[:8],
+				"total":        sent.Subtotal,
+				"currency":     sent.Currency,
+			})
+		}
+	}
 	h.renderQuote(w, r, sent)
 }
 

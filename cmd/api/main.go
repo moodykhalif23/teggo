@@ -13,6 +13,7 @@ import (
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/config"
 	"b2bcommerce/internal/db"
+	"b2bcommerce/internal/payments/gateway"
 	"b2bcommerce/internal/queue"
 	"b2bcommerce/internal/server"
 	"b2bcommerce/internal/store"
@@ -40,9 +41,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("queue: %v", err)
 	}
+	// Card processor. Only the deterministic mock is built in; selecting another
+	// provider falls back to mock with a warning until its adapter lands.
+	var gw gateway.Gateway = gateway.Mock{}
+	if cfg.PaymentsGateway != "" && cfg.PaymentsGateway != "mock" {
+		log.Printf("payments: gateway %q not implemented, using mock", cfg.PaymentsGateway)
+	}
+
 	handler := server.New(st, issuer,
 		server.WithRecompute(enq),
 		server.WithInvoicePDF(enq),
+		server.WithNotifier(enq),
+		server.WithPaymentGateway(gw),
 	)
 
 	srv := &http.Server{
