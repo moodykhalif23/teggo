@@ -39,6 +39,13 @@ type Config struct {
 	// MediaRoot is the filesystem directory for the DAM blob store. In a
 	// multi-node deploy this must be a shared volume (or swap in object storage).
 	MediaRoot string
+
+	// Integration (Punchout/EDI). PunchoutStorefrontURL is where a buyer lands
+	// after punchout start; EDISenderID is our identity on outbound cXML/EDI;
+	// PunchoutTTL bounds a punchout session's lifetime.
+	PunchoutStorefrontURL string
+	EDISenderID           string
+	PunchoutTTL           time.Duration
 }
 
 // Load reads configuration from environment variables, applying defaults and
@@ -62,6 +69,9 @@ func Load() (Config, error) {
 
 		DBMaxConns: int32(getenvInt("DB_MAX_CONNS", 20)),
 		MediaRoot:  getenv("MEDIA_ROOT", "/data/media"),
+
+		PunchoutStorefrontURL: getenv("PUNCHOUT_STOREFRONT_URL", "/"),
+		EDISenderID:           getenv("EDI_SENDER_ID", "TEGGO"),
 	}
 
 	ttl, err := time.ParseDuration(getenv("JWT_TTL", "24h"))
@@ -75,6 +85,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("invalid DB_MAX_CONN_IDLE_TIME: %w", err)
 	}
 	c.DBMaxConnIdleTime = idle
+
+	pttl, err := time.ParseDuration(getenv("PUNCHOUT_TTL", "1h"))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid PUNCHOUT_TTL: %w", err)
+	}
+	c.PunchoutTTL = pttl
 
 	if c.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")

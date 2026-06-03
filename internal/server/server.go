@@ -18,10 +18,11 @@ import (
 	"b2bcommerce/internal/modules/cart"
 	"b2bcommerce/internal/modules/catalog"
 	"b2bcommerce/internal/modules/cms"
-	"b2bcommerce/internal/modules/dam"
 	"b2bcommerce/internal/modules/crm"
 	"b2bcommerce/internal/modules/customers"
+	"b2bcommerce/internal/modules/dam"
 	"b2bcommerce/internal/modules/health"
+	"b2bcommerce/internal/modules/integration"
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
 	"b2bcommerce/internal/modules/reporting"
@@ -33,9 +34,6 @@ import (
 	"b2bcommerce/internal/store"
 )
 
-// notifier is the production enqueuer's surface used by the sales + OTC modules:
-// transactional email plus domain-event emission for the automation engine.
-// *queue.Enqueuer satisfies it; sales.Notifier/otc.Notifier are narrower views.
 type notifier interface {
 	EnqueueEmail(ctx context.Context, to, template string, data map[string]any) error
 	EmitEvent(ctx context.Context, event string, payload map[string]any) error
@@ -52,6 +50,9 @@ type options struct {
 	blobStore    blob.Store
 	imageProc    imageproc.Processor
 	rendition    dam.RenditionEnqueuer
+	punchoutURL  string
+	ediSenderID  string
+	punchoutTTL  time.Duration
 }
 
 // Option configures optional server dependencies.
@@ -77,6 +78,13 @@ func WithMedia(store blob.Store, proc imageproc.Processor) Option {
 // WithRendition wires the async rendition enqueuer used after media upload.
 func WithRendition(e dam.RenditionEnqueuer) Option {
 	return func(o *options) { o.rendition = e }
+}
+
+// WithIntegration configures the Punchout/EDI module: the storefront landing
+// URL for punchout, our outbound cXML/EDI sender identity, and the punchout
+// session TTL.
+func WithIntegration(storefrontURL, ediSenderID string, ttl time.Duration) Option {
+	return func(o *options) { o.punchoutURL = storefrontURL; o.ediSenderID = ediSenderID; o.punchoutTTL = ttl }
 }
 
 func WithRecompute(e pricing.Enqueuer) Option {
@@ -152,6 +160,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 		}
 		dam.New(st.Pool(), o.blobStore, proc, issuer, o.rendition).Routes(r, authMW)
 	}
+	integration.New(st.Pool(), issuer, o.punchoutURL, o.ediSenderID, o.punchoutTTL).Routes(r, authMW)
 
 	// Wrap the router so HTTP server metrics (request count, duration) flow to
 	// the configured OpenTelemetry MeterProvider. No-op when telemetry is off.

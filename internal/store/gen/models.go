@@ -203,6 +203,23 @@ type CustomerUser struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+type EdiDocument struct {
+	ID                int64              `json:"id"`
+	OrganizationID    int64              `json:"organization_id"`
+	TradingPartnerID  int64              `json:"trading_partner_id"`
+	Direction         string             `json:"direction"`
+	DocType           string             `json:"doc_type"`
+	Status            string             `json:"status"`
+	ControlNumber     *string            `json:"control_number"`
+	RawPayload        string             `json:"raw_payload"`
+	Parsed            []byte             `json:"parsed"`
+	RelatedEntityType *string            `json:"related_entity_type"`
+	RelatedEntityID   *int64             `json:"related_entity_id"`
+	Error             *string            `json:"error"`
+	CreatedAt         time.Time          `json:"created_at"`
+	ProcessedAt       pgtype.Timestamptz `json:"processed_at"`
+}
+
 type InventoryLevel struct {
 	ID               int64     `json:"id"`
 	ProductID        int64     `json:"product_id"`
@@ -534,6 +551,20 @@ type ProductTranslation struct {
 	Description *string `json:"description"`
 }
 
+type PunchoutSession struct {
+	ID               int64     `json:"id"`
+	PublicID         uuid.UUID `json:"public_id"`
+	TradingPartnerID int64     `json:"trading_partner_id"`
+	CustomerID       int64     `json:"customer_id"`
+	BuyerCookie      string    `json:"buyer_cookie"`
+	Operation        string    `json:"operation"`
+	ReturnUrl        string    `json:"return_url"`
+	CartID           *int64    `json:"cart_id"`
+	Status           string    `json:"status"`
+	CreatedAt        time.Time `json:"created_at"`
+	ExpiresAt        time.Time `json:"expires_at"`
+}
+
 type Quote struct {
 	ID             int64              `json:"id"`
 	PublicID       uuid.UUID          `json:"public_id"`
@@ -688,6 +719,20 @@ type ShoppingListItem struct {
 	ProductID      int64  `json:"product_id"`
 	Quantity       string `json:"quantity"`
 	Unit           string `json:"unit"`
+}
+
+type TradingPartner struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	CustomerID     *int64    `json:"customer_id"`
+	Name           string    `json:"name"`
+	Protocol       string    `json:"protocol"`
+	Transport      *string   `json:"transport"`
+	Identity       *string   `json:"identity"`
+	SharedSecret   *string   `json:"shared_secret"`
+	Config         []byte    `json:"config"`
+	IsActive       bool      `json:"is_active"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type TransformationPreset struct {

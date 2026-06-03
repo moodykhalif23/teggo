@@ -60,6 +60,8 @@ type Querier interface {
 	// Every query is organization-scoped (tenant isolation enforced at the query layer).
 	CreateCustomerGroup(ctx context.Context, arg CreateCustomerGroupParams) (CustomerGroup, error)
 	CreateCustomerUser(ctx context.Context, arg CreateCustomerUserParams) (CreateCustomerUserRow, error)
+	// ===== EDI documents =======================================================
+	CreateEDIDocument(ctx context.Context, arg CreateEDIDocumentParams) (EdiDocument, error)
 	// ===== Invoices ============================================================
 	CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (Invoice, error)
 	// CRM queries — Pack 2 §1. Admin/sales-rep facing; everything org-scoped.
@@ -92,6 +94,8 @@ type Querier interface {
 	// plus the category-subtree and JSONB-facet reads used by the storefront listing.
 	// ===== Products (admin) ====================================================
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	// ===== Punchout sessions ===================================================
+	CreatePunchoutSession(ctx context.Context, arg CreatePunchoutSessionParams) (PunchoutSession, error)
 	// ===== Quote ===============================================================
 	CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote, error)
 	CreateQuoteRevision(ctx context.Context, arg CreateQuoteRevisionParams) error
@@ -114,6 +118,8 @@ type Querier interface {
 	CreateShipment(ctx context.Context, arg CreateShipmentParams) (Shipment, error)
 	// ===== Shopping lists ======================================================
 	CreateShoppingList(ctx context.Context, arg CreateShoppingListParams) (ShoppingList, error)
+	// ===== Trading partners ====================================================
+	CreateTradingPartner(ctx context.Context, arg CreateTradingPartnerParams) (TradingPartner, error)
 	// Inventory queries — Implementation Pack 1 §8 + §12.4 (ATP).
 	// ===== Warehouses ==========================================================
 	CreateWarehouse(ctx context.Context, arg CreateWarehouseParams) (Warehouse, error)
@@ -178,10 +184,14 @@ type Querier interface {
 	// GetCustomerUserSpendingLimit returns a customer-user's approval/spending
 	// limit (NULL = no limit), used by the order-approval guard.
 	GetCustomerUserSpendingLimit(ctx context.Context, id int64) (*string, error)
+	// GetCxmlPartnerByIdentity resolves the punchout partner from the cXML sender
+	// identity (used at setup time, before any org context exists).
+	GetCxmlPartnerByIdentity(ctx context.Context, identity *string) (TradingPartner, error)
 	// ===== Pipelines & stages ==================================================
 	GetDefaultPipeline(ctx context.Context, organizationID int64) (Pipeline, error)
 	GetDefaultWarehouse(ctx context.Context, organizationID int64) (Warehouse, error)
 	GetDefaultWebsite(ctx context.Context, organizationID int64) (GetDefaultWebsiteRow, error)
+	GetEDIDocument(ctx context.Context, arg GetEDIDocumentParams) (EdiDocument, error)
 	GetInstanceForEntity(ctx context.Context, arg GetInstanceForEntityParams) (WorkflowInstance, error)
 	GetInventoryLevel(ctx context.Context, arg GetInventoryLevelParams) (InventoryLevel, error)
 	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
@@ -211,11 +221,15 @@ type Querier interface {
 	GetPreset(ctx context.Context, arg GetPresetParams) (TransformationPreset, error)
 	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
+	// Punchout + EDI integration (Pack 3 §3).
+	// ===== Product lookup (EDI 850 / punchout mapping) =========================
+	GetProductBySKU(ctx context.Context, arg GetProductBySKUParams) (Product, error)
 	GetProductBySlug(ctx context.Context, arg GetProductBySlugParams) (GetProductBySlugRow, error)
 	GetProductIDByPublicID(ctx context.Context, arg GetProductIDByPublicIDParams) (int64, error)
 	// GetPublishedPage resolves a published page by website + locale + slug (the
 	// storefront read path).
 	GetPublishedPage(ctx context.Context, arg GetPublishedPageParams) (ContentPage, error)
+	GetPunchoutSessionByPublicID(ctx context.Context, publicID uuid.UUID) (PunchoutSession, error)
 	GetQuoteByID(ctx context.Context, arg GetQuoteByIDParams) (Quote, error)
 	GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Quote, error)
 	GetRFQByID(ctx context.Context, arg GetRFQByIDParams) (Rfq, error)
@@ -229,6 +243,10 @@ type Querier interface {
 	GetShipment(ctx context.Context, id int64) (Shipment, error)
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
 	GetStage(ctx context.Context, id int64) (PipelineStage, error)
+	GetTradingPartner(ctx context.Context, arg GetTradingPartnerParams) (TradingPartner, error)
+	// GetTradingPartnerByID resolves a partner without org context (inbound EDI
+	// arrives on a partner-scoped endpoint; the org is derived from the partner).
+	GetTradingPartnerByID(ctx context.Context, id int64) (TradingPartner, error)
 	GetTransitionByCode(ctx context.Context, arg GetTransitionByCodeParams) (WorkflowTransition, error)
 	// GetTransitionToState resolves the move from the instance's current state to a
 	// target state code: a transition whose to_state has that code and whose
@@ -274,6 +292,7 @@ type Querier interface {
 	// elapsed since last_run_at (or that have never run), joined to their definition
 	// so the job can compile + run without a second query.
 	ListDueReportSchedules(ctx context.Context) ([]ListDueReportSchedulesRow, error)
+	ListEDIDocuments(ctx context.Context, organizationID int64) ([]ListEDIDocumentsRow, error)
 	// ListExpirableQuotes returns open quotes (sent/revised) whose validity has
 	// passed — the quote-expiry sweep's working set.
 	ListExpirableQuotes(ctx context.Context, validUntil pgtype.Timestamptz) ([]Quote, error)
@@ -323,6 +342,7 @@ type Querier interface {
 	ListShipmentsForOrder(ctx context.Context, orderID int64) ([]Shipment, error)
 	ListShoppingListItems(ctx context.Context, shoppingListID int64) ([]ListShoppingListItemsRow, error)
 	ListShoppingLists(ctx context.Context, customerID int64) ([]ShoppingList, error)
+	ListTradingPartners(ctx context.Context, organizationID int64) ([]TradingPartner, error)
 	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
 	ListWebsites(ctx context.Context, organizationID int64) ([]Website, error)
 	ListWorkflowDefinitions(ctx context.Context, organizationID int64) ([]WorkflowDefinition, error)
@@ -375,6 +395,7 @@ type Querier interface {
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
+	SetEDIResult(ctx context.Context, arg SetEDIResultParams) (EdiDocument, error)
 	SetInventoryLevelConfig(ctx context.Context, arg SetInventoryLevelConfigParams) (InventoryLevel, error)
 	SetInvoicePDFURL(ctx context.Context, arg SetInvoicePDFURLParams) error
 	SetInvoiceStatus(ctx context.Context, arg SetInvoiceStatusParams) (Invoice, error)
@@ -384,6 +405,8 @@ type Querier interface {
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
 	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
+	SetPunchoutCart(ctx context.Context, arg SetPunchoutCartParams) error
+	SetPunchoutStatus(ctx context.Context, arg SetPunchoutStatusParams) error
 	SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) (Quote, error)
 	SetQuoteSubtotal(ctx context.Context, arg SetQuoteSubtotalParams) error
 	SetRFQStatus(ctx context.Context, arg SetRFQStatusParams) (Rfq, error)
@@ -412,6 +435,7 @@ type Querier interface {
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateReportDefinition(ctx context.Context, arg UpdateReportDefinitionParams) (ReportDefinition, error)
+	UpdateTradingPartner(ctx context.Context, arg UpdateTradingPartnerParams) (TradingPartner, error)
 	UpdateWebsite(ctx context.Context, arg UpdateWebsiteParams) (Website, error)
 	// UpdateWorkflowTransitionConfig edits a transition's guards/actions JSONB,
 	// org-scoped via its definition (admin low-code editing).

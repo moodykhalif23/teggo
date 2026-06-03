@@ -89,6 +89,7 @@ func main() {
 		server.WithLogger(logger),
 		server.WithMedia(mediaStore, imageproc.GoProcessor{}),
 		server.WithRendition(enq),
+		server.WithIntegration(cfg.PunchoutStorefrontURL, cfg.EDISenderID, cfg.PunchoutTTL),
 	)
 
 	srv := &http.Server{
