@@ -53,18 +53,6 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	})
 }
 
-// claimsUserID returns the admin user id from the subject claim, or nil.
-func claimsUserID(r *http.Request) *int64 {
-	c, ok := mw.ClaimsFrom(r.Context())
-	if !ok {
-		return nil
-	}
-	if id, err := strconv.ParseInt(c.Subject, 10, 64); err == nil && id != 0 {
-		return &id
-	}
-	return nil
-}
-
 func orgID(r *http.Request) (int64, bool) {
 	c, ok := mw.ClaimsFrom(r.Context())
 	if !ok {
