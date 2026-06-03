@@ -28,6 +28,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	// Public storefront reads.
 	r.Get("/storefront/products", h.storefrontList)
 	r.Get("/storefront/products/{slug}", h.storefrontGet)
+	r.Get("/storefront/catalog", h.storefrontFacetedSearch)
 
 	// Admin (bearer + permission gated).
 	r.Group(func(ar chi.Router) {
@@ -219,6 +220,108 @@ func (h *Handler) storefrontGet(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, storefrontProduct{
 		PublicID: p.PublicID.String(), SKU: p.Sku, Name: p.Name, Slug: p.Slug,
 		Description: p.Description, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
+	})
+}
+
+// storefrontFacetedSearch is the V1 faceted catalog endpoint (PRD §14): keyword
+// + category subtree + attribute filters combined, returning the product page,
+// the total count, and per-attribute facet value counts for the filter sidebar.
+// sort ∈ {relevance, newest, name(default)}.
+func (h *Handler) storefrontFacetedSearch(w http.ResponseWriter, r *http.Request) {
+	orgID := int64(1)
+	q := r.URL.Query()
+	limit := atoiDefault(q.Get("page_size"), 24)
+	page := atoiDefault(q.Get("page"), 1)
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+	sort := q.Get("sort") // "relevance" | "newest" | else name
+
+	// Optional keyword.
+	var qPtr *string
+	if s := q.Get("q"); s != "" {
+		qPtr = &s
+	}
+	// Optional attribute filter (JSON object of equalities).
+	var attrs []byte
+	if f := q.Get("filter"); f != "" {
+		if !json.Valid([]byte(f)) {
+			response.Fail(w, http.StatusBadRequest, "bad_request", "filter must be a JSON object")
+			return
+		}
+		attrs = []byte(f)
+	}
+	// Optional category → its subtree of category ids.
+	var catIDs []int64
+	if slug := q.Get("category"); slug != "" {
+		cat, err := h.q.GetCategoryBySlug(r.Context(), gen.GetCategoryBySlugParams{OrganizationID: orgID, Slug: slug})
+		if err != nil {
+			// Unknown category → empty result (not an error).
+			response.JSON(w, http.StatusOK, map[string]any{"items": []storefrontProduct{}, "total": 0, "page": page, "sort": sort, "facets": []any{}})
+			return
+		}
+		ids, err := h.q.CategoryDescendantIDs(r.Context(), gen.CategoryDescendantIDsParams{ID: cat.ID, OrganizationID: orgID})
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve category")
+			return
+		}
+		catIDs = ids
+	}
+
+	rows, err := h.q.SearchProductsFaceted(r.Context(), gen.SearchProductsFacetedParams{
+		Org: orgID, Q: qPtr, Attrs: attrs, CatIds: catIDs, Sort: sort, Lim: int32(limit), Off: int32(offset),
+	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not search catalog")
+		return
+	}
+	total, err := h.q.CountProductsFaceted(r.Context(), gen.CountProductsFacetedParams{
+		Org: orgID, Q: qPtr, Attrs: attrs, CatIds: catIDs,
+	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not count results")
+		return
+	}
+	facetRows, err := h.q.ProductFacets(r.Context(), gen.ProductFacetsParams{
+		Org: orgID, Q: qPtr, Attrs: attrs, CatIds: catIDs,
+	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not compute facets")
+		return
+	}
+
+	items := make([]storefrontProduct, 0, len(rows))
+	for _, p := range rows {
+		items = append(items, storefrontProduct{
+			PublicID: p.PublicID.String(), SKU: p.Sku, Name: p.Name, Slug: p.Slug,
+			Description: p.Description, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
+		})
+	}
+
+	// Group facet rows (already ordered attr, count desc) into per-attribute lists.
+	type facetValue struct {
+		Value string `json:"value"`
+		Count int64  `json:"count"`
+	}
+	type facet struct {
+		Attr   string       `json:"attr"`
+		Values []facetValue `json:"values"`
+	}
+	facets := []facet{}
+	idx := map[string]int{}
+	for _, fr := range facetRows {
+		i, ok := idx[fr.Attr]
+		if !ok {
+			idx[fr.Attr] = len(facets)
+			facets = append(facets, facet{Attr: fr.Attr, Values: []facetValue{}})
+			i = idx[fr.Attr]
+		}
+		facets[i].Values = append(facets[i].Values, facetValue{Value: fr.Value, Count: fr.Count})
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"items": items, "total": total, "page": page, "sort": sort, "facets": facets,
 	})
 }
 

@@ -1504,6 +1504,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Faceted catalog search (keyword + category + attribute filters, with facet counts) */
+        get: operations["storefrontFacetedSearch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2633,6 +2650,23 @@ export interface components {
             code: string;
             name: string;
             items: components["schemas"]["MenuItem"][];
+        };
+        FacetValue: {
+            value: string;
+            /** Format: int64 */
+            count: number;
+        };
+        Facet: {
+            attr: string;
+            values: components["schemas"]["FacetValue"][];
+        };
+        FacetedSearchResult: {
+            items: components["schemas"]["StorefrontProduct"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            sort?: string;
+            facets: components["schemas"]["Facet"][];
         };
     };
     responses: {
@@ -5472,6 +5506,35 @@ export interface operations {
                 };
             };
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontFacetedSearch: {
+        parameters: {
+            query?: {
+                q?: string;
+                category?: string;
+                /** @description JSON object of attribute equalities */
+                filter?: string;
+                sort?: "relevance" | "newest" | "name";
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacetedSearchResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
         };
     };
 }

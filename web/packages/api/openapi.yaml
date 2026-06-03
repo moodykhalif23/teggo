@@ -1208,6 +1208,29 @@ components:
         name: { type: string }
         items: { type: array, items: { $ref: '#/components/schemas/MenuItem' } }
 
+    # ----- Faceted search (PRD §14 V1) -----
+    FacetValue:
+      type: object
+      required: [value, count]
+      properties:
+        value: { type: string }
+        count: { type: integer, format: int64 }
+    Facet:
+      type: object
+      required: [attr, values]
+      properties:
+        attr: { type: string }
+        values: { type: array, items: { $ref: '#/components/schemas/FacetValue' } }
+    FacetedSearchResult:
+      type: object
+      required: [items, total, page, facets]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/StorefrontProduct' } }
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        sort: { type: string }
+        facets: { type: array, items: { $ref: '#/components/schemas/Facet' } }
+
   responses:
     ErrorResponse:
       description: Error
@@ -2500,3 +2523,21 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Menu' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ----- Faceted catalog search (PRD §14 V1) -----
+  /storefront/catalog:
+    get:
+      tags: [Catalog]
+      operationId: storefrontFacetedSearch
+      summary: Faceted catalog search (keyword + category + attribute filters, with facet counts)
+      security: []
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: filter, in: query, description: 'JSON object of attribute equalities', schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [relevance, newest, name] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 24 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/FacetedSearchResult' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }

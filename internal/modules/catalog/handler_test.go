@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -388,5 +389,96 @@ func TestAdminSearch_IncludesDraftsScoped(t *testing.T) {
 		if it.Sku == "ZT-4" {
 			t.Error("tenant isolation breach: org-2 product in org-1 admin search")
 		}
+	}
+}
+
+// --- Faceted search (PRD §14 V1) ------------------------------------------
+
+func TestFacetedSearch(t *testing.T) {
+	h, _, pool := newServer(t)
+	q := gen.New(pool)
+	ctx := context.Background()
+
+	// A dedicated category so facet counts are deterministic (seed products
+	// aren't assigned to it).
+	cat, _ := q.CreateCategory(ctx, gen.CreateCategoryParams{OrganizationID: 1, Name: "Fittings", Slug: "fittings", SortOrder: 1})
+	mk := func(sku, name, attrs string) {
+		p, err := q.CreateProduct(ctx, gen.CreateProductParams{
+			OrganizationID: 1, Sku: sku, Type: "simple", Name: name, Slug: sku, Status: "active",
+			Attributes: []byte(attrs), Unit: "each",
+		})
+		if err != nil {
+			t.Fatalf("product %s: %v", sku, err)
+		}
+		_ = q.AssignProductToCategory(ctx, gen.AssignProductToCategoryParams{ProductID: p.ID, CategoryID: cat.ID})
+	}
+	mk("F1", "Brass Elbow", `{"material":"brass","size":"1in"}`)
+	mk("F2", "Brass Tee", `{"material":"brass","size":"2in"}`)
+	mk("F3", "Zorptron Coupler", `{"material":"steel","size":"1in"}`)
+
+	type facetValue struct {
+		Value string `json:"value"`
+		Count int64  `json:"count"`
+	}
+	type resp struct {
+		Items  []struct{ Sku, Name string } `json:"items"`
+		Total  int64                        `json:"total"`
+		Facets []struct {
+			Attr   string       `json:"attr"`
+			Values []facetValue `json:"values"`
+		} `json:"facets"`
+	}
+	get := func(qs string) resp {
+		rr := do(t, h, http.MethodGet, "/storefront/catalog?"+qs, "", nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("catalog %q: %d (%s)", qs, rr.Code, rr.Body.String())
+		}
+		var out resp
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+	facetCount := func(r resp, attr, value string) int64 {
+		for _, f := range r.Facets {
+			if f.Attr == attr {
+				for _, v := range f.Values {
+					if v.Value == value {
+						return v.Count
+					}
+				}
+			}
+		}
+		return -1
+	}
+
+	// All three in the category → facet counts material brass(2)/steel(1), size 1in(2)/2in(1).
+	all := get("category=fittings")
+	if all.Total != 3 {
+		t.Fatalf("category total: want 3, got %d", all.Total)
+	}
+	if facetCount(all, "material", "brass") != 2 || facetCount(all, "material", "steel") != 1 {
+		t.Errorf("material facet wrong: %+v", all.Facets)
+	}
+	if facetCount(all, "size", "1in") != 2 {
+		t.Errorf("size facet wrong: %+v", all.Facets)
+	}
+
+	// Selecting a facet narrows the result set.
+	brass := get(`category=fittings&filter=` + url.QueryEscape(`{"material":"brass"}`))
+	if brass.Total != 2 {
+		t.Errorf("material=brass total: want 2, got %d", brass.Total)
+	}
+
+	// Keyword narrows to one.
+	kw := get("category=fittings&q=zorptron")
+	if kw.Total != 1 || len(kw.Items) != 1 || kw.Items[0].Sku != "F3" {
+		t.Errorf("keyword search: want only F3, got total=%d %+v", kw.Total, kw.Items)
+	}
+
+	// Sort=newest puts the last-created (F3) first.
+	newest := get("category=fittings&sort=newest")
+	if len(newest.Items) == 0 || newest.Items[0].Sku != "F3" {
+		t.Errorf("sort=newest: want F3 first, got %+v", newest.Items)
 	}
 }

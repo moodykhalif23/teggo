@@ -76,6 +76,44 @@ WHERE p.organization_id = $1
 ORDER BY ts_rank(p.search_vector, websearch_to_tsquery('english', $2)) DESC, p.name
 LIMIT $3 OFFSET $4;
 
+-- ===== Faceted search (PRD §14 V1) =========================================
+-- One filter set drives three queries (items / count / facet aggregation), all
+-- sharing the same WHERE. Every filter is optional via the `$n::type IS NULL OR`
+-- idiom: $2 keyword (FTS), $3 attribute JSONB (@>), $4 category-id array (subtree
+-- resolved in Go). $5 sort: 'relevance' | 'newest' | else name.
+
+-- name: SearchProductsFaceted :many
+SELECT p.id, p.public_id, p.sku, p.name, p.slug, p.description, p.status, p.attributes, p.unit
+FROM products p
+WHERE p.organization_id = sqlc.arg('org') AND p.status = 'active' AND p.deleted_at IS NULL
+  AND (sqlc.narg('q')::text IS NULL OR p.search_vector @@ websearch_to_tsquery('english', sqlc.narg('q')))
+  AND (sqlc.narg('attrs')::jsonb IS NULL OR p.attributes @> sqlc.narg('attrs'))
+  AND (sqlc.narg('cat_ids')::bigint[] IS NULL OR p.id IN (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = ANY(sqlc.narg('cat_ids'))))
+ORDER BY
+  (CASE WHEN sqlc.arg('sort')::text = 'newest' THEN p.created_at END) DESC NULLS LAST,
+  (CASE WHEN sqlc.arg('sort')::text = 'relevance' THEN ts_rank(p.search_vector, websearch_to_tsquery('english', COALESCE(sqlc.narg('q'), ''))) END) DESC NULLS LAST,
+  p.name
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
+
+-- name: CountProductsFaceted :one
+SELECT count(*) FROM products p
+WHERE p.organization_id = sqlc.arg('org') AND p.status = 'active' AND p.deleted_at IS NULL
+  AND (sqlc.narg('q')::text IS NULL OR p.search_vector @@ websearch_to_tsquery('english', sqlc.narg('q')))
+  AND (sqlc.narg('attrs')::jsonb IS NULL OR p.attributes @> sqlc.narg('attrs'))
+  AND (sqlc.narg('cat_ids')::bigint[] IS NULL OR p.id IN (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = ANY(sqlc.narg('cat_ids'))));
+
+-- ProductFacets unnests the JSONB attributes of the filtered result set into
+-- (attribute, value, count) for the storefront filter sidebar.
+-- name: ProductFacets :many
+SELECT kv.key::text AS attr, kv.value::text AS value, count(*)::bigint AS count
+FROM products p, jsonb_each_text(p.attributes) AS kv(key, value)
+WHERE p.organization_id = sqlc.arg('org') AND p.status = 'active' AND p.deleted_at IS NULL
+  AND (sqlc.narg('q')::text IS NULL OR p.search_vector @@ websearch_to_tsquery('english', sqlc.narg('q')))
+  AND (sqlc.narg('attrs')::jsonb IS NULL OR p.attributes @> sqlc.narg('attrs'))
+  AND (sqlc.narg('cat_ids')::bigint[] IS NULL OR p.id IN (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = ANY(sqlc.narg('cat_ids'))))
+GROUP BY kv.key, kv.value
+ORDER BY kv.key, count DESC, kv.value;
+
 -- FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
 -- backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like
 -- {"color":"red","voltage":"24"}.

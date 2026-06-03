@@ -99,6 +99,33 @@ func (q *Queries) CountProductsAdmin(ctx context.Context, organizationID int64) 
 	return count, err
 }
 
+const countProductsFaceted = `-- name: CountProductsFaceted :one
+SELECT count(*) FROM products p
+WHERE p.organization_id = $1 AND p.status = 'active' AND p.deleted_at IS NULL
+  AND ($2::text IS NULL OR p.search_vector @@ websearch_to_tsquery('english', $2))
+  AND ($3::jsonb IS NULL OR p.attributes @> $3)
+  AND ($4::bigint[] IS NULL OR p.id IN (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = ANY($4)))
+`
+
+type CountProductsFacetedParams struct {
+	Org    int64   `json:"org"`
+	Q      *string `json:"q"`
+	Attrs  []byte  `json:"attrs"`
+	CatIds []int64 `json:"cat_ids"`
+}
+
+func (q *Queries) CountProductsFaceted(ctx context.Context, arg CountProductsFacetedParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProductsFaceted,
+		arg.Org,
+		arg.Q,
+		arg.Attrs,
+		arg.CatIds,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSearchProductsAdmin = `-- name: CountSearchProductsAdmin :one
 SELECT count(*) FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL
@@ -728,6 +755,57 @@ func (q *Queries) ListProductsAdmin(ctx context.Context, arg ListProductsAdminPa
 	return items, nil
 }
 
+const productFacets = `-- name: ProductFacets :many
+SELECT kv.key::text AS attr, kv.value::text AS value, count(*)::bigint AS count
+FROM products p, jsonb_each_text(p.attributes) AS kv(key, value)
+WHERE p.organization_id = $1 AND p.status = 'active' AND p.deleted_at IS NULL
+  AND ($2::text IS NULL OR p.search_vector @@ websearch_to_tsquery('english', $2))
+  AND ($3::jsonb IS NULL OR p.attributes @> $3)
+  AND ($4::bigint[] IS NULL OR p.id IN (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = ANY($4)))
+GROUP BY kv.key, kv.value
+ORDER BY kv.key, count DESC, kv.value
+`
+
+type ProductFacetsParams struct {
+	Org    int64   `json:"org"`
+	Q      *string `json:"q"`
+	Attrs  []byte  `json:"attrs"`
+	CatIds []int64 `json:"cat_ids"`
+}
+
+type ProductFacetsRow struct {
+	Attr  string `json:"attr"`
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// ProductFacets unnests the JSONB attributes of the filtered result set into
+// (attribute, value, count) for the storefront filter sidebar.
+func (q *Queries) ProductFacets(ctx context.Context, arg ProductFacetsParams) ([]ProductFacetsRow, error) {
+	rows, err := q.db.Query(ctx, productFacets,
+		arg.Org,
+		arg.Q,
+		arg.Attrs,
+		arg.CatIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProductFacetsRow
+	for rows.Next() {
+		var i ProductFacetsRow
+		if err := rows.Scan(&i.Attr, &i.Value, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeProductFromCategory = `-- name: RemoveProductFromCategory :exec
 DELETE FROM product_categories WHERE product_id = $1 AND category_id = $2
 `
@@ -859,6 +937,86 @@ func (q *Queries) SearchProductsAdmin(ctx context.Context, arg SearchProductsAdm
 			&i.ParentID,
 			&i.AttributeFamilyID,
 			&i.SearchVector,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchProductsFaceted = `-- name: SearchProductsFaceted :many
+
+SELECT p.id, p.public_id, p.sku, p.name, p.slug, p.description, p.status, p.attributes, p.unit
+FROM products p
+WHERE p.organization_id = $1 AND p.status = 'active' AND p.deleted_at IS NULL
+  AND ($2::text IS NULL OR p.search_vector @@ websearch_to_tsquery('english', $2))
+  AND ($3::jsonb IS NULL OR p.attributes @> $3)
+  AND ($4::bigint[] IS NULL OR p.id IN (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = ANY($4)))
+ORDER BY
+  (CASE WHEN $5::text = 'newest' THEN p.created_at END) DESC NULLS LAST,
+  (CASE WHEN $5::text = 'relevance' THEN ts_rank(p.search_vector, websearch_to_tsquery('english', COALESCE($2, ''))) END) DESC NULLS LAST,
+  p.name
+LIMIT $7 OFFSET $6
+`
+
+type SearchProductsFacetedParams struct {
+	Org    int64   `json:"org"`
+	Q      *string `json:"q"`
+	Attrs  []byte  `json:"attrs"`
+	CatIds []int64 `json:"cat_ids"`
+	Sort   string  `json:"sort"`
+	Off    int32   `json:"off"`
+	Lim    int32   `json:"lim"`
+}
+
+type SearchProductsFacetedRow struct {
+	ID          int64     `json:"id"`
+	PublicID    uuid.UUID `json:"public_id"`
+	Sku         string    `json:"sku"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description"`
+	Status      string    `json:"status"`
+	Attributes  []byte    `json:"attributes"`
+	Unit        string    `json:"unit"`
+}
+
+// ===== Faceted search (PRD §14 V1) =========================================
+// One filter set drives three queries (items / count / facet aggregation), all
+// sharing the same WHERE. Every filter is optional via the `$n::type IS NULL OR`
+// idiom: $2 keyword (FTS), $3 attribute JSONB (@>), $4 category-id array (subtree
+// resolved in Go). $5 sort: 'relevance' | 'newest' | else name.
+func (q *Queries) SearchProductsFaceted(ctx context.Context, arg SearchProductsFacetedParams) ([]SearchProductsFacetedRow, error) {
+	rows, err := q.db.Query(ctx, searchProductsFaceted,
+		arg.Org,
+		arg.Q,
+		arg.Attrs,
+		arg.CatIds,
+		arg.Sort,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchProductsFacetedRow
+	for rows.Next() {
+		var i SearchProductsFacetedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.Sku,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.Status,
+			&i.Attributes,
+			&i.Unit,
 		); err != nil {
 			return nil, err
 		}

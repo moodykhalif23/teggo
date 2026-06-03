@@ -36,6 +36,7 @@ type Querier interface {
 	CountAutomationExecutions(ctx context.Context, ruleID int64) (int64, error)
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
 	CountProductsAdmin(ctx context.Context, organizationID int64) (int64, error)
+	CountProductsFaceted(ctx context.Context, arg CountProductsFacetedParams) (int64, error)
 	CountSearchProductsAdmin(ctx context.Context, arg CountSearchProductsAdminParams) (int64, error)
 	CountTransitionLog(ctx context.Context, instanceID int64) (int64, error)
 	// ===== Activities ==========================================================
@@ -284,6 +285,9 @@ type Querier interface {
 	// PipelineBoard: per-stage open count, total and probability-weighted amounts
 	// (Pack 2 §1.4). Sums cast to text via the numeric override; count is bigint.
 	PipelineBoard(ctx context.Context, pipelineID int64) ([]PipelineBoardRow, error)
+	// ProductFacets unnests the JSONB attributes of the filtered result set into
+	// (attribute, value, count) for the storefront filter sidebar.
+	ProductFacets(ctx context.Context, arg ProductFacetsParams) ([]ProductFacetsRow, error)
 	// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
 	// currency: for each product it picks the winning candidate list (highest
 	// level, then priority) that has a valid price, and flattens that list's tiers.
@@ -306,6 +310,12 @@ type Querier interface {
 	// SearchProductsAdmin: admin product search over the FTS vector (PRD §14),
 	// ranked by relevance. Includes all statuses (admins manage drafts too).
 	SearchProductsAdmin(ctx context.Context, arg SearchProductsAdminParams) ([]Product, error)
+	// ===== Faceted search (PRD §14 V1) =========================================
+	// One filter set drives three queries (items / count / facet aggregation), all
+	// sharing the same WHERE. Every filter is optional via the `$n::type IS NULL OR`
+	// idiom: $2 keyword (FTS), $3 attribute JSONB (@>), $4 category-id array (subtree
+	// resolved in Go). $5 sort: 'relevance' | 'newest' | else name.
+	SearchProductsFaceted(ctx context.Context, arg SearchProductsFacetedParams) ([]SearchProductsFacetedRow, error)
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
