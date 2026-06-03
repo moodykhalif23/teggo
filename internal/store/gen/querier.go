@@ -115,6 +115,11 @@ type Querier interface {
 	// change when this price list changes (direct, via group, or via any website
 	// assignment of the list). Used to fan out recompute jobs.
 	CustomersAffectedByPriceList(ctx context.Context, id int64) ([]int64, error)
+	// Reporting queries — Pack 3 §1. All read from the precomputed materialized
+	// views, org-scoped.
+	// DailySales returns the daily revenue/order series within a date range
+	// (aggregated across currencies for the dashboard line chart).
+	DailySales(ctx context.Context, arg DailySalesParams) ([]DailySalesRow, error)
 	DeleteAssignment(ctx context.Context, id int64) (int64, error)
 	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
@@ -303,6 +308,8 @@ type Querier interface {
 	// broken by the most specific qty tier <= requested.
 	// params: $1 customer_id, $2 product_id, $3 quantity, $4 currency, $5 website_id, $6 at
 	ResolvePrice(ctx context.Context, arg ResolvePriceParams) (ResolvePriceRow, error)
+	// SalesSummary is the headline KPI rollup since a date.
+	SalesSummary(ctx context.Context, arg SalesSummaryParams) (SalesSummaryRow, error)
 	// SearchActiveProducts: full-text product search (PRD §14, Postgres FTS).
 	// $2 is the raw user query in websearch syntax (e.g. `brass valve`, `"ball valve"`,
 	// `valve -plastic`); results are ranked by relevance, then name as a tiebreak.
@@ -342,6 +349,8 @@ type Querier interface {
 	// SumOpenInvoices totals a customer's unpaid (issued/overdue) invoices, used to
 	// enforce the credit limit when paying on terms.
 	SumOpenInvoices(ctx context.Context, customerID int64) (string, error)
+	// TopProducts ranks products by revenue in a month, joined to product names.
+	TopProducts(ctx context.Context, arg TopProductsParams) ([]TopProductsRow, error)
 	TouchUserLogin(ctx context.Context, id int64) error
 	UpdateAutomationRule(ctx context.Context, arg UpdateAutomationRuleParams) (AutomationRule, error)
 	UpdateCartItemPrice(ctx context.Context, arg UpdateCartItemPriceParams) error

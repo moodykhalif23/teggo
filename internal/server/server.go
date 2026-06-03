@@ -19,6 +19,7 @@ import (
 	"b2bcommerce/internal/modules/health"
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
+	"b2bcommerce/internal/modules/reporting"
 	"b2bcommerce/internal/modules/sales"
 	"b2bcommerce/internal/modules/wfadmin"
 	"b2bcommerce/internal/payments/gateway"
@@ -99,6 +100,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	crm.New(st.Pool()).Routes(r, authMW)
 	wfadmin.New(st.Pool()).Routes(r, authMW)
 	cms.New(st.Pool(), issuer).Routes(r, authMW)
+	reporting.New(st.Pool()).Routes(r, authMW)
 
 	return r
 }

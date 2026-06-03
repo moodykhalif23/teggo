@@ -1231,6 +1231,41 @@ components:
         sort: { type: string }
         facets: { type: array, items: { $ref: '#/components/schemas/Facet' } }
 
+    # ----- Reporting (Pack 3 §1, V1) -----
+    SalesSummary:
+      type: object
+      required: [days, order_count, revenue, avg_order_value]
+      properties:
+        days: { type: integer }
+        order_count: { type: integer, format: int64 }
+        revenue: { type: string }
+        avg_order_value: { type: string }
+    DailySalesPoint:
+      type: object
+      required: [day, order_count, revenue]
+      properties:
+        day: { type: string }
+        order_count: { type: integer, format: int64 }
+        revenue: { type: string }
+    DailySalesResult:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DailySalesPoint' } }
+    TopProduct:
+      type: object
+      required: [product_id, sku, name, qty, revenue]
+      properties:
+        product_id: { type: integer, format: int64 }
+        sku: { type: string }
+        name: { type: string }
+        qty: { type: string }
+        revenue: { type: string }
+    TopProductsResult:
+      type: object
+      properties:
+        month: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/TopProduct' } }
+
   responses:
     ErrorResponse:
       description: Error
@@ -2541,3 +2576,42 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/FacetedSearchResult' } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ----- Reporting dashboards (Pack 3 §1, V1) -----
+  /admin/reports/summary:
+    get:
+      tags: [Reporting]
+      operationId: adminReportSummary
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SalesSummary' } } } }
+  /admin/reports/sales:
+    get:
+      tags: [Reporting]
+      operationId: adminReportSales
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/DailySalesResult' } } } }
+  /admin/reports/top-products:
+    get:
+      tags: [Reporting]
+      operationId: adminReportTopProducts
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: month, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TopProductsResult' } } } }
+  /admin/reports/refresh:
+    post:
+      tags: [Reporting]
+      operationId: adminReportRefresh
+      summary: Refresh the reporting materialized views
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK }

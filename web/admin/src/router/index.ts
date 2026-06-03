@@ -158,6 +158,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/cms/PagesView.vue'),
         meta: { permission: 'cms.view' },
       },
+      {
+        path: 'analytics',
+        name: 'analytics',
+        component: () => import('@/views/reporting/ReportsView.vue'),
+        meta: { permission: 'report.view' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -41,6 +41,7 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 	river.AddWorker(workers, &jobs.AutomationActionWorker{Registry: reg})
 	river.AddWorker(workers, &jobs.ScheduledEmitWorker{Dispatcher: dispatcher})
 	river.AddWorker(workers, &jobs.DispatchEventWorker{Dispatcher: dispatcher})
+	river.AddWorker(workers, &jobs.RefreshReportingWorker{Pool: pool})
 	// Register additional workers here as modules add jobs.
 
 	periodic := []*river.PeriodicJob{
@@ -50,6 +51,14 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 				return jobs.EmitScheduledArgs{Event: "schedule.hourly"}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+		// Keep the reporting dashboards' materialized views fresh.
+		river.NewPeriodicJob(
+			river.PeriodicInterval(time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return jobs.RefreshReportingArgs{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: true},
 		),
 	}
 

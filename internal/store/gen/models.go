@@ -307,6 +307,22 @@ type MenuItem struct {
 	SortOrder  int32   `json:"sort_order"`
 }
 
+type MvDailySale struct {
+	OrganizationID int64       `json:"organization_id"`
+	Day            pgtype.Date `json:"day"`
+	Currency       string      `json:"currency"`
+	OrderCount     int64       `json:"order_count"`
+	Revenue        string      `json:"revenue"`
+}
+
+type MvTopProduct struct {
+	ProductID      int64       `json:"product_id"`
+	OrganizationID int64       `json:"organization_id"`
+	Month          pgtype.Date `json:"month"`
+	Qty            string      `json:"qty"`
+	Revenue        string      `json:"revenue"`
+}
+
 type Opportunity struct {
 	ID             int64              `json:"id"`
 	PublicID       uuid.UUID          `json:"public_id"`
