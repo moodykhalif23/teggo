@@ -1293,6 +1293,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListWorkflows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/workflows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/workflow-transitions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit a transition's guards/actions (low-code) */
+        patch: operations["adminUpdateTransitionConfig"];
+        trace?: never;
+    };
+    "/admin/automation-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListAutomationRules"];
+        put?: never;
+        post: operations["adminCreateAutomationRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/automation-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["adminUpdateAutomationRule"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2275,6 +2362,77 @@ export interface components {
         };
         ListWrapperActivity: {
             items?: components["schemas"]["Activity"][];
+        };
+        WfState: {
+            /** Format: int64 */
+            id: number;
+            code: string;
+            label: string;
+            is_initial: boolean;
+            is_final: boolean;
+            sort_order?: number;
+        };
+        WfTransition: {
+            /** Format: int64 */
+            id: number;
+            code: string;
+            label: string;
+            from: string;
+            to: string;
+            guards: {
+                [key: string]: unknown;
+            }[];
+            actions: {
+                [key: string]: unknown;
+            }[];
+        };
+        WorkflowDefinition: {
+            /** Format: int64 */
+            id: number;
+            code: string;
+            entity_type: string;
+            name: string;
+            is_active: boolean;
+            states: components["schemas"]["WfState"][];
+            transitions: components["schemas"]["WfTransition"][];
+        };
+        ListWrapperWorkflow: {
+            items?: components["schemas"]["WorkflowDefinition"][];
+        };
+        TransitionConfigPatch: {
+            guards?: {
+                [key: string]: unknown;
+            }[];
+            actions?: {
+                [key: string]: unknown;
+            }[];
+        };
+        AutomationRule: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            trigger_event: string;
+            conditions: {
+                [key: string]: unknown;
+            }[];
+            actions: {
+                [key: string]: unknown;
+            }[];
+            is_active: boolean;
+        };
+        AutomationRuleInput: {
+            name: string;
+            trigger_event: string;
+            conditions?: {
+                [key: string]: unknown;
+            }[];
+            actions?: {
+                [key: string]: unknown;
+            }[];
+            is_active?: boolean;
+        };
+        ListWrapperAutomationRule: {
+            items?: components["schemas"]["AutomationRule"][];
         };
     };
     responses: {
@@ -4735,6 +4893,150 @@ export interface operations {
                     "application/json": components["schemas"]["ListWrapperActivity"];
                 };
             };
+        };
+    };
+    adminListWorkflows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperWorkflow"];
+                };
+            };
+        };
+    };
+    adminGetWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinition"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpdateTransitionConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionConfigPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WfTransition"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListAutomationRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperAutomationRule"];
+                };
+            };
+        };
+    };
+    adminCreateAutomationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRule"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpdateAutomationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRuleInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRule"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
         };
     };
 }

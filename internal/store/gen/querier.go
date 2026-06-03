@@ -120,6 +120,7 @@ type Querier interface {
 	// Cart & shopping list queries — Implementation Pack 1 §5.
 	// ===== Carts ===============================================================
 	GetActiveCart(ctx context.Context, arg GetActiveCartParams) (Cart, error)
+	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
 	GetCartByID(ctx context.Context, id int64) (Cart, error)
 	GetCartItem(ctx context.Context, arg GetCartItemParams) (CartItem, error)
 	GetCategory(ctx context.Context, arg GetCategoryParams) (Category, error)
@@ -188,6 +189,7 @@ type Querier interface {
 	// Workflow engine queries — Pack 2 §3.
 	// ===== Definitions / states / transitions ==================================
 	GetWorkflowDefByCode(ctx context.Context, arg GetWorkflowDefByCodeParams) (WorkflowDefinition, error)
+	GetWorkflowDefinition(ctx context.Context, arg GetWorkflowDefinitionParams) (WorkflowDefinition, error)
 	// ===== Instances ===========================================================
 	GetWorkflowInstance(ctx context.Context, id int64) (WorkflowInstance, error)
 	GetWorkflowState(ctx context.Context, id int64) (WorkflowState, error)
@@ -199,6 +201,7 @@ type Querier interface {
 	ListAssignmentsForList(ctx context.Context, priceListID int64) ([]PriceListAssignment, error)
 	ListAttributeFamilies(ctx context.Context, organizationID int64) ([]AttributeFamily, error)
 	ListAttributes(ctx context.Context, organizationID int64) ([]Attribute, error)
+	ListAutomationRules(ctx context.Context, organizationID int64) ([]AutomationRule, error)
 	// Automation engine queries — Pack 2 §3.
 	// ListAutomationRulesByEvent returns active rules for a trigger event, across
 	// orgs (the scheduler doesn't know orgs; each rule carries its own).
@@ -248,6 +251,7 @@ type Querier interface {
 	ListShoppingListItems(ctx context.Context, shoppingListID int64) ([]ListShoppingListItemsRow, error)
 	ListShoppingLists(ctx context.Context, customerID int64) ([]ShoppingList, error)
 	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
+	ListWorkflowDefinitions(ctx context.Context, organizationID int64) ([]WorkflowDefinition, error)
 	ListWorkflowStates(ctx context.Context, definitionID int64) ([]WorkflowState, error)
 	ListWorkflowTransitions(ctx context.Context, definitionID int64) ([]WorkflowTransition, error)
 	MarkCartConverted(ctx context.Context, id int64) error
@@ -305,11 +309,15 @@ type Querier interface {
 	// enforce the credit limit when paying on terms.
 	SumOpenInvoices(ctx context.Context, customerID int64) (string, error)
 	TouchUserLogin(ctx context.Context, id int64) error
+	UpdateAutomationRule(ctx context.Context, arg UpdateAutomationRuleParams) (AutomationRule, error)
 	UpdateCartItemPrice(ctx context.Context, arg UpdateCartItemPriceParams) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+	// UpdateWorkflowTransitionConfig edits a transition's guards/actions JSONB,
+	// org-scoped via its definition (admin low-code editing).
+	UpdateWorkflowTransitionConfig(ctx context.Context, arg UpdateWorkflowTransitionConfigParams) (WorkflowTransition, error)
 	// ===== Cart items ==========================================================
 	// UpsertCartItem snapshots unit_price at add-time; re-adding the same product
 	// sets the quantity and refreshes the price.

@@ -140,6 +140,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/crm/OpportunityListView.vue'),
         meta: { permission: 'crm.view' },
       },
+      {
+        path: 'workflows',
+        name: 'workflows',
+        component: () => import('@/views/workflow/WorkflowsView.vue'),
+        meta: { permission: 'workflow.view' },
+      },
+      {
+        path: 'automation-rules',
+        name: 'automation-rules',
+        component: () => import('@/views/workflow/AutomationRulesView.vue'),
+        meta: { permission: 'workflow.view' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

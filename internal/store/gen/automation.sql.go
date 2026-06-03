@@ -60,6 +60,64 @@ func (q *Queries) CreateAutomationRule(ctx context.Context, arg CreateAutomation
 	return i, err
 }
 
+const getAutomationRule = `-- name: GetAutomationRule :one
+SELECT id, organization_id, name, trigger_event, conditions, actions, is_active, created_at FROM automation_rules WHERE organization_id = $1 AND id = $2
+`
+
+type GetAutomationRuleParams struct {
+	OrganizationID int64 `json:"organization_id"`
+	ID             int64 `json:"id"`
+}
+
+func (q *Queries) GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error) {
+	row := q.db.QueryRow(ctx, getAutomationRule, arg.OrganizationID, arg.ID)
+	var i AutomationRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.TriggerEvent,
+		&i.Conditions,
+		&i.Actions,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAutomationRules = `-- name: ListAutomationRules :many
+SELECT id, organization_id, name, trigger_event, conditions, actions, is_active, created_at FROM automation_rules WHERE organization_id = $1 ORDER BY id
+`
+
+func (q *Queries) ListAutomationRules(ctx context.Context, organizationID int64) ([]AutomationRule, error) {
+	rows, err := q.db.Query(ctx, listAutomationRules, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AutomationRule
+	for rows.Next() {
+		var i AutomationRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.TriggerEvent,
+			&i.Conditions,
+			&i.Actions,
+			&i.IsActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAutomationRulesByEvent = `-- name: ListAutomationRulesByEvent :many
 
 SELECT id, organization_id, name, trigger_event, conditions, actions, is_active, created_at FROM automation_rules
@@ -164,4 +222,45 @@ func (q *Queries) RecordAutomationExecution(ctx context.Context, arg RecordAutom
 		arg.Result,
 	)
 	return err
+}
+
+const updateAutomationRule = `-- name: UpdateAutomationRule :one
+UPDATE automation_rules
+SET name = $3, trigger_event = $4, conditions = $5, actions = $6, is_active = $7
+WHERE organization_id = $1 AND id = $2
+RETURNING id, organization_id, name, trigger_event, conditions, actions, is_active, created_at
+`
+
+type UpdateAutomationRuleParams struct {
+	OrganizationID int64  `json:"organization_id"`
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	TriggerEvent   string `json:"trigger_event"`
+	Conditions     []byte `json:"conditions"`
+	Actions        []byte `json:"actions"`
+	IsActive       bool   `json:"is_active"`
+}
+
+func (q *Queries) UpdateAutomationRule(ctx context.Context, arg UpdateAutomationRuleParams) (AutomationRule, error) {
+	row := q.db.QueryRow(ctx, updateAutomationRule,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Name,
+		arg.TriggerEvent,
+		arg.Conditions,
+		arg.Actions,
+		arg.IsActive,
+	)
+	var i AutomationRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.TriggerEvent,
+		&i.Conditions,
+		&i.Actions,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
 }

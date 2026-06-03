@@ -19,6 +19,7 @@ import (
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
 	"b2bcommerce/internal/modules/sales"
+	"b2bcommerce/internal/modules/wfadmin"
 	"b2bcommerce/internal/payments/gateway"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/store"
@@ -95,6 +96,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	otc.New(st.Pool(), o.pdf, o.notifier, o.gateway).Routes(r, authMW)
 	inventory.New(st.Pool()).Routes(r, authMW)
 	crm.New(st.Pool()).Routes(r, authMW)
+	wfadmin.New(st.Pool()).Routes(r, authMW)
 
 	return r
 }

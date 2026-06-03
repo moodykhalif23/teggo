@@ -199,6 +199,29 @@ func (q *Queries) GetWorkflowDefByCode(ctx context.Context, arg GetWorkflowDefBy
 	return i, err
 }
 
+const getWorkflowDefinition = `-- name: GetWorkflowDefinition :one
+SELECT id, organization_id, code, entity_type, name, is_active FROM workflow_definitions WHERE organization_id = $1 AND id = $2
+`
+
+type GetWorkflowDefinitionParams struct {
+	OrganizationID int64 `json:"organization_id"`
+	ID             int64 `json:"id"`
+}
+
+func (q *Queries) GetWorkflowDefinition(ctx context.Context, arg GetWorkflowDefinitionParams) (WorkflowDefinition, error) {
+	row := q.db.QueryRow(ctx, getWorkflowDefinition, arg.OrganizationID, arg.ID)
+	var i WorkflowDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.EntityType,
+		&i.Name,
+		&i.IsActive,
+	)
+	return i, err
+}
+
 const getWorkflowInstance = `-- name: GetWorkflowInstance :one
 
 SELECT id, definition_id, entity_type, entity_id, current_state_id, created_at, updated_at FROM workflow_instances WHERE id = $1
@@ -261,6 +284,37 @@ func (q *Queries) GetWorkflowStateByCode(ctx context.Context, arg GetWorkflowSta
 		&i.SortOrder,
 	)
 	return i, err
+}
+
+const listWorkflowDefinitions = `-- name: ListWorkflowDefinitions :many
+SELECT id, organization_id, code, entity_type, name, is_active FROM workflow_definitions WHERE organization_id = $1 ORDER BY code
+`
+
+func (q *Queries) ListWorkflowDefinitions(ctx context.Context, organizationID int64) ([]WorkflowDefinition, error) {
+	rows, err := q.db.Query(ctx, listWorkflowDefinitions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowDefinition
+	for rows.Next() {
+		var i WorkflowDefinition
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Code,
+			&i.EntityType,
+			&i.Name,
+			&i.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listWorkflowStates = `-- name: ListWorkflowStates :many
@@ -341,4 +395,43 @@ type SetWorkflowInstanceStateParams struct {
 func (q *Queries) SetWorkflowInstanceState(ctx context.Context, arg SetWorkflowInstanceStateParams) error {
 	_, err := q.db.Exec(ctx, setWorkflowInstanceState, arg.ID, arg.CurrentStateID)
 	return err
+}
+
+const updateWorkflowTransitionConfig = `-- name: UpdateWorkflowTransitionConfig :one
+UPDATE workflow_transitions t
+SET guards = $3, actions = $4
+FROM workflow_definitions d
+WHERE t.id = $2 AND t.definition_id = d.id AND d.organization_id = $1
+RETURNING t.id, t.definition_id, t.code, t.label, t.from_state_id, t.to_state_id, t.guards, t.actions, t.sort_order
+`
+
+type UpdateWorkflowTransitionConfigParams struct {
+	OrganizationID int64  `json:"organization_id"`
+	ID             int64  `json:"id"`
+	Guards         []byte `json:"guards"`
+	Actions        []byte `json:"actions"`
+}
+
+// UpdateWorkflowTransitionConfig edits a transition's guards/actions JSONB,
+// org-scoped via its definition (admin low-code editing).
+func (q *Queries) UpdateWorkflowTransitionConfig(ctx context.Context, arg UpdateWorkflowTransitionConfigParams) (WorkflowTransition, error) {
+	row := q.db.QueryRow(ctx, updateWorkflowTransitionConfig,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Guards,
+		arg.Actions,
+	)
+	var i WorkflowTransition
+	err := row.Scan(
+		&i.ID,
+		&i.DefinitionID,
+		&i.Code,
+		&i.Label,
+		&i.FromStateID,
+		&i.ToStateID,
+		&i.Guards,
+		&i.Actions,
+		&i.SortOrder,
+	)
+	return i, err
 }

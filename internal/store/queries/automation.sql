@@ -12,6 +12,18 @@ INSERT INTO automation_rules (organization_id, name, trigger_event, conditions, 
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
+-- name: ListAutomationRules :many
+SELECT * FROM automation_rules WHERE organization_id = $1 ORDER BY id;
+
+-- name: GetAutomationRule :one
+SELECT * FROM automation_rules WHERE organization_id = $1 AND id = $2;
+
+-- name: UpdateAutomationRule :one
+UPDATE automation_rules
+SET name = $3, trigger_event = $4, conditions = $5, actions = $6, is_active = $7
+WHERE organization_id = $1 AND id = $2
+RETURNING *;
+
 -- name: RecordAutomationExecution :exec
 INSERT INTO automation_executions (rule_id, event_payload, status, result)
 VALUES ($1, $2, $3, $4);

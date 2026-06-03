@@ -1069,6 +1069,72 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Activity' } }
 
+    # ----- Workflow & automation admin (Pack 2 §3) -----
+    WfState:
+      type: object
+      required: [id, code, label, is_initial, is_final]
+      properties:
+        id: { type: integer, format: int64 }
+        code: { type: string }
+        label: { type: string }
+        is_initial: { type: boolean }
+        is_final: { type: boolean }
+        sort_order: { type: integer }
+    WfTransition:
+      type: object
+      required: [id, code, label, from, to, guards, actions]
+      properties:
+        id: { type: integer, format: int64 }
+        code: { type: string }
+        label: { type: string }
+        from: { type: string }
+        to: { type: string }
+        guards: { type: array, items: { type: object, additionalProperties: true } }
+        actions: { type: array, items: { type: object, additionalProperties: true } }
+    WorkflowDefinition:
+      type: object
+      required: [id, code, entity_type, name, is_active, states, transitions]
+      properties:
+        id: { type: integer, format: int64 }
+        code: { type: string }
+        entity_type: { type: string }
+        name: { type: string }
+        is_active: { type: boolean }
+        states: { type: array, items: { $ref: '#/components/schemas/WfState' } }
+        transitions: { type: array, items: { $ref: '#/components/schemas/WfTransition' } }
+    ListWrapperWorkflow:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/WorkflowDefinition' } }
+    TransitionConfigPatch:
+      type: object
+      properties:
+        guards: { type: array, items: { type: object, additionalProperties: true } }
+        actions: { type: array, items: { type: object, additionalProperties: true } }
+    AutomationRule:
+      type: object
+      required: [id, name, trigger_event, conditions, actions, is_active]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        trigger_event: { type: string }
+        conditions: { type: array, items: { type: object, additionalProperties: true } }
+        actions: { type: array, items: { type: object, additionalProperties: true } }
+        is_active: { type: boolean }
+    AutomationRuleInput:
+      type: object
+      required: [name, trigger_event]
+      properties:
+        name: { type: string }
+        trigger_event: { type: string }
+        conditions: { type: array, items: { type: object, additionalProperties: true } }
+        actions: { type: array, items: { type: object, additionalProperties: true } }
+        is_active: { type: boolean }
+    ListWrapperAutomationRule:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AutomationRule' } }
+
   responses:
     ErrorResponse:
       description: Error
@@ -2207,3 +2273,63 @@ paths:
       security: [{ adminAuth: [] }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperActivity' } } } }
+
+  # ----- Workflow & automation admin (Pack 2 §3) -----
+  /admin/workflows:
+    get:
+      tags: [Workflow]
+      operationId: adminListWorkflows
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperWorkflow' } } } }
+  /admin/workflows/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Workflow]
+      operationId: adminGetWorkflow
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinition' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/workflow-transitions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [Workflow]
+      operationId: adminUpdateTransitionConfig
+      summary: Edit a transition's guards/actions (low-code)
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TransitionConfigPatch' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WfTransition' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/automation-rules:
+    get:
+      tags: [Workflow]
+      operationId: adminListAutomationRules
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperAutomationRule' } } } }
+    post:
+      tags: [Workflow]
+      operationId: adminCreateAutomationRule
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationRuleInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationRule' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/automation-rules/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [Workflow]
+      operationId: adminUpdateAutomationRule
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationRuleInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationRule' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
