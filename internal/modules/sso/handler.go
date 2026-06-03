@@ -39,7 +39,8 @@ func New(pool *pgxpool.Pool, issuer TokenIssuer) *Handler {
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	// Public SSO endpoints (the IdP redirects the browser here).
 	r.Get("/auth/sso/{id}/login", h.login)
-	r.Get("/auth/sso/{id}/callback", h.callback)
+	r.Get("/auth/sso/{id}/callback", h.callback) // OIDC
+	r.Post("/auth/sso/{id}/acs", h.acs)          // SAML assertion consumer
 
 	r.Group(func(ar chi.Router) {
 		ar.Use(authMW)
@@ -128,9 +129,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if in.Type == "" {
 		in.Type = "oidc"
 	}
-	if in.Type == "saml" {
-		response.Fail(w, http.StatusNotImplemented, "not_implemented", "SAML providers are not yet supported")
+	if in.Type != "oidc" && in.Type != "saml" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "type must be oidc or saml")
 		return
+	}
+	if in.Type == "saml" {
+		var sc ssoeng.SAMLConfig
+		_ = json.Unmarshal(nonEmpty(in.Config), &sc)
+		if sc.IDPSSOURL == "" || sc.IDPCertificate == "" {
+			response.Fail(w, http.StatusBadRequest, "bad_request", "SAML requires idp_sso_url and idp_certificate in config")
+			return
+		}
 	}
 	if in.Audience == "storefront" && in.CustomerID == nil {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "storefront providers require a customer_id")

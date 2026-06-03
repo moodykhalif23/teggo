@@ -1,8 +1,7 @@
 // Package sso implements OpenID Connect SSO (PRD §15) using the OAuth2
 // authorization-code flow. It depends only on the stdlib + our JWT library: the
 // IdP's JWKS is fetched and parsed by hand, and the id_token is verified
-// (signature, issuer, audience, expiry, nonce). SAML is a planned follow-up
-// behind the same identity-provider model.
+// (signature, issuer, audience, expiry, nonce).
 package sso
 
 import (

@@ -186,11 +186,22 @@ func (h *Handler) publicProvider(w http.ResponseWriter, r *http.Request) (gen.Id
 		response.Fail(w, http.StatusNotFound, "not_found", "provider not found")
 		return gen.IdentityProvider{}, false
 	}
-	if p.Type != "oidc" {
-		response.Fail(w, http.StatusNotImplemented, "not_implemented", "only OIDC is supported")
-		return gen.IdentityProvider{}, false
-	}
 	return p, true
+}
+
+// samlConfig parses SAML config and resolves the ACS URL for this provider.
+func (h *Handler) samlConfig(r *http.Request, p gen.IdentityProvider) (ssoeng.SAMLConfig, string) {
+	var sc ssoeng.SAMLConfig
+	_ = json.Unmarshal(nonEmptyJSON(p.Config), &sc)
+	acs := scheme(r) + "://" + r.Host + "/auth/sso/" + strconv.FormatInt(p.ID, 10) + "/acs"
+	return sc, acs
+}
+
+func nonEmptyJSON(b []byte) []byte {
+	if len(b) == 0 {
+		return []byte("{}")
+	}
+	return b
 }
 
 // ---- helpers --------------------------------------------------------------
