@@ -26,3 +26,8 @@ overrides:
   '@docusaurus/mdx-loader': 3.8.1
   '@docusaurus/bundler': 3.8.1
   webpack: 5.97.1
+  # Match the OpenAPI plugin/theme to the Docusaurus 3.8 era. The latest (4.7.x) is
+  # built for newer Docusaurus and ships a lib whose CJS modules aren't wrapped by
+  # 3.8.1's loader → "exports is not defined" at runtime in the API explorer.
+  docusaurus-plugin-openapi-docs: 4.4.0
+  docusaurus-theme-openapi-docs: 4.4.0
