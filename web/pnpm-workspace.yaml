@@ -3,14 +3,13 @@ packages:
   - 'storefront'
   - 'docs'
   - 'packages/*'
+
 allowBuilds:
-  '@parcel/watcher': set this to true or false
-  core-js-pure: set this to true or false
-  esbuild: set this to true or false
-# Dependencies allowed to run install/build scripts (pnpm blocks these by default).
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - esbuild
+  '@parcel/watcher': true
+  esbuild: true
+  core-js: false
+  core-js-pure: false
+  postman-code-generators: false
 # Pin the Docusaurus stack so the OpenAPI theme's Tabs internals match core, and
 # hold webpack at a release whose ProgressPlugin schema accepts webpackbar's options.
 overrides:
