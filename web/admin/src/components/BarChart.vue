@@ -36,8 +36,8 @@ const option = computed<EChartsOption>(() => ({
       name: props.name ?? 'Count',
       type: 'bar',
       data: props.values,
-      barMaxWidth: 48,
-      itemStyle: { color: '#0ea5e9', borderRadius: [6, 6, 0, 0] },
+      barMaxWidth: 44,
+      itemStyle: { color: '#475569', borderRadius: [4, 4, 0, 0] },
     },
   ],
 }))

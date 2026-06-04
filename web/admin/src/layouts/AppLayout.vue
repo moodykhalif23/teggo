@@ -136,6 +136,26 @@ const navModel = computed<MenuItem[]>(() => {
   return model
 })
 
+// Breadcrumb shown in the topbar for orientation. Built from the nav groups
+// (routeName → { section, title }) plus a small map for detail/editor routes
+// that aren't in the sidebar. Presentation only.
+const crumbIndex = computed<Record<string, { section: string; title: string }>>(() => {
+  const idx: Record<string, { section: string; title: string }> = {}
+  for (const g of groups) {
+    for (const i of g.items) idx[i.routeName] = { section: g.label, title: i.label }
+  }
+  Object.assign(idx, {
+    'customer-detail': { section: 'Customers', title: 'Customer' },
+    'price-list-detail': { section: 'Pricing', title: 'Price list' },
+    'rfq-detail': { section: 'Sales', title: 'RFQ' },
+    'quote-editor': { section: 'Sales', title: 'Quote' },
+    'order-detail': { section: 'Sales', title: 'Order' },
+    'invoice-detail': { section: 'Sales', title: 'Invoice' },
+  })
+  return idx
+})
+const crumb = computed(() => crumbIndex.value[String(route.name)] ?? { section: '', title: 'Dashboard' })
+
 // Keep the group that owns the current route expanded (without collapsing groups
 // the user opened themselves). PanelMenu also toggles this via v-model.
 const expandedKeys = ref<Record<string, boolean>>({})
@@ -204,6 +224,14 @@ function logout() {
         </Popover>
       </header>
       <main class="content">
+        <nav class="crumb" aria-label="Breadcrumb">
+          <i class="pi pi-home crumb-home" />
+          <template v-if="crumb.section">
+            <span class="crumb-sec">{{ crumb.section }}</span>
+            <i class="pi pi-angle-right crumb-sep" />
+          </template>
+          <span class="crumb-cur">{{ crumb.title }}</span>
+        </nav>
         <RouterView />
       </main>
     </div>
@@ -347,6 +375,28 @@ function logout() {
   padding: 0 1rem;
   background: var(--teggo-surface, #fff);
   border-bottom: 1px solid var(--p-surface-200, #e2e8f0);
+}
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+}
+.crumb-home {
+  font-size: 0.85rem;
+  color: var(--p-surface-400, #94a3b8);
+}
+.crumb-sec {
+  color: var(--p-text-muted-color, #64748b);
+}
+.crumb-sep {
+  font-size: 0.7rem;
+  color: var(--p-surface-300, #cbd5e1);
+}
+.crumb-cur {
+  font-weight: 600;
+  color: var(--p-text-color, #0f172a);
 }
 .spacer {
   flex: 1;

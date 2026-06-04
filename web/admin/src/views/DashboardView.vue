@@ -57,45 +57,58 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <h1>Dashboard</h1>
-    <p class="muted">Back-office for the Teggo B2B platform.</p>
+  <div class="page dashboard">
+    <header class="dash-head">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="sub">Overview of your B2B operations</p>
+      </div>
+    </header>
 
-    <div class="kpis">
-      <Card v-for="k in kpis" :key="k.label" class="kpi" @click="router.push({ name: k.route })">
-        <template #content>
-          <div class="kpi-row">
-            <i :class="k.icon" />
-            <div>
-              <div class="kpi-value">{{ k.value }}</div>
-              <div class="kpi-label">{{ k.label }}</div>
+    <section class="stats">
+      <button
+        v-for="k in kpis"
+        :key="k.label"
+        type="button"
+        class="stat"
+        @click="router.push({ name: k.route })"
+      >
+        <span class="stat-ic"><i :class="k.icon" /></span>
+        <span class="stat-main">
+          <span class="stat-val">{{ k.value }}</span>
+          <span class="stat-lbl">{{ k.label }}</span>
+        </span>
+        <i class="pi pi-angle-right stat-go" />
+      </button>
+    </section>
+
+    <Card v-if="chartKpis.length" class="panel">
+      <template #title>Records by area</template>
+      <template #subtitle>Live counts across your workspace</template>
+      <template #content>
+        <BarChart :labels="chartLabels" :values="chartValues" name="Records" />
+      </template>
+    </Card>
+
+    <Card class="panel">
+      <template #title>Session</template>
+      <template #subtitle>Your access in this organization</template>
+      <template #content>
+        <div class="sess">
+          <div class="sess-org">
+            <span class="sess-k">Organization</span>
+            <span class="sess-v">{{ auth.orgId ?? '—' }}</span>
+          </div>
+          <div class="sess-perm">
+            <div class="sess-perm-head">
+              <i class="pi pi-shield" />
+              <span>{{ auth.permissions.length }} permissions</span>
+            </div>
+            <div class="tags">
+              <Tag v-for="p in auth.permissions" :key="p" :value="p" severity="secondary" />
+              <span v-if="!auth.permissions.length" class="muted">no permissions</span>
             </div>
           </div>
-        </template>
-      </Card>
-    </div>
-
-    <Card v-if="chartKpis.length" class="overview">
-      <template #title>At a glance</template>
-      <template #content>
-        <BarChart :labels="chartLabels" :values="chartValues" name="Records" />
-      </template>
-    </Card>
-
-    <Card v-if="chartValues.length" class="chartcard">
-      <template #title>Overview</template>
-      <template #content>
-        <BarChart :labels="chartLabels" :values="chartValues" name="Records" />
-      </template>
-    </Card>
-
-    <Card class="session">
-      <template #title>Session</template>
-      <template #content>
-        <p><strong>Organization:</strong> {{ auth.orgId ?? '—' }}</p>
-        <div class="tags">
-          <Tag v-for="p in auth.permissions" :key="p" :value="p" severity="secondary" />
-          <span v-if="!auth.permissions.length" class="muted">no permissions</span>
         </div>
       </template>
     </Card>
@@ -103,15 +116,97 @@ onMounted(load)
 </template>
 
 <style scoped>
-.page h1 { margin: 0 0 0.25rem; }
+.dash-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.sub {
+  margin: 0.25rem 0 0;
+  color: var(--p-text-muted-color, #64748b);
+  font-size: 0.9rem;
+}
 .muted { color: var(--p-text-muted-color, #64748b); }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
-.kpi { cursor: pointer; }
-.kpi-row { display: flex; align-items: center; gap: 0.9rem; }
-.kpi-row i { font-size: 1.6rem; color: var(--p-primary-color, #16a34a); }
-.kpi-value { font-size: 1.7rem; font-weight: 700; line-height: 1; }
-.kpi-label { color: var(--p-text-muted-color, #64748b); font-size: 0.85rem; margin-top: 0.2rem; }
-.chartcard { margin-bottom: 1rem; }
-.session { margin-top: 0.5rem; }
-.tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+
+/* Stat tiles */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding: 1.05rem 1.15rem;
+  background: #fff;
+  border: 1px solid var(--teggo-border, #e2e8f0);
+  border-radius: var(--teggo-radius, 6px);
+}
+.stat-ic {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--teggo-radius, 6px);
+  background: var(--p-primary-50, #f0fdf4);
+  color: var(--p-primary-color, #16a34a);
+  font-size: 1.2rem;
+}
+.stat-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.stat-val {
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--p-text-color, #0f172a);
+}
+.stat-lbl {
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color, #64748b);
+  margin-top: 0.1rem;
+}
+.stat-go {
+  margin-left: auto;
+  color: var(--p-surface-300, #cbd5e1);
+  font-size: 0.85rem;
+}
+
+/* Panels (cards) */
+.panel { margin-bottom: 1rem; }
+
+/* Session */
+.sess { display: flex; flex-direction: column; gap: 1rem; }
+.sess-org {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.sess-k {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--p-text-muted-color, #64748b);
+  font-weight: 600;
+}
+.sess-v { font-weight: 700; font-size: 1.05rem; }
+.sess-perm-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color, #64748b);
+  margin-bottom: 0.55rem;
+}
+.tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 </style>

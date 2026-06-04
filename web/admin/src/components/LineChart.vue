@@ -24,8 +24,8 @@ const option = computed<EChartsOption>(() => ({
       data: props.values,
       smooth: true,
       showSymbol: false,
-      lineStyle: { color: '#0ea5e9', width: 2 },
-      areaStyle: { color: 'rgba(14,165,233,0.12)' },
+      lineStyle: { color: '#475569', width: 2 },
+      areaStyle: { color: 'rgba(71,85,105,0.10)' },
     },
   ],
 }))
