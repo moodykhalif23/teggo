@@ -4,7 +4,7 @@
      (matches PrimeVue's default content border so no surface looks bolder than
      another) + slightly-sharp edges. */
   --teggo-border: #e2e8f0; /* slate-200 — the single, normal border tone */
-  --teggo-radius: 2px;
+  --teggo-radius: 6px; /* polished, gently-rounded — not fully sharp */
   --teggo-surface: #ffffff;
   --teggo-surface-muted: #f1f5f9; /* slate-100 — table headers, subtle fills */
 }
