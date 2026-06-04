@@ -70,7 +70,9 @@ function logout() {
         <i class="pi pi-bolt" />
         <span>Teggo Admin</span>
       </div>
-      <Menu :model="navItems" class="nav" />
+      <div class="nav-scroll">
+        <Menu :model="navItems" class="nav" />
+      </div>
     </aside>
 
     <div class="main">
@@ -117,13 +119,28 @@ function logout() {
   border-bottom: 1px solid var(--p-surface-200, #e2e8f0);
   flex-shrink: 0;
 }
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--p-surface-300, #cbd5e1) transparent;
+}
+.nav-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.nav-scroll::-webkit-scrollbar-thumb {
+  background: var(--p-surface-300, #cbd5e1);
+  border-radius: 4px;
+}
+.nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--p-surface-400, #94a3b8);
+}
 .nav {
   border: none;
   width: 100%;
   background: transparent;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 .main {
   flex: 1;
