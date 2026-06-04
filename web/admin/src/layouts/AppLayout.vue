@@ -94,11 +94,14 @@ function logout() {
 <style scoped>
 .layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 .sidebar {
   width: var(--teggo-sidebar-width);
   flex-shrink: 0;
+  height: 100%;
   background: var(--p-surface-0, #fff);
   border-right: 1px solid var(--p-surface-200, #e2e8f0);
   display: flex;
@@ -112,22 +115,29 @@ function logout() {
   font-size: 1.1rem;
   padding: 1.25rem 1.25rem;
   border-bottom: 1px solid var(--p-surface-200, #e2e8f0);
+  flex-shrink: 0;
 }
 .nav {
   border: none;
   width: 100%;
   background: transparent;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .topbar {
   display: flex;
   align-items: center;
   height: 56px;
+  flex-shrink: 0;
   padding: 0 1rem;
   background: var(--p-surface-0, #fff);
   border-bottom: 1px solid var(--p-surface-200, #e2e8f0);
@@ -138,5 +148,7 @@ function logout() {
 .content {
   padding: 1.5rem;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 </style>
