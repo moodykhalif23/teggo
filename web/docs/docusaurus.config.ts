@@ -34,6 +34,21 @@ const config: Config = {
   ],
 
   plugins: [
+    // The OpenAPI theme bundles postman-code-generators for its language-tab
+    // snippets, which reference Node core modules webpack 5 no longer polyfills.
+    // We don't run those generators in the browser, so stub the modules out.
+    function nodePolyfillFallback() {
+      return {
+        name: 'node-polyfill-fallback',
+        configureWebpack() {
+          return {
+            resolve: {
+              fallback: { path: false, fs: false, os: false, crypto: false, http: false, https: false, stream: false, zlib: false, util: false },
+            },
+          }
+        },
+      }
+    },
     [
       'docusaurus-plugin-openapi-docs',
       {

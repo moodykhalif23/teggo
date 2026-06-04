@@ -1,0 +1,11 @@
+# Docusaurus build + generated output
+/build
+/.docusaurus
+/.cache-loader
+
+# Generated from ../packages/api/openapi.yaml — produced by `pnpm gen-api`
+/docs/api/
+/static/openapi.yaml
+
+node_modules
+*.log
