@@ -106,10 +106,9 @@ onMounted(load)
 .page h1 { margin: 0 0 0.25rem; }
 .muted { color: var(--p-text-muted-color, #64748b); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
-.kpi { cursor: pointer; transition: box-shadow 0.15s ease; }
-.kpi:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); }
+.kpi { cursor: pointer; }
 .kpi-row { display: flex; align-items: center; gap: 0.9rem; }
-.kpi-row i { font-size: 1.6rem; color: var(--p-primary-color, #0ea5e9); }
+.kpi-row i { font-size: 1.6rem; color: var(--p-primary-color, #16a34a); }
 .kpi-value { font-size: 1.7rem; font-weight: 700; line-height: 1; }
 .kpi-label { color: var(--p-text-muted-color, #64748b); font-size: 0.85rem; margin-top: 0.2rem; }
 .chartcard { margin-bottom: 1rem; }

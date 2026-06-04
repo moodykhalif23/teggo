@@ -221,7 +221,7 @@ onMounted(loadProducts)
 <style scoped>
 h1 { margin: 0 0 0.25rem; }
 .muted { color: var(--p-text-muted-color, #64748b); font-weight: 400; }
-.card { border: 1px solid var(--p-surface-200, #e2e8f0); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+.card { border: 1px solid var(--teggo-border, #cbd5e1); border-radius: var(--teggo-radius, 2px); padding: 1rem; margin: 1rem 0; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .row { display: flex; gap: 0.75rem; align-items: flex-end; }
 .field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; }

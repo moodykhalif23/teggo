@@ -1,5 +1,12 @@
 :root {
   --teggo-sidebar-width: 256px;
+  /* Enterprise surface tokens — one normal, light slate border everywhere
+     (matches PrimeVue's default content border so no surface looks bolder than
+     another) + slightly-sharp edges. */
+  --teggo-border: #e2e8f0; /* slate-200 — the single, normal border tone */
+  --teggo-radius: 2px;
+  --teggo-surface: #ffffff;
+  --teggo-surface-muted: #f1f5f9; /* slate-100 — table headers, subtle fills */
 }
 
 * {
@@ -19,4 +26,96 @@ body {
     Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background: var(--p-content-background, #f8fafc);
   color: var(--p-text-color, #1e293b);
+}
+
+/* ===========================================================================
+   Enterprise UI layer — visual only, no behaviour change.
+   Flat, bordered surfaces with slightly-sharp edges and no decorative hover.
+   =========================================================================== */
+
+/* Cards: defined border, flat (no shadow), sharp, and no hover lift. */
+.p-card {
+  border: 1px solid var(--teggo-border);
+  border-radius: var(--teggo-radius);
+  box-shadow: none;
+  background: var(--teggo-surface);
+}
+.p-card:hover {
+  box-shadow: none;
+}
+.p-card .p-card-body {
+  padding: 1rem 1.25rem;
+}
+.p-card .p-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.p-card .p-card-caption {
+  border-bottom: 1px solid var(--teggo-border);
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Sharp edges across the common controls. */
+.p-panel,
+.p-datatable,
+.p-inputtext,
+.p-textarea,
+.p-select,
+.p-multiselect,
+.p-button,
+.p-tag,
+.p-chip,
+.p-dialog,
+.p-menu,
+.p-popover,
+.p-tabs,
+.p-toast-message,
+.p-fileupload {
+  border-radius: var(--teggo-radius) !important;
+}
+
+/* Panels: subtle border (the strong border is reserved for cards & tables). */
+.p-panel {
+  border: 1px solid var(--p-surface-200, #e2e8f0);
+  box-shadow: none;
+}
+.p-panel .p-panel-header {
+  background: var(--teggo-surface-muted);
+  border-bottom: 1px solid var(--p-surface-200, #e2e8f0);
+}
+
+/* DataTable: defined slate gridlines, uppercase flat header, no row hover. */
+.p-datatable {
+  border: 1px solid var(--teggo-border);
+}
+.p-datatable .p-datatable-thead > tr > th {
+  background: var(--teggo-surface-muted);
+  border-color: var(--teggo-border);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--p-text-muted-color, #475569);
+}
+.p-datatable .p-datatable-tbody > tr > td {
+  border-color: var(--teggo-border);
+}
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: transparent;
+}
+
+/* Dialogs: subtle border + soft elevation (overlay, not a flat surface). */
+.p-dialog {
+  border: 1px solid var(--p-surface-200, #e2e8f0);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+}
+
+/* Page scaffold shared by the views (each view wraps content in .page). */
+.page > h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.25rem;
 }

@@ -21,10 +21,14 @@ function decodeClaims(token: string): JwtClaims | null {
 }
 
 const TOKEN_KEY = 'teggo.admin.token'
+const EMAIL_KEY = 'teggo.admin.email'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem(TOKEN_KEY) as string | null,
+    // The signed-in email, kept only to render the account avatar/menu (the JWT
+    // carries no display name). Cleared on logout.
+    email: localStorage.getItem(EMAIL_KEY) as string | null,
   }),
   getters: {
     claims: (state): JwtClaims | null => (state.token ? decodeClaims(state.token) : null),
@@ -38,6 +42,16 @@ export const useAuthStore = defineStore('auth', {
     orgId(): number | null {
       return this.claims?.org_id ?? null
     },
+    // Up-to-two-letter initials for the avatar, derived from the email local part
+    // (e.g. "ada.lovelace@x.io" → "AL", "admin@x.io" → "AD").
+    initials(): string {
+      const local = (this.email ?? '').split('@')[0]
+      if (!local) return '?'
+      const parts = local.split(/[._-]+/).filter(Boolean)
+      const letters =
+        parts.length >= 2 ? parts[0][0] + parts[1][0] : local.slice(0, 2)
+      return letters.toUpperCase()
+    },
   },
   actions: {
     can(permission: string): boolean {
@@ -48,15 +62,22 @@ export const useAuthStore = defineStore('auth', {
       if (token) localStorage.setItem(TOKEN_KEY, token)
       else localStorage.removeItem(TOKEN_KEY)
     },
+    setEmail(email: string | null) {
+      this.email = email
+      if (email) localStorage.setItem(EMAIL_KEY, email)
+      else localStorage.removeItem(EMAIL_KEY)
+    },
     async login(email: string, password: string, orgId = 1) {
       const { data, error } = await api.POST('/admin/auth/login', {
         body: { email, password, org_id: orgId },
       })
       if (error || !data) throw new Error(errMessage(error, 'Invalid credentials'))
       this.setToken(data.token)
+      this.setEmail(email)
     },
     logout() {
       this.setToken(null)
+      this.setEmail(null)
     },
   },
 })
