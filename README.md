@@ -64,16 +64,42 @@ bcrypt of that password — change or remove the seed (`migrations/0003_seed.sql
 
 ## Run the frontends
 
+### One command (backend + GUIs)
+
+```bash
+corepack enable pnpm     # once
+make dev                 # backend (Docker, detached) + admin & storefront dev servers
+```
+
+`make dev` runs [`scripts/dev.sh`](scripts/dev.sh): it brings the backend up with
+`docker compose up -d`, installs web deps, then starts both frontends. Ctrl-C stops the
+frontends; the backend stays up (`make down` to stop it).
+
+| Make target | What it does | URL |
+|---|---|---|
+| `make dev` | Backend (detached) + admin + storefront | — |
+| `make web` | admin + storefront dev servers (backend assumed up) | — |
+| `make admin` | admin SPA only | http://localhost:5173 |
+| `make storefront` | storefront only | http://localhost:3000 |
+| `make docs` | generate API reference + serve docs | http://localhost:3001 |
+| `make docs-build` | generate API reference + static build | `web/docs/build` |
+| `make api-client` | regenerate the typed client from the OpenAPI spec | — |
+| `make web-build` | production build of admin + storefront + docs | — |
+
+### Or with pnpm directly
+
 ```bash
 cd web
 corepack enable pnpm
 pnpm install
 pnpm --filter @teggo/api generate     # generate the typed client from packages/api/openapi.yaml
 
-pnpm dev:admin                      # admin SPA  → http://localhost:5173
-pnpm dev:storefront                 # storefront → http://localhost:3000
+pnpm dev                             # admin + storefront concurrently
+pnpm dev:admin                       # admin SPA  → http://localhost:5173
+pnpm dev:storefront                  # storefront → http://localhost:3000
+pnpm docs                            # developer docs (Docusaurus)
 
-pnpm build                          # production build of all packages
+pnpm build                           # production build of all packages
 ```
 
 The Vite dev server proxies `/admin` and `/storefront` to the API at `localhost:8080`
