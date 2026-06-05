@@ -1757,6 +1757,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/accounts/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-account churn-risk signals from order history. */
+        get: operations["adminAccountHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/leads": {
         parameters: {
             query?: never;
@@ -4147,6 +4164,29 @@ export interface components {
         };
         ListWrapperInventoryMovement: {
             items?: components["schemas"]["InventoryMovement"][];
+        };
+        AccountHealth: {
+            /** Format: int64 */
+            customer_id: number;
+            name: string;
+            /** Format: int64 */
+            rep_id?: number | null;
+            /** Format: int64 */
+            order_count: number;
+            /** Format: date-time */
+            last_ordered: string;
+            days_since: number;
+            avg_interval_days: number;
+            lifetime_value: string;
+            /** Format: int64 */
+            recent_count: number;
+            /** Format: int64 */
+            prior_count: number;
+            at_risk: boolean;
+            reason?: string;
+        };
+        ListWrapperAccountHealth: {
+            items?: components["schemas"]["AccountHealth"][];
         };
         Lead: {
             /** Format: int64 */
@@ -8316,6 +8356,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InventoryLevel"];
+                };
+            };
+        };
+    };
+    adminAccountHealth: {
+        parameters: {
+            query?: {
+                at_risk?: boolean;
+                rep_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperAccountHealth"];
                 };
             };
         };

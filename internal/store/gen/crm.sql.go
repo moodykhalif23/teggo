@@ -12,6 +12,67 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const accountHealth = `-- name: AccountHealth :many
+SELECT o.customer_id,
+       max(c.name)::text                            AS name,
+       c.assigned_sales_rep_id                       AS rep_id,
+       count(*)                                      AS order_count,
+       min(o.created_at)::timestamptz                AS first_ordered,
+       max(o.created_at)::timestamptz                AS last_ordered,
+       COALESCE(sum(o.grand_total), 0)::numeric(15,4) AS lifetime_value,
+       count(*) FILTER (WHERE o.created_at >= now() - interval '90 days')                                          AS recent_count,
+       count(*) FILTER (WHERE o.created_at >= now() - interval '180 days' AND o.created_at < now() - interval '90 days') AS prior_count
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE c.organization_id = $1 AND o.status <> 'cancelled' AND c.deleted_at IS NULL
+GROUP BY o.customer_id, c.assigned_sales_rep_id
+`
+
+type AccountHealthRow struct {
+	CustomerID    int64     `json:"customer_id"`
+	Name          string    `json:"name"`
+	RepID         *int64    `json:"rep_id"`
+	OrderCount    int64     `json:"order_count"`
+	FirstOrdered  time.Time `json:"first_ordered"`
+	LastOrdered   time.Time `json:"last_ordered"`
+	LifetimeValue string    `json:"lifetime_value"`
+	RecentCount   int64     `json:"recent_count"`
+	PriorCount    int64     `json:"prior_count"`
+}
+
+// AccountHealth aggregates each customer's order history (org-scoped, excluding
+// cancelled) into the signals a rep needs to spot a slipping account: lifetime
+// value, first/last order, and recent vs prior 90-day order counts.
+func (q *Queries) AccountHealth(ctx context.Context, organizationID int64) ([]AccountHealthRow, error) {
+	rows, err := q.db.Query(ctx, accountHealth, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccountHealthRow
+	for rows.Next() {
+		var i AccountHealthRow
+		if err := rows.Scan(
+			&i.CustomerID,
+			&i.Name,
+			&i.RepID,
+			&i.OrderCount,
+			&i.FirstOrdered,
+			&i.LastOrdered,
+			&i.LifetimeValue,
+			&i.RecentCount,
+			&i.PriorCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const addOpportunityStageHistory = `-- name: AddOpportunityStageHistory :exec
 INSERT INTO opportunity_stage_history (opportunity_id, from_stage_id, to_stage_id, changed_by)
 VALUES ($1, $2, $3, $4)

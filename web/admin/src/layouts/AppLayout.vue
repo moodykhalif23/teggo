@@ -73,6 +73,7 @@ const groups: NavGroup[] = [
       { label: 'Leads', icon: 'pi pi-filter', routeName: 'leads', permission: 'crm.view' },
       { label: 'Pipeline', icon: 'pi pi-chart-bar', routeName: 'pipeline', permission: 'crm.view' },
       { label: 'Opportunities', icon: 'pi pi-briefcase', routeName: 'opportunities', permission: 'crm.view' },
+      { label: 'Account health', icon: 'pi pi-heart', routeName: 'account-health', permission: 'crm.view' },
     ],
   },
   {

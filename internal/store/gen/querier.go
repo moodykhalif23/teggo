@@ -13,6 +13,10 @@ import (
 )
 
 type Querier interface {
+	// AccountHealth aggregates each customer's order history (org-scoped, excluding
+	// cancelled) into the signals a rep needs to spot a slipping account: lifetime
+	// value, first/last order, and recent vs prior 90-day order counts.
+	AccountHealth(ctx context.Context, organizationID int64) ([]AccountHealthRow, error)
 	AddConfiguredQuoteItem(ctx context.Context, arg AddConfiguredQuoteItemParams) (QuoteItem, error)
 	// ===== Movements ===========================================================
 	AddInventoryMovement(ctx context.Context, arg AddInventoryMovementParams) (InventoryMovement, error)

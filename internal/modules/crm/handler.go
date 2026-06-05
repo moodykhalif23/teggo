@@ -55,6 +55,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		ar.With(mw.RequirePermission("crm.manage")).Post("/admin/customers/{id}/contacts", h.createContact)
 		ar.With(mw.RequirePermission("crm.manage")).Post("/admin/activities", h.createActivity)
 		ar.With(mw.RequirePermission("crm.view")).Get("/admin/customers/{id}/timeline", h.customerTimeline)
+		ar.With(mw.RequirePermission("crm.view")).Get("/admin/accounts/health", h.accountHealth)
 	})
 }
 

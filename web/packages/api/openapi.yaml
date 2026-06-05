@@ -1270,6 +1270,27 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/InventoryMovement' } }
 
     # ----- CRM (Pack 2 §1) -----
+    AccountHealth:
+      type: object
+      required: [customer_id, name, order_count, last_ordered, days_since, avg_interval_days, lifetime_value, recent_count, prior_count, at_risk]
+      properties:
+        customer_id: { type: integer, format: int64 }
+        name: { type: string }
+        rep_id: { type: integer, format: int64, nullable: true }
+        order_count: { type: integer, format: int64 }
+        last_ordered: { type: string, format: date-time }
+        days_since: { type: integer }
+        avg_interval_days: { type: integer }
+        lifetime_value: { type: string }
+        recent_count: { type: integer, format: int64 }
+        prior_count: { type: integer, format: int64 }
+        at_risk: { type: boolean }
+        reason: { type: string }
+    ListWrapperAccountHealth:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AccountHealth' } }
+
     Lead:
       type: object
       required: [id, public_id, organization_id, source, status]
@@ -3717,6 +3738,18 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryLevel' } } } }
 
   # ----- CRM (Pack 2 §1) -----
+  /admin/accounts/health:
+    get:
+      tags: [CRM]
+      operationId: adminAccountHealth
+      summary: Per-account churn-risk signals from order history.
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: at_risk, in: query, schema: { type: boolean } }
+        - { name: rep_id, in: query, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperAccountHealth' } } } }
+
   /admin/leads:
     get:
       tags: [CRM]

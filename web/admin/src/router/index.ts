@@ -165,6 +165,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'crm.view' },
       },
       {
+        path: 'account-health',
+        name: 'account-health',
+        component: () => import('@/views/crm/AccountHealthView.vue'),
+        meta: { permission: 'crm.view' },
+      },
+      {
         path: 'workflows',
         name: 'workflows',
         component: () => import('@/views/workflow/WorkflowsView.vue'),

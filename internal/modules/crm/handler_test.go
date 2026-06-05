@@ -363,3 +363,76 @@ func TestSubmitStorefrontLeadValidation(t *testing.T) {
 		t.Errorf("no email/phone: want 400, got %d", rr.Code)
 	}
 }
+
+// ---- account health / churn risk -----------------------------------------
+
+func TestAccountHealth(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	tok := crmToken(t, issuer)
+	q := gen.New(pool)
+	ctx := context.Background()
+
+	// orders with backdated created_at (no created_at trigger on orders).
+	seedAccount := func(name string, agos ...int) int64 {
+		cust, err := q.CreateCustomer(ctx, gen.CreateCustomerParams{OrganizationID: 1, Name: name, CreditLimit: "0"})
+		if err != nil {
+			t.Fatalf("customer: %v", err)
+		}
+		for _, ago := range agos {
+			o, err := q.CreateOrder(ctx, gen.CreateOrderParams{
+				OrganizationID: 1, WebsiteID: 1, CustomerID: cust.ID, Currency: "USD",
+				BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"),
+				Subtotal: "100", TaxTotal: "0", ShippingTotal: "0", GrandTotal: "100",
+			})
+			if err != nil {
+				t.Fatalf("order: %v", err)
+			}
+			if _, err := pool.Exec(ctx, `UPDATE orders SET created_at = now() - make_interval(days => $1) WHERE id = $2`, ago, o.ID); err != nil {
+				t.Fatalf("backdate: %v", err)
+			}
+		}
+		return cust.ID
+	}
+	// Slipping: cadence ~30d but silent for 90d (overdue).
+	slipping := seedAccount("Slipping Co", 150, 120, 90)
+	// Healthy: ordered recently and regularly.
+	healthy := seedAccount("Healthy Co", 40, 20, 5)
+
+	rr := do(t, h, http.MethodGet, "/admin/accounts/health", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("health: %d (%s)", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			CustomerID int64 `json:"customer_id"`
+			AtRisk     bool  `json:"at_risk"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	risk := map[int64]bool{}
+	for _, it := range resp.Items {
+		risk[it.CustomerID] = it.AtRisk
+	}
+	if !risk[slipping] {
+		t.Errorf("slipping account should be at_risk")
+	}
+	if risk[healthy] {
+		t.Errorf("healthy account should not be at_risk")
+	}
+
+	// at_risk filter returns the slipping account but not the healthy one.
+	fr := do(t, h, http.MethodGet, "/admin/accounts/health?at_risk=true", tok, nil)
+	var fresp struct {
+		Items []struct {
+			CustomerID int64 `json:"customer_id"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(fr.Body.Bytes(), &fresp)
+	seen := map[int64]bool{}
+	for _, it := range fresp.Items {
+		seen[it.CustomerID] = true
+	}
+	if !seen[slipping] || seen[healthy] {
+		t.Errorf("at_risk filter: want slipping only (slipping=%v healthy=%v)", seen[slipping], seen[healthy])
+	}
+}
