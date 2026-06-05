@@ -1094,6 +1094,66 @@ func (q *Queries) ListRFQsForCustomer(ctx context.Context, customerID int64) ([]
 	return items, nil
 }
 
+const reorderCadence = `-- name: ReorderCadence :many
+SELECT oi.product_id,
+       max(p.slug)::text        AS slug,
+       max(oi.sku)::text        AS sku,
+       max(oi.name)::text       AS name,
+       max(oi.unit)::text       AS unit,
+       count(DISTINCT o.id)     AS order_count,
+       min(o.created_at)::timestamptz AS first_ordered,
+       max(o.created_at)::timestamptz AS last_ordered
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+WHERE o.customer_id = $1 AND o.status <> 'cancelled' AND p.deleted_at IS NULL
+GROUP BY oi.product_id
+HAVING count(DISTINCT o.id) >= 2
+`
+
+type ReorderCadenceRow struct {
+	ProductID    int64     `json:"product_id"`
+	Slug         string    `json:"slug"`
+	Sku          string    `json:"sku"`
+	Name         string    `json:"name"`
+	Unit         string    `json:"unit"`
+	OrderCount   int64     `json:"order_count"`
+	FirstOrdered time.Time `json:"first_ordered"`
+	LastOrdered  time.Time `json:"last_ordered"`
+}
+
+// ReorderCadence aggregates a customer's purchase history per product (across
+// non-cancelled orders) so the app can infer reorder intervals and nudge buyers.
+// Only products ordered at least twice are returned (an interval needs 2 points).
+func (q *Queries) ReorderCadence(ctx context.Context, customerID int64) ([]ReorderCadenceRow, error) {
+	rows, err := q.db.Query(ctx, reorderCadence, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReorderCadenceRow
+	for rows.Next() {
+		var i ReorderCadenceRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Slug,
+			&i.Sku,
+			&i.Name,
+			&i.Unit,
+			&i.OrderCount,
+			&i.FirstOrdered,
+			&i.LastOrdered,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sendQuote = `-- name: SendQuote :one
 UPDATE quotes SET status = 'sent', version = version + 1, valid_until = COALESCE($2, valid_until)
 WHERE id = $1

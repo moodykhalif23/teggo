@@ -497,6 +497,10 @@ type Querier interface {
 	RecordAutomationExecution(ctx context.Context, arg RecordAutomationExecutionParams) error
 	RemoveProductFromCategory(ctx context.Context, arg RemoveProductFromCategoryParams) error
 	RenameShoppingList(ctx context.Context, arg RenameShoppingListParams) (ShoppingList, error)
+	// ReorderCadence aggregates a customer's purchase history per product (across
+	// non-cancelled orders) so the app can infer reorder intervals and nudge buyers.
+	// Only products ordered at least twice are returned (an interval needs 2 points).
+	ReorderCadence(ctx context.Context, customerID int64) ([]ReorderCadenceRow, error)
 	// ResolveConfig returns the most specific value for a key given the optional
 	// website/group/customer in scope (customer > group > website > org).
 	ResolveConfig(ctx context.Context, arg ResolveConfigParams) (ResolveConfigRow, error)

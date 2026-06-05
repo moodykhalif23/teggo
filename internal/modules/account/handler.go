@@ -42,6 +42,8 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Post("/storefront/account/users", h.createUser)
 		sr.Patch("/storefront/account/users/{id}", h.updateUser)
 
+		sr.Get("/storefront/account/reorder-suggestions", h.reorderSuggestions)
+
 		sr.Get("/storefront/account/approvals", h.listApprovals)
 		sr.Post("/storefront/account/approvals/{publicID}/approve", h.approveOrder)
 		sr.Post("/storefront/account/approvals/{publicID}/reject", h.rejectOrder)

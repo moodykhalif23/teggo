@@ -389,3 +389,86 @@ func TestAccountRequiresStorefrontToken(t *testing.T) {
 		t.Errorf("no token: want 401, got %d", rr.Code)
 	}
 }
+
+// ---- reorder suggestions (replenishment) ---------------------------------
+
+func TestReorderSuggestions(t *testing.T) {
+	h, pool := newServer(t)
+	custID := seedCustomer(t, pool, "acme", "buyer@acme.test")
+	q := gen.New(pool)
+	ctx := context.Background()
+
+	prod, err := q.CreateProduct(ctx, gen.CreateProductParams{
+		OrganizationID: 1, Sku: "REORD-1", Type: "simple", Name: "Reorder Widget", Slug: "reord-1",
+		Status: "active", Attributes: []byte("{}"), Unit: "each",
+	})
+	if err != nil {
+		t.Fatalf("product: %v", err)
+	}
+	// Three orders at -100, -70, -45 days: span 55d / 2 intervals = ~27d avg,
+	// last was 45d ago -> due (overdue ~18d).
+	for _, ago := range []int{100, 70, 45} {
+		o, err := q.CreateOrder(ctx, gen.CreateOrderParams{
+			OrganizationID: 1, WebsiteID: 1, CustomerID: custID, Currency: "USD",
+			BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"),
+			Subtotal: "10", TaxTotal: "0", ShippingTotal: "0", GrandTotal: "10",
+		})
+		if err != nil {
+			t.Fatalf("order: %v", err)
+		}
+		if _, err := q.AddOrderItem(ctx, gen.AddOrderItemParams{
+			OrderID: o.ID, ProductID: prod.ID, Sku: prod.Sku, Name: prod.Name,
+			Quantity: "1", Unit: "each", UnitPrice: "10", TaxAmount: "0", RowTotal: "10",
+		}); err != nil {
+			t.Fatalf("order item: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE orders SET created_at = now() - make_interval(days => $1) WHERE id = $2`, ago, o.ID); err != nil {
+			t.Fatalf("backdate: %v", err)
+		}
+	}
+
+	tok := login(t, h, "buyer@acme.test")
+	rr := do(t, h, http.MethodGet, "/storefront/account/reorder-suggestions", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("suggestions: %d (%s)", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			Slug            string `json:"slug"`
+			AvgIntervalDays int    `json:"avg_interval_days"`
+			DaysSince       int    `json:"days_since"`
+			DaysOverdue     int    `json:"days_overdue"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	if len(resp.Items) != 1 || resp.Items[0].Slug != "reord-1" {
+		t.Fatalf("want 1 suggestion for reord-1, got %+v", resp.Items)
+	}
+	s := resp.Items[0]
+	if s.AvgIntervalDays < 25 || s.AvgIntervalDays > 30 {
+		t.Errorf("avg interval: want ~27, got %d", s.AvgIntervalDays)
+	}
+	if s.DaysSince < 44 || s.DaysSince > 46 || s.DaysOverdue <= 0 {
+		t.Errorf("due metrics: want ~45 days since and overdue>0, got since=%d overdue=%d", s.DaysSince, s.DaysOverdue)
+	}
+}
+
+func TestReorderSuggestionsNeedsTwoOrders(t *testing.T) {
+	h, pool := newServer(t)
+	custID := seedCustomer(t, pool, "beta", "buyer@beta.test")
+	q := gen.New(pool)
+	ctx := context.Background()
+	prod, _ := q.CreateProduct(ctx, gen.CreateProductParams{OrganizationID: 1, Sku: "ONCE-1", Type: "simple", Name: "Once", Slug: "once-1", Status: "active", Attributes: []byte("{}"), Unit: "each"})
+	o, _ := q.CreateOrder(ctx, gen.CreateOrderParams{OrganizationID: 1, WebsiteID: 1, CustomerID: custID, Currency: "USD", BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"), Subtotal: "10", TaxTotal: "0", ShippingTotal: "0", GrandTotal: "10"})
+	_, _ = q.AddOrderItem(ctx, gen.AddOrderItemParams{OrderID: o.ID, ProductID: prod.ID, Sku: prod.Sku, Name: prod.Name, Quantity: "1", Unit: "each", UnitPrice: "10", TaxAmount: "0", RowTotal: "10"})
+
+	tok := login(t, h, "buyer@beta.test")
+	rr := do(t, h, http.MethodGet, "/storefront/account/reorder-suggestions", tok, nil)
+	var resp struct {
+		Items []any `json:"items"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	if len(resp.Items) != 0 {
+		t.Errorf("single-order product should not suggest reorder, got %d", len(resp.Items))
+	}
+}

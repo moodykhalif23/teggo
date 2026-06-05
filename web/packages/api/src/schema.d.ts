@@ -723,6 +723,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/account/reorder-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Products due for reorder, inferred from the buyer's order cadence. */
+        get: operations["storefrontReorderSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/account/addresses": {
         parameters: {
             query?: never;
@@ -3155,6 +3172,22 @@ export interface components {
             region?: string | null;
             postal_code?: string | null;
             country: string;
+        };
+        ReorderSuggestion: {
+            slug: string;
+            sku: string;
+            name: string;
+            unit: string;
+            /** Format: int64 */
+            order_count: number;
+            /** Format: date-time */
+            last_ordered: string;
+            avg_interval_days: number;
+            days_since: number;
+            days_overdue: number;
+        };
+        ListWrapperReorderSuggestion: {
+            items?: components["schemas"]["ReorderSuggestion"][];
         };
         CustomerAddressInput: {
             /** @enum {string} */
@@ -6316,6 +6349,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkAddResult"];
+                };
+            };
+        };
+    };
+    storefrontReorderSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperReorderSuggestion"];
                 };
             };
         };

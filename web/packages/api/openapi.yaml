@@ -343,6 +343,24 @@ components:
         postal_code: { type: string, nullable: true }
         country: { type: string, minLength: 2, maxLength: 2 }
 
+    ReorderSuggestion:
+      type: object
+      required: [slug, sku, name, unit, order_count, last_ordered, avg_interval_days, days_since, days_overdue]
+      properties:
+        slug: { type: string }
+        sku: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        order_count: { type: integer, format: int64 }
+        last_ordered: { type: string, format: date-time }
+        avg_interval_days: { type: integer }
+        days_since: { type: integer }
+        days_overdue: { type: integer }
+    ListWrapperReorderSuggestion:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ReorderSuggestion' } }
+
     CustomerAddressInput:
       type: object
       required: [type, line1, city, country]
@@ -2896,6 +2914,15 @@ paths:
         '200':
           description: OK
           content: { application/json: { schema: { $ref: '#/components/schemas/BulkAddResult' } } }
+
+  /storefront/account/reorder-suggestions:
+    get:
+      tags: [Customers]
+      operationId: storefrontReorderSuggestions
+      summary: Products due for reorder, inferred from the buyer's order cadence.
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperReorderSuggestion' } } } }
 
   /storefront/account/addresses:
     get:

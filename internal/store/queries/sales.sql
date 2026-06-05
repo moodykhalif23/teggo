@@ -145,3 +145,22 @@ FROM customer_addresses
 WHERE customer_id = $1 AND type = $2
 ORDER BY is_default DESC, id
 LIMIT 1;
+
+-- ReorderCadence aggregates a customer's purchase history per product (across
+-- non-cancelled orders) so the app can infer reorder intervals and nudge buyers.
+-- Only products ordered at least twice are returned (an interval needs 2 points).
+-- name: ReorderCadence :many
+SELECT oi.product_id,
+       max(p.slug)::text        AS slug,
+       max(oi.sku)::text        AS sku,
+       max(oi.name)::text       AS name,
+       max(oi.unit)::text       AS unit,
+       count(DISTINCT o.id)     AS order_count,
+       min(o.created_at)::timestamptz AS first_ordered,
+       max(o.created_at)::timestamptz AS last_ordered
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+WHERE o.customer_id = $1 AND o.status <> 'cancelled' AND p.deleted_at IS NULL
+GROUP BY oi.product_id
+HAVING count(DISTINCT o.id) >= 2;
