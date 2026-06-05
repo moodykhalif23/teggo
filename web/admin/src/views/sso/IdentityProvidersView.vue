@@ -5,12 +5,12 @@ import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
-import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type Provider = components['schemas']['IdentityProvider']
@@ -19,6 +19,9 @@ const toast = useToast()
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? ''
 const providers = ref<Provider[]>([])
 const error = ref('')
+
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
+const custName = computed(() => Object.fromEntries(customers.value.map((c) => [c.id, c.name])))
 
 const dialogOpen = ref(false)
 const editingId = ref<number | null>(null)
@@ -89,7 +92,10 @@ async function save() {
 
 const loginURL = (p: Provider) => `${apiBase}/auth/sso/${p.id}/login`
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadCustomers()
+})
 </script>
 
 <template>
@@ -109,7 +115,7 @@ onMounted(load)
       <Column field="name" header="Name" />
       <Column field="type" header="Type" />
       <Column field="audience" header="Audience" />
-      <Column header="Customer"><template #body="{ data }">{{ data.customer_id ?? '—' }}</template></Column>
+      <Column header="Customer"><template #body="{ data }">{{ data.customer_id ? (custName[data.customer_id] ?? `#${data.customer_id}`) : '—' }}</template></Column>
       <Column header="Secret"><template #body="{ data }"><i :class="data.has_secret ? 'pi pi-check' : 'pi pi-minus'" /></template></Column>
       <Column header="Active"><template #body="{ data }"><Tag :value="data.is_active ? 'active' : 'off'" :severity="data.is_active ? 'success' : 'secondary'" /></template></Column>
       <Column header="Login URL"><template #body="{ data }"><a :href="loginURL(data)" target="_blank" rel="noopener" class="lnk">test login</a></template></Column>
@@ -120,7 +126,20 @@ onMounted(load)
       <div class="row">
         <div class="field"><label>Name</label><InputText v-model="form.name" /></div>
         <div class="field"><label>Audience</label><Select v-model="form.audience" :options="['admin', 'storefront']" /></div>
-        <div class="field" v-if="form.audience === 'storefront'"><label>Customer ID</label><InputNumber v-model="form.customer_id" :useGrouping="false" /></div>
+        <div class="field" v-if="form.audience === 'storefront'">
+          <label>Customer</label>
+          <Select
+            v-model="form.customer_id"
+            :options="customers"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            filterPlaceholder="Search customers…"
+            placeholder="Select a customer"
+            :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'"
+            showClear
+          />
+        </div>
       </div>
       <h4>OIDC config</h4>
       <div class="field"><label>Issuer</label><InputText v-model="form.issuer" placeholder="https://idp.example" /></div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import DataTable from 'primevue/datatable'
@@ -10,8 +10,8 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Message from 'primevue/message'
-import { computed } from 'vue'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions, useProductOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type Quote = components['schemas']['QuoteSummary']
@@ -27,22 +27,12 @@ const saving = ref(false)
 const form = reactive({ customer_id: null as number | null, currency: 'USD', product_id: null as number | null, quantity: '1', unit_price: '' })
 
 // Searchable pickers: load customers + products by name so the user never types raw IDs.
-const customers = ref<{ id: number; name: string }[]>([])
-const products = ref<{ id: number; sku: string; name: string }[]>([])
-const optsLoaded = ref(false)
-const productOptions = computed(() =>
-  products.value.map((p) => ({ id: p.id, label: `${p.sku} — ${p.name}` })),
-)
-
-async function loadOptions() {
-  if (optsLoaded.value) return
-  const [c, p] = await Promise.all([
-    api.GET('/admin/customers', { params: { query: { page: 1, page_size: 200 } } }),
-    api.GET('/admin/products', { params: { query: { page: 1, page_size: 200 } } }),
-  ])
-  customers.value = (c.data?.items ?? []).map((x) => ({ id: x.id, name: x.name }))
-  products.value = (p.data?.items ?? []).map((x) => ({ id: x.id, sku: x.sku, name: x.name }))
-  optsLoaded.value = true
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
+const { productOptions, productsLoaded, loadProducts } = useProductOptions()
+const optsLoaded = computed(() => customersLoaded.value && productsLoaded.value)
+function loadOptions() {
+  loadCustomers()
+  loadProducts()
 }
 
 async function load() {

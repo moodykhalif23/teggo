@@ -13,6 +13,7 @@ import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useProductOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type Warehouse = components['schemas']['Warehouse']
@@ -46,6 +47,7 @@ async function createWarehouse() {
 }
 
 // --- product stock lookup ---
+const { productOptions, productsLoaded, loadProducts } = useProductOptions()
 const productId = ref<number | null>(null)
 const levels = ref<LevelRow[]>([])
 const lookupError = ref('')
@@ -135,7 +137,10 @@ async function loadMovements(row: LevelRow) {
   movements.value = data?.items ?? []
 }
 
-onMounted(loadWarehouses)
+onMounted(() => {
+  loadWarehouses()
+  loadProducts()
+})
 </script>
 
 <template>
@@ -161,7 +166,19 @@ onMounted(loadWarehouses)
         <template #title>Product stock</template>
         <template #content>
           <div class="lookup">
-            <InputNumber v-model="productId" placeholder="Product ID" :useGrouping="false" />
+            <Select
+              v-model="productId"
+              :options="productOptions"
+              optionLabel="label"
+              optionValue="id"
+              filter
+              filterPlaceholder="Search products…"
+              placeholder="Select a product"
+              :emptyMessage="productsLoaded ? 'No products' : 'Loading…'"
+              showClear
+              class="prodsel"
+              @change="loadLevels"
+            />
             <Button label="Load" icon="pi pi-search" @click="loadLevels" />
             <span class="spacer" />
             <Button label="Set config" severity="secondary" outlined size="small" :disabled="!loadedProduct" @click="openCfg()" />
@@ -249,6 +266,7 @@ onMounted(loadWarehouses)
 .grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 .ch { display: flex; align-items: center; justify-content: space-between; }
 .lookup { display: flex; align-items: center; gap: 0.5rem; }
+.prodsel { min-width: 18rem; }
 .spacer { flex: 1; }
 .mt { margin-top: 1rem; }
 .mt h3 { margin: 0 0 0.5rem; }

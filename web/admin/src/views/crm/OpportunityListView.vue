@@ -10,6 +10,7 @@ import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type Opportunity = components['schemas']['Opportunity']
@@ -29,6 +30,8 @@ const form = reactive<{ customer_id: number | null; name: string; amount: number
   amount: 0,
   currency: 'USD',
 })
+
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
 
 async function loadStages() {
   const { data } = await api.GET('/admin/pipelines')
@@ -55,6 +58,7 @@ function stageLabel(id: number) {
 function openCreate() {
   Object.assign(form, { customer_id: null, name: '', amount: 0, currency: 'USD' })
   dialogOpen.value = true
+  loadCustomers()
 }
 
 async function save() {
@@ -131,7 +135,21 @@ onMounted(load)
     </DataTable>
 
     <Dialog v-model:visible="dialogOpen" modal header="New opportunity" :style="{ width: '30rem' }">
-      <div class="field"><label>Customer ID</label><InputNumber v-model="form.customer_id" :useGrouping="false" /></div>
+      <div class="field">
+        <label>Customer</label>
+        <Select
+          v-model="form.customer_id"
+          :options="customers"
+          optionLabel="name"
+          optionValue="id"
+          filter
+          filterPlaceholder="Search customers…"
+          placeholder="Select a customer"
+          :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'"
+          showClear
+          fluid
+        />
+      </div>
       <div class="field"><label>Name</label><InputText v-model="form.name" /></div>
       <div class="field"><label>Amount</label><InputNumber v-model="form.amount" :minFractionDigits="2" :maxFractionDigits="4" /></div>
       <div class="field"><label>Currency</label><InputText v-model="form.currency" maxlength="3" /></div>

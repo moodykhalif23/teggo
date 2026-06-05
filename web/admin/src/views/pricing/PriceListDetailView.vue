@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -19,6 +19,7 @@ import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions, useProductOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type PriceList = components['schemas']['PriceList']
@@ -35,6 +36,10 @@ const list = ref<PriceList | null>(null)
 const prices = ref<Price[]>([])
 const assignments = ref<Assignment[]>([])
 const error = ref('')
+
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
+const { productOptions, productsLoaded, loadProducts } = useProductOptions()
+const prodLabel = computed(() => Object.fromEntries(productOptions.value.map((o) => [o.id, o.label])))
 
 async function load() {
   error.value = ''
@@ -133,7 +138,11 @@ function targetLabel(a: Assignment) {
   return '—'
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadProducts()
+  loadCustomers()
+})
 </script>
 
 <template>
@@ -161,7 +170,7 @@ onMounted(load)
             <div class="tabhead"><Button icon="pi pi-plus" label="Add tier" size="small" @click="openPrice" /></div>
             <DataTable :value="prices" dataKey="id" stripedRows>
               <template #empty>No prices.</template>
-              <Column field="product_id" header="Product ID" />
+              <Column header="Product"><template #body="{ data }">{{ prodLabel[data.product_id] ?? `#${data.product_id}` }}</template></Column>
               <Column field="unit" header="Unit" />
               <Column field="min_quantity" header="Min qty" />
               <Column field="value" header="Unit price" />
@@ -184,7 +193,21 @@ onMounted(load)
 
     <Dialog v-model:visible="priceDialog" header="Add price tier" modal :style="{ width: '420px' }">
       <form class="form" @submit.prevent="savePrice">
-        <div class="field"><label>Product ID</label><InputNumber v-model="priceForm.product_id" :useGrouping="false" fluid /></div>
+        <div class="field">
+          <label>Product</label>
+          <Select
+            v-model="priceForm.product_id"
+            :options="productOptions"
+            optionLabel="label"
+            optionValue="id"
+            filter
+            filterPlaceholder="Search products…"
+            placeholder="Select a product"
+            :emptyMessage="productsLoaded ? 'No products' : 'Loading…'"
+            showClear
+            fluid
+          />
+        </div>
         <div class="field"><label>Unit</label><InputText v-model="priceForm.unit" fluid /></div>
         <div class="field"><label>Min quantity</label><InputText v-model="priceForm.min_quantity" fluid /></div>
         <div class="field"><label>Unit price</label><InputText v-model="priceForm.value" fluid /></div>
@@ -201,7 +224,22 @@ onMounted(load)
           <label>Target</label>
           <Select v-model="asgForm.target" :options="['customer', 'customer_group', 'website']" fluid />
         </div>
-        <div class="field"><label>Target ID</label><InputNumber v-model="asgForm.targetId" :useGrouping="false" fluid /></div>
+        <div class="field" v-if="asgForm.target === 'customer'">
+          <label>Customer</label>
+          <Select
+            v-model="asgForm.targetId"
+            :options="customers"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            filterPlaceholder="Search customers…"
+            placeholder="Select a customer"
+            :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'"
+            showClear
+            fluid
+          />
+        </div>
+        <div class="field" v-else><label>{{ asgForm.target === 'customer_group' ? 'Customer group ID' : 'Website ID' }}</label><InputNumber v-model="asgForm.targetId" :useGrouping="false" fluid /></div>
         <div class="field"><label>Priority (higher wins within a level)</label><InputNumber v-model="asgForm.priority" fluid /></div>
       </form>
       <template #footer>

@@ -6,9 +6,10 @@ import Card from 'primevue/card'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import InputText from 'primevue/inputtext'
-import InputNumber from 'primevue/inputnumber'
+import Select from 'primevue/select'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useProductOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type Quote = components['schemas']['QuoteDetail']
@@ -25,6 +26,8 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const id = Number(route.params.id)
+
+const { productOptions, productsLoaded, loadProducts } = useProductOptions()
 
 const quote = ref<Quote | null>(null)
 const lines = ref<Line[]>([])
@@ -101,7 +104,10 @@ function sev(s?: string) {
   return s === 'sent' || s === 'revised' ? 'info' : s === 'accepted' ? 'success' : s === 'declined' || s === 'expired' ? 'danger' : 'secondary'
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadProducts()
+})
 </script>
 
 <template>
@@ -132,11 +138,24 @@ onMounted(load)
         <template #content>
           <table class="lines">
             <thead>
-              <tr><th>Product ID</th><th>Qty</th><th>Unit</th><th>Unit price</th><th>Discount</th><th class="r">Row total</th><th></th></tr>
+              <tr><th>Product</th><th>Qty</th><th>Unit</th><th>Unit price</th><th>Discount</th><th class="r">Row total</th><th></th></tr>
             </thead>
             <tbody>
               <tr v-for="(l, idx) in lines" :key="idx">
-                <td><InputNumber v-model="l.product_id" :useGrouping="false" :disabled="isFinal" /></td>
+                <td>
+                  <Select
+                    v-model="l.product_id"
+                    :options="productOptions"
+                    optionLabel="label"
+                    optionValue="id"
+                    filter
+                    filterPlaceholder="Search products…"
+                    placeholder="Select a product"
+                    :emptyMessage="productsLoaded ? 'No products' : 'Loading…'"
+                    :disabled="isFinal"
+                    class="prodsel"
+                  />
+                </td>
                 <td><InputText v-model="l.quantity" :disabled="isFinal" class="sm" /></td>
                 <td><InputText v-model="l.unit" :disabled="isFinal" class="sm" /></td>
                 <td><InputText v-model="l.unit_price" :disabled="isFinal" class="sm" /></td>
@@ -171,6 +190,7 @@ onMounted(load)
 .lines td { padding: 0.3rem 0.5rem; }
 .lines .r { text-align: right; }
 .sm :deep(input), .sm { width: 7rem; }
+.prodsel { width: 16rem; }
 .tabular { font-variant-numeric: tabular-nums; }
 .empty { text-align: center; color: var(--p-text-muted-color, #64748b); padding: 1rem; }
 .totals { display: flex; align-items: baseline; gap: 0.6rem; justify-content: flex-end; margin-top: 1rem; font-size: 1.05rem; }

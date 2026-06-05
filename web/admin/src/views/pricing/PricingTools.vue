@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
-import InputNumber from 'primevue/inputnumber'
+import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions, useProductOptions } from '@/composables/useRecordOptions'
 
 const toast = useToast()
+
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
+const { productOptions, productsLoaded, loadProducts } = useProductOptions()
+onMounted(() => {
+  loadCustomers()
+  loadProducts()
+})
 
 // Resolve preview
 const resolve = reactive({ customer_id: null as number | null, product_id: null as number | null, quantity: '1', currency: 'USD' })
@@ -68,8 +76,8 @@ async function doRecompute() {
       <template #subtitle>Deterministic resolution (customer &gt; group &gt; website, tiered).</template>
       <template #content>
         <div class="row">
-          <InputNumber v-model="resolve.customer_id" placeholder="customer_id" :useGrouping="false" />
-          <InputNumber v-model="resolve.product_id" placeholder="product_id" :useGrouping="false" />
+          <Select v-model="resolve.customer_id" :options="customers" optionLabel="name" optionValue="id" filter filterPlaceholder="Search…" placeholder="Customer" :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'" showClear />
+          <Select v-model="resolve.product_id" :options="productOptions" optionLabel="label" optionValue="id" filter filterPlaceholder="Search…" placeholder="Product" :emptyMessage="productsLoaded ? 'No products' : 'Loading…'" showClear />
           <InputText v-model="resolve.quantity" placeholder="qty" class="sm" />
           <InputText v-model="resolve.currency" placeholder="ccy" class="sm" maxlength="3" />
           <Button label="Resolve" :loading="resolving" @click="doResolve" />
@@ -91,7 +99,7 @@ async function doRecompute() {
       <template #subtitle>Rebuild the cached prices for a customer (async job).</template>
       <template #content>
         <div class="row">
-          <InputNumber v-model="recompute.customer_id" placeholder="customer_id" :useGrouping="false" />
+          <Select v-model="recompute.customer_id" :options="customers" optionLabel="name" optionValue="id" filter filterPlaceholder="Search…" placeholder="Customer" :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'" showClear />
           <InputText v-model="recompute.currency" placeholder="ccy (default website)" class="sm" maxlength="3" />
           <Button label="Recompute" icon="pi pi-bolt" :loading="recomputing" @click="doRecompute" />
         </div>
@@ -104,6 +112,7 @@ async function doRecompute() {
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
 .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .row :deep(.p-inputnumber), .row :deep(.p-inputtext) { width: 9rem; }
+.row :deep(.p-select) { min-width: 13rem; }
 .row .sm :deep(input), .row .sm { width: 6rem; }
 .result { margin-top: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
 .muted { color: var(--p-text-muted-color, #64748b); }

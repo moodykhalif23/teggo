@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
-import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
 import DataTable from 'primevue/datatable'
@@ -12,6 +11,7 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type TradingPartner = components['schemas']['TradingPartner']
@@ -21,6 +21,9 @@ const toast = useToast()
 const partners = ref<TradingPartner[]>([])
 const docs = ref<EDIDocument[]>([])
 const error = ref('')
+
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
+const custName = computed(() => Object.fromEntries(customers.value.map((c) => [c.id, c.name])))
 
 const protocols = ['cxml', 'oci', 'edi_x12', 'edifact']
 const transports = ['https', 'as2', 'sftp', 'van']
@@ -95,7 +98,10 @@ async function save() {
 const sevForStatus = (s: string) =>
   s === 'processed' || s === 'sent' || s === 'acknowledged' ? 'success' : s === 'error' ? 'danger' : 'info'
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadCustomers()
+})
 </script>
 
 <template>
@@ -118,7 +124,7 @@ onMounted(load)
       <Column field="protocol" header="Protocol" />
       <Column field="transport" header="Transport" />
       <Column field="identity" header="Identity" />
-      <Column header="Customer"><template #body="{ data }">{{ data.customer_id ?? '—' }}</template></Column>
+      <Column header="Customer"><template #body="{ data }">{{ data.customer_id ? (custName[data.customer_id] ?? `#${data.customer_id}`) : '—' }}</template></Column>
       <Column header="Secret"><template #body="{ data }"><i :class="data.has_secret ? 'pi pi-check' : 'pi pi-minus'" /></template></Column>
       <Column header="Active"><template #body="{ data }"><Tag :value="data.is_active ? 'active' : 'off'" :severity="data.is_active ? 'success' : 'secondary'" /></template></Column>
       <Column header="" style="width:4rem"><template #body="{ data }"><Button icon="pi pi-pencil" text rounded size="small" @click="openEdit(data)" /></template></Column>
@@ -146,7 +152,20 @@ onMounted(load)
       </div>
       <div class="row">
         <div class="field"><label>Identity</label><InputText v-model="form.identity" placeholder="cXML / ISA id" /></div>
-        <div class="field"><label>Customer ID</label><InputNumber v-model="form.customer_id" :useGrouping="false" /></div>
+        <div class="field">
+          <label>Customer <span class="muted">(optional)</span></label>
+          <Select
+            v-model="form.customer_id"
+            :options="customers"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            filterPlaceholder="Search customers…"
+            placeholder="Select a customer"
+            :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'"
+            showClear
+          />
+        </div>
       </div>
       <div class="field">
         <label>Shared secret <span class="muted">(punchout; leave blank to keep)</span></label>

@@ -10,9 +10,9 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
-import InputNumber from 'primevue/inputnumber'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useCustomerOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 
 type Invoice = components['schemas']['InvoiceDetail']
@@ -46,9 +46,11 @@ const payDialog = ref(false)
 const savingPay = ref(false)
 const methods = ['card', 'ach', 'invoice', 'po', 'mpesa']
 const payForm = reactive({ customer_id: null as number | null, method: 'card', amount: '', currency: '' })
+const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
 function openPay() {
-  Object.assign(payForm, { customer_id: null, method: 'card', amount: invoice.value?.grand_total ?? '', currency: invoice.value?.currency ?? '' })
+  Object.assign(payForm, { customer_id: invoice.value?.customer_id ?? null, method: 'card', amount: invoice.value?.grand_total ?? '', currency: invoice.value?.currency ?? '' })
   payDialog.value = true
+  loadCustomers()
 }
 async function savePay() {
   if (!payForm.customer_id || !payForm.amount) {
@@ -167,7 +169,21 @@ function paySev(s: string) {
 
     <Dialog v-model:visible="payDialog" header="Record payment" modal :style="{ width: '440px' }">
       <form class="form" @submit.prevent="savePay">
-        <div class="field"><label>Customer ID</label><InputNumber v-model="payForm.customer_id" :useGrouping="false" fluid /></div>
+        <div class="field">
+          <label>Customer</label>
+          <Select
+            v-model="payForm.customer_id"
+            :options="customers"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            filterPlaceholder="Search customers…"
+            placeholder="Select a customer"
+            :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'"
+            showClear
+            fluid
+          />
+        </div>
         <div class="grid2">
           <div class="field"><label>Method</label><Select v-model="payForm.method" :options="methods" fluid /></div>
           <div class="field"><label>Currency</label><InputText v-model="payForm.currency" maxlength="3" fluid /></div>
