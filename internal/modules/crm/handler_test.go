@@ -316,3 +316,50 @@ func TestCrmAuthAndIsolation(t *testing.T) {
 }
 
 func strptr(s string) *string { return &s }
+
+// ---- public storefront lead capture --------------------------------------
+
+func TestSubmitStorefrontLead(t *testing.T) {
+	h, issuer, _ := newServer(t)
+	tok := crmToken(t, issuer)
+
+	// Anonymous submission (no token) succeeds and creates a storefront_form lead.
+	rr := do(t, h, http.MethodPost, "/storefront/leads", "", map[string]any{
+		"contact_name": "Jane Buyer", "email": "jane@prospect.test",
+		"company_name": "Prospect Inc", "notes": "Need 500 widgets",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("submit lead: want 201, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	// It shows up in the admin lead list with source storefront_form.
+	la := do(t, h, http.MethodGet, "/admin/leads", tok, nil)
+	var resp struct {
+		Items []struct {
+			Source      string  `json:"source"`
+			ContactName *string `json:"contact_name"`
+		} `json:"items"`
+	}
+	decode(t, la, &resp)
+	found := false
+	for _, l := range resp.Items {
+		if l.ContactName != nil && *l.ContactName == "Jane Buyer" && l.Source == "storefront_form" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("submitted lead not found with source storefront_form: %+v", resp.Items)
+	}
+}
+
+func TestSubmitStorefrontLeadValidation(t *testing.T) {
+	h, _, _ := newServer(t)
+	// Missing contact_name.
+	if rr := do(t, h, http.MethodPost, "/storefront/leads", "", map[string]any{"email": "x@y.test"}); rr.Code != http.StatusBadRequest {
+		t.Errorf("no contact_name: want 400, got %d", rr.Code)
+	}
+	// No email and no phone.
+	if rr := do(t, h, http.MethodPost, "/storefront/leads", "", map[string]any{"contact_name": "X"}); rr.Code != http.StatusBadRequest {
+		t.Errorf("no email/phone: want 400, got %d", rr.Code)
+	}
+}

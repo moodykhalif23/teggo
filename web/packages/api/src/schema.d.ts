@@ -492,6 +492,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Public storefront enquiry/contact form — creates a CRM lead. */
+        post: operations["storefrontSubmitLead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/products/{slug}/pricing": {
         parameters: {
             query?: never;
@@ -3064,6 +3081,9 @@ export interface components {
                 new_price: string;
             }[];
         };
+        Ack: {
+            ok: boolean;
+        };
         PriceTier: {
             unit: string;
             min_quantity: string;
@@ -5562,6 +5582,31 @@ export interface operations {
                     "application/json": components["schemas"]["RevalidateResult"];
                 };
             };
+        };
+    };
+    storefrontSubmitLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ack"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
         };
     };
     storefrontProductPricing: {

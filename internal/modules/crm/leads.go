@@ -3,10 +3,59 @@ package crm
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
 )
+
+// resolveOrg maps an unauthenticated storefront request to its organization via
+// the website serving the request host (PRD §4). Falls back to the demo org (1).
+func (h *Handler) resolveOrg(r *http.Request) int64 {
+	host := r.Host
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	if ws, err := h.q.GetWebsiteByDomain(r.Context(), host); err == nil {
+		return ws.OrganizationID
+	}
+	return 1
+}
+
+// submitLead is the PUBLIC storefront enquiry/contact form (Pack 2 §1, source
+// 'storefront_form'). It is unauthenticated and rate-limited; the org is taken
+// from the request host, never the body. The response is a bare acknowledgement
+// — no lead row is leaked to an anonymous submitter.
+func (h *Handler) submitLead(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CompanyName *string `json:"company_name"`
+		ContactName *string `json:"contact_name"`
+		Email       *string `json:"email"`
+		Phone       *string `json:"phone"`
+		Notes       *string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid body")
+		return
+	}
+	// Require something to follow up on, and a way to reach them.
+	if deref(req.ContactName, "") == "" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "contact_name is required")
+		return
+	}
+	if deref(req.Email, "") == "" && deref(req.Phone, "") == "" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "an email or phone is required")
+		return
+	}
+	if _, err := h.q.CreateLead(r.Context(), gen.CreateLeadParams{
+		OrganizationID: h.resolveOrg(r), Source: "storefront_form", CompanyName: req.CompanyName,
+		ContactName: req.ContactName, Email: req.Email, Phone: req.Phone, Notes: req.Notes,
+	}); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not submit enquiry")
+		return
+	}
+	response.JSON(w, http.StatusCreated, map[string]any{"ok": true})
+}
 
 func (h *Handler) createLead(w http.ResponseWriter, r *http.Request) {
 	a, ok := admin(r)

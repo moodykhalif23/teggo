@@ -8,6 +8,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,6 +26,12 @@ type Handler struct {
 func New(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool, q: gen.New(pool)} }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
+	// Public storefront enquiry form (unauthenticated, rate-limited to blunt spam).
+	r.Group(func(pr chi.Router) {
+		pr.Use(mw.RateLimit(20, time.Minute))
+		pr.Post("/storefront/leads", h.submitLead)
+	})
+
 	r.Group(func(ar chi.Router) {
 		ar.Use(authMW)
 		ar.Use(mw.RequireAudience("admin"))

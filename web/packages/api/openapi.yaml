@@ -526,6 +526,12 @@ components:
               old_price: { type: string }
               new_price: { type: string }
 
+    Ack:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+
     PriceTier:
       type: object
       required: [unit, min_quantity, value]
@@ -2580,6 +2586,16 @@ paths:
         '200':
           description: OK
           content: { application/json: { schema: { $ref: '#/components/schemas/RevalidateResult' } } }
+
+  /storefront/leads:
+    post:
+      tags: [CRM]
+      operationId: storefrontSubmitLead
+      summary: Public storefront enquiry/contact form — creates a CRM lead.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LeadInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Ack' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
 
   /storefront/products/{slug}/pricing:
     parameters:
