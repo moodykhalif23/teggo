@@ -135,6 +135,28 @@ func (h *Handler) acs(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]any{"token": token, "audience": p.Audience})
 }
 
+// metadata serves this SP's SAML metadata XML for a SAML provider, so an IdP
+// admin can register us by URL. Public (metadata is not secret).
+func (h *Handler) metadata(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.publicProvider(w, r)
+	if !ok {
+		return
+	}
+	if p.Type != "saml" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "provider is not SAML")
+		return
+	}
+	cfg, acs := h.samlConfig(r, p)
+	xmlBytes, err := ssoeng.SAMLMetadataXML(cfg, acs)
+	if err != nil {
+		response.Fail(w, http.StatusFailedDependency, "misconfigured", "invalid SAML config")
+		return
+	}
+	w.Header().Set("Content-Type", "application/samlmetadata+xml")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(xmlBytes)
+}
+
 // callback completes the flow: validates state, exchanges the code, verifies the
 // id_token, provisions/links the identity, and issues our JWT.
 func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {

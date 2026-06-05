@@ -3,8 +3,10 @@ package sso
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"encoding/xml"
 	"fmt"
 	"strings"
+	"time"
 
 	saml2 "github.com/russellhaering/gosaml2"
 	saml2types "github.com/russellhaering/gosaml2/types"
@@ -51,6 +53,37 @@ func NewSAMLSP(cfg SAMLConfig, acsURL string) (*saml2.SAMLServiceProvider, error
 		IDPCertificateStore:         store,
 	}
 	return sp, nil
+}
+
+// SAMLMetadataXML builds this SP's SAML metadata document (EntityDescriptor
+// with the ACS URL + SP entity id) so an IdP admin can register us by URL
+// instead of hand-entering endpoints. We construct the descriptor directly
+// rather than via gosaml2's Metadata(), which requires an SP signing/encryption
+// keystore — we're an unsigned SP (we don't sign AuthnRequests).
+func SAMLMetadataXML(cfg SAMLConfig, acsURL string) ([]byte, error) {
+	entityID := cfg.SPEntityID
+	if entityID == "" {
+		entityID = acsURL
+	}
+	md := &saml2types.EntityDescriptor{
+		ValidUntil: time.Now().UTC().Add(7 * 24 * time.Hour),
+		EntityID:   entityID,
+		SPSSODescriptor: &saml2types.SPSSODescriptor{
+			AuthnRequestsSigned:        false,
+			WantAssertionsSigned:       true,
+			ProtocolSupportEnumeration: saml2.SAMLProtocolNamespace,
+			AssertionConsumerServices: []saml2types.IndexedEndpoint{{
+				Binding:  saml2.BindingHttpPost,
+				Location: acsURL,
+				Index:    1,
+			}},
+		},
+	}
+	out, err := xml.MarshalIndent(md, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal SAML metadata: %w", err)
+	}
+	return append([]byte(xml.Header), out...), nil
 }
 
 // SAMLAuthRedirect returns the IdP redirect URL (HTTP-Redirect binding) carrying

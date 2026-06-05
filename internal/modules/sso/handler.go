@@ -13,9 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	ssoeng "b2bcommerce/internal/sso"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
+	ssoeng "b2bcommerce/internal/sso"
 	"b2bcommerce/internal/store/gen"
 )
 
@@ -41,6 +41,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	r.Get("/auth/sso/{id}/login", h.login)
 	r.Get("/auth/sso/{id}/callback", h.callback) // OIDC
 	r.Post("/auth/sso/{id}/acs", h.acs)          // SAML assertion consumer
+	r.Get("/auth/sso/{id}/metadata", h.metadata) // SAML SP metadata (XML)
 
 	r.Group(func(ar chi.Router) {
 		ar.Use(authMW)

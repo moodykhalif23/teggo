@@ -91,6 +91,7 @@ async function save() {
 }
 
 const loginURL = (p: Provider) => `${apiBase}/auth/sso/${p.id}/login`
+const metadataURL = (p: Provider) => `${apiBase}/auth/sso/${p.id}/metadata`
 
 onMounted(() => {
   load()
@@ -119,6 +120,7 @@ onMounted(() => {
       <Column header="Secret"><template #body="{ data }"><i :class="data.has_secret ? 'pi pi-check' : 'pi pi-minus'" /></template></Column>
       <Column header="Active"><template #body="{ data }"><Tag :value="data.is_active ? 'active' : 'off'" :severity="data.is_active ? 'success' : 'secondary'" /></template></Column>
       <Column header="Login URL"><template #body="{ data }"><a :href="loginURL(data)" target="_blank" rel="noopener" class="lnk">test login</a></template></Column>
+      <Column header="SP metadata"><template #body="{ data }"><a v-if="data.type === 'saml'" :href="metadataURL(data)" target="_blank" rel="noopener" class="lnk">metadata XML</a><span v-else class="muted">—</span></template></Column>
       <Column header="" style="width:4rem"><template #body="{ data }"><Button icon="pi pi-pencil" text rounded size="small" @click="openEdit(data)" /></template></Column>
     </DataTable>
 

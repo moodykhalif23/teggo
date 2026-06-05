@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -274,5 +275,25 @@ func TestSSOSamlProviderAndACS(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("garbage SAMLResponse: want 401, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	// Metadata endpoint serves SP metadata XML carrying our ACS URL.
+	md := do(t, h, http.MethodGet, "/auth/sso/"+ps+"/metadata", "", nil)
+	if md.Code != http.StatusOK {
+		t.Fatalf("saml metadata: want 200, got %d (%s)", md.Code, md.Body.String())
+	}
+	body := md.Body.String()
+	if !strings.Contains(body, "EntityDescriptor") || !strings.Contains(body, "/auth/sso/"+ps+"/acs") {
+		t.Errorf("metadata missing EntityDescriptor/ACS URL: %s", body)
+	}
+}
+
+func TestSSOMetadataRejectsOIDC(t *testing.T) {
+	h, issuer, _ := newServer(t)
+	at := tok(t, issuer)
+	idp := newIDP(t)
+	pid := createProvider(t, h, at, map[string]any{"type": "oidc", "name": "X", "audience": "admin", "config": idp.config()})
+	if rr := do(t, h, http.MethodGet, "/auth/sso/"+strconv.FormatInt(pid, 10)+"/metadata", "", nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("metadata on OIDC provider: want 400, got %d", rr.Code)
 	}
 }
