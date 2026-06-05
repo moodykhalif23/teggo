@@ -77,6 +77,27 @@ func addUser(t *testing.T, pool *pgxpool.Pool, customerID int64, email, fullName
 	return u.ID
 }
 
+// seedHeldOrder creates an order in on_hold status (awaiting approval) for a
+// company, placed by the given customer-user.
+func seedHeldOrder(t *testing.T, pool *pgxpool.Pool, customerID int64, placedBy *int64) gen.Order {
+	t.Helper()
+	q := gen.New(pool)
+	ctx := context.Background()
+	o, err := q.CreateOrder(ctx, gen.CreateOrderParams{
+		OrganizationID: 1, WebsiteID: 1, CustomerID: customerID, CustomerUserID: placedBy, Currency: "USD",
+		BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"),
+		Subtotal: "1000", TaxTotal: "0", ShippingTotal: "0", GrandTotal: "1000",
+	})
+	if err != nil {
+		t.Fatalf("create order: %v", err)
+	}
+	if _, err := q.SetOrderStatus(ctx, gen.SetOrderStatusParams{ID: o.ID, Status: "on_hold"}); err != nil {
+		t.Fatalf("hold order: %v", err)
+	}
+	o.Status = "on_hold"
+	return o
+}
+
 func login(t *testing.T, h http.Handler, email string) string {
 	t.Helper()
 	rr := do(t, h, http.MethodPost, "/storefront/auth/login", "", map[string]any{"email": email, "password": custPassword, "org_id": 1})
@@ -234,6 +255,92 @@ func TestNonAdminCannotManageUsers(t *testing.T) {
 		"email": "x@acme.test", "password": "pw-123456", "full_name": "X",
 	}); rr.Code != http.StatusForbidden {
 		t.Errorf("buyer create user: want 403, got %d", rr.Code)
+	}
+}
+
+func TestOrderApprovalFlow(t *testing.T) {
+	h, pool := newServer(t)
+	custID := seedCustomer(t, pool, "acme", "buyer@acme.test")
+	buyerID := addUser(t, pool, custID, "junior@acme.test", "Junior Buyer", "buyer")
+	addUser(t, pool, custID, "approver@acme.test", "The Approver", "approver")
+	approverTok := login(t, h, "approver@acme.test")
+
+	// Two held orders placed by the junior buyer.
+	o1 := seedHeldOrder(t, pool, custID, &buyerID)
+	o2 := seedHeldOrder(t, pool, custID, &buyerID)
+
+	// Approver sees both pending approvals.
+	la := do(t, h, http.MethodGet, "/storefront/account/approvals", approverTok, nil)
+	if la.Code != http.StatusOK {
+		t.Fatalf("list approvals: want 200, got %d (%s)", la.Code, la.Body.String())
+	}
+	var list struct {
+		Items []struct {
+			PublicID string `json:"public_id"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(la.Body.Bytes(), &list)
+	if len(list.Items) != 2 {
+		t.Fatalf("approvals: want 2, got %d", len(list.Items))
+	}
+
+	// Approve o1 -> pending.
+	ap := do(t, h, http.MethodPost, "/storefront/account/approvals/"+o1.PublicID.String()+"/approve", approverTok, nil)
+	if ap.Code != http.StatusOK {
+		t.Fatalf("approve: want 200, got %d (%s)", ap.Code, ap.Body.String())
+	}
+	var ar struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(ap.Body.Bytes(), &ar)
+	if ar.Status != "pending" {
+		t.Errorf("approved status: want pending, got %s", ar.Status)
+	}
+
+	// Reject o2 -> cancelled.
+	rj := do(t, h, http.MethodPost, "/storefront/account/approvals/"+o2.PublicID.String()+"/reject", approverTok, nil)
+	if rj.Code != http.StatusOK {
+		t.Fatalf("reject: want 200, got %d (%s)", rj.Code, rj.Body.String())
+	}
+
+	// Approving again is a conflict (no longer on_hold).
+	if again := do(t, h, http.MethodPost, "/storefront/account/approvals/"+o1.PublicID.String()+"/approve", approverTok, nil); again.Code != http.StatusConflict {
+		t.Errorf("re-approve: want 409, got %d", again.Code)
+	}
+
+	// No approvals remain.
+	la2 := do(t, h, http.MethodGet, "/storefront/account/approvals", approverTok, nil)
+	_ = json.Unmarshal(la2.Body.Bytes(), &list)
+	if len(list.Items) != 0 {
+		t.Errorf("after decisions: want 0 approvals, got %d", len(list.Items))
+	}
+}
+
+func TestApprovalAuthorizationAndSeparationOfDuties(t *testing.T) {
+	h, pool := newServer(t)
+	custID := seedCustomer(t, pool, "acme", "buyer@acme.test") // role buyer
+	approverID := addUser(t, pool, custID, "approver@acme.test", "The Approver", "approver")
+	buyerTok := login(t, h, "buyer@acme.test")
+	approverTok := login(t, h, "approver@acme.test")
+
+	// A plain buyer cannot view or act on approvals.
+	if rr := do(t, h, http.MethodGet, "/storefront/account/approvals", buyerTok, nil); rr.Code != http.StatusForbidden {
+		t.Errorf("buyer list approvals: want 403, got %d", rr.Code)
+	}
+
+	// Separation of duties: the approver cannot approve an order they placed.
+	own := seedHeldOrder(t, pool, custID, &approverID)
+	if rr := do(t, h, http.MethodPost, "/storefront/account/approvals/"+own.PublicID.String()+"/approve", approverTok, nil); rr.Code != http.StatusForbidden {
+		t.Errorf("approve own order: want 403, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	// Cross-company isolation: approver from another company gets 404.
+	otherID := seedCustomer(t, pool, "beta", "buyer@beta.test")
+	addUser(t, pool, otherID, "approver@beta.test", "Beta Approver", "approver")
+	betaTok := login(t, h, "approver@beta.test")
+	o := seedHeldOrder(t, pool, custID, nil)
+	if rr := do(t, h, http.MethodPost, "/storefront/account/approvals/"+o.PublicID.String()+"/approve", betaTok, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("foreign approve: want 404, got %d", rr.Code)
 	}
 }
 

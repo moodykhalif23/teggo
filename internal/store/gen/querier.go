@@ -386,6 +386,7 @@ type Querier interface {
 	ListOrderStatusHistory(ctx context.Context, orderID int64) ([]ListOrderStatusHistoryRow, error)
 	ListOrdersAdmin(ctx context.Context, arg ListOrdersAdminParams) ([]Order, error)
 	ListOrdersForCustomer(ctx context.Context, customerID int64) ([]Order, error)
+	ListOrdersForCustomerByStatus(ctx context.Context, arg ListOrdersForCustomerByStatusParams) ([]Order, error)
 	// ===== Outbound work lists (idempotent: skip already-synced) ================
 	ListOrdersToSync(ctx context.Context, arg ListOrdersToSyncParams) ([]Order, error)
 	// ListPagesAdmin lists all pages for the org's websites.

@@ -121,6 +121,9 @@ SELECT * FROM orders WHERE organization_id = $1 ORDER BY created_at DESC LIMIT $
 -- name: ListOrdersForCustomer :many
 SELECT * FROM orders WHERE customer_id = $1 ORDER BY created_at DESC;
 
+-- name: ListOrdersForCustomerByStatus :many
+SELECT * FROM orders WHERE customer_id = $1 AND status = $2 ORDER BY created_at DESC;
+
 -- name: SetOrderStatus :one
 UPDATE orders SET status = $2 WHERE id = $1 RETURNING *;
 

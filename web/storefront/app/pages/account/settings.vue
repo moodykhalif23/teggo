@@ -17,6 +17,7 @@ const { data: profile, error } = await useAsyncData('account-company', async () 
 })
 
 const isAdmin = computed(() => profile.value?.me.role === 'admin')
+const canApprove = computed(() => profile.value?.me.role === 'admin' || profile.value?.me.role === 'approver')
 </script>
 
 <template>
@@ -51,8 +52,9 @@ const isAdmin = computed(() => profile.value?.me.role === 'admin')
         </Card>
       </div>
 
-      <div v-if="isAdmin" class="admin">
-        <Button label="Manage company users" icon="pi pi-users" @click="router.push('/account/users')" />
+      <div class="admin">
+        <Button v-if="isAdmin" label="Manage company users" icon="pi pi-users" @click="router.push('/account/users')" />
+        <Button v-if="canApprove" label="Review order approvals" icon="pi pi-check-square" outlined @click="router.push('/account/approvals')" />
       </div>
     </template>
   </section>
@@ -65,5 +67,5 @@ const isAdmin = computed(() => profile.value?.me.role === 'admin')
 .dl { display: grid; grid-template-columns: 9rem 1fr; gap: 0.5rem 1rem; margin: 0; }
 .dl dt { color: var(--p-text-muted-color, #64748b); font-size: 0.85rem; }
 .dl dd { margin: 0; }
-.admin { margin-top: 1.5rem; }
+.admin { margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
 </style>

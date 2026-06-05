@@ -749,6 +749,56 @@ func (q *Queries) ListOrdersForCustomer(ctx context.Context, customerID int64) (
 	return items, nil
 }
 
+const listOrdersForCustomerByStatus = `-- name: ListOrdersForCustomerByStatus :many
+SELECT id, public_id, organization_id, website_id, customer_id, customer_user_id, quote_id, placed_by_sales_rep_id, status, currency, po_number, requested_delivery_date, billing_address, shipping_address, subtotal, tax_total, shipping_total, grand_total, created_at, updated_at FROM orders WHERE customer_id = $1 AND status = $2 ORDER BY created_at DESC
+`
+
+type ListOrdersForCustomerByStatusParams struct {
+	CustomerID int64  `json:"customer_id"`
+	Status     string `json:"status"`
+}
+
+func (q *Queries) ListOrdersForCustomerByStatus(ctx context.Context, arg ListOrdersForCustomerByStatusParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listOrdersForCustomerByStatus, arg.CustomerID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.WebsiteID,
+			&i.CustomerID,
+			&i.CustomerUserID,
+			&i.QuoteID,
+			&i.PlacedBySalesRepID,
+			&i.Status,
+			&i.Currency,
+			&i.PoNumber,
+			&i.RequestedDeliveryDate,
+			&i.BillingAddress,
+			&i.ShippingAddress,
+			&i.Subtotal,
+			&i.TaxTotal,
+			&i.ShippingTotal,
+			&i.GrandTotal,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listQuoteItems = `-- name: ListQuoteItems :many
 SELECT qi.id, qi.product_id, p.sku, p.name, qi.quantity, qi.unit, qi.unit_price, qi.discount, qi.row_total
 FROM quote_items qi

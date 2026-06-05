@@ -598,6 +598,61 @@ export interface paths {
         patch: operations["storefrontUpdateUser"];
         trace?: never;
     };
+    "/storefront/account/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Orders awaiting approval for the company (approver/admin only). */
+        get: operations["storefrontListApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/account/approvals/{publicID}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a held order — releases it to the normal flow (approver/admin only). */
+        post: operations["storefrontApproveOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/account/approvals/{publicID}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a held order — cancels it (approver/admin only). */
+        post: operations["storefrontRejectOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/shopping-lists": {
         parameters: {
             query?: never;
@@ -2779,6 +2834,24 @@ export interface components {
                 role: "buyer" | "approver" | "admin";
                 spending_limit?: string | null;
             };
+        };
+        ApprovalSummary: {
+            /** Format: uuid */
+            public_id: string;
+            grand_total: string;
+            currency: string;
+            /** Format: int64 */
+            placed_by_user?: number | null;
+            /** Format: date-time */
+            requested_at?: string;
+        };
+        ListWrapperApproval: {
+            items?: components["schemas"]["ApprovalSummary"][];
+        };
+        ApprovalDecision: {
+            /** Format: uuid */
+            public_id: string;
+            status: string;
         };
         CustomerAddress: {
             /** Format: int64 */
@@ -5650,6 +5723,77 @@ export interface operations {
             400: components["responses"]["ErrorResponse"];
             403: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontListApprovals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperApproval"];
+                };
+            };
+            403: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontApproveOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalDecision"];
+                };
+            };
+            403: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontRejectOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalDecision"];
+                };
+            };
+            403: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
         };
     };
     storefrontListShoppingLists: {

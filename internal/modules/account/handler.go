@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"b2bcommerce/internal/auth"
@@ -38,6 +39,10 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Get("/storefront/account/users", h.listUsers)
 		sr.Post("/storefront/account/users", h.createUser)
 		sr.Patch("/storefront/account/users/{id}", h.updateUser)
+
+		sr.Get("/storefront/account/approvals", h.listApprovals)
+		sr.Post("/storefront/account/approvals/{publicID}/approve", h.approveOrder)
+		sr.Post("/storefront/account/approvals/{publicID}/reject", h.rejectOrder)
 	})
 }
 
@@ -269,6 +274,118 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	response.JSON(w, http.StatusOK, u)
 }
+
+// requireApprover gates approval routes to the approver or admin roles.
+func (h *Handler) requireApprover(w http.ResponseWriter, r *http.Request, p principal) (gen.GetCustomerUserRow, bool) {
+	u, ok := h.currentUser(r, p)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return gen.GetCustomerUserRow{}, false
+	}
+	if u.Role != "approver" && u.Role != "admin" {
+		response.Fail(w, http.StatusForbidden, "forbidden", "approver or admin role required")
+		return gen.GetCustomerUserRow{}, false
+	}
+	return u, true
+}
+
+// ---- Order approvals -----------------------------------------------------
+
+// listApprovals returns the company's orders awaiting approval (held on_hold
+// at placement because they exceeded the buyer's spending limit).
+func (h *Handler) listApprovals(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	if _, ok := h.requireApprover(w, r, p); !ok {
+		return
+	}
+	rows, err := h.q.ListOrdersForCustomerByStatus(r.Context(), gen.ListOrdersForCustomerByStatusParams{CustomerID: p.customerID, Status: "on_hold"})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not list approvals")
+		return
+	}
+	items := make([]map[string]any, 0, len(rows))
+	for _, o := range rows {
+		items = append(items, map[string]any{
+			"public_id":      o.PublicID.String(),
+			"grand_total":    o.GrandTotal,
+			"currency":       o.Currency,
+			"placed_by_user": o.CustomerUserID,
+			"requested_at":   o.CreatedAt,
+		})
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// loadHeldOrder loads an on_hold order for the caller's company and enforces
+// separation of duties: an approver may not approve/reject an order they placed
+// themselves. Returns the order and the approver row.
+func (h *Handler) loadHeldOrder(w http.ResponseWriter, r *http.Request, p principal, approver gen.GetCustomerUserRow) (gen.Order, bool) {
+	pid, err := uuid.Parse(chi.URLParam(r, "publicID"))
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return gen.Order{}, false
+	}
+	order, err := h.q.GetOrderByPublicID(r.Context(), pid)
+	if err != nil || order.CustomerID != p.customerID {
+		response.Fail(w, http.StatusNotFound, "not_found", "order not found")
+		return gen.Order{}, false
+	}
+	if order.Status != "on_hold" {
+		response.Fail(w, http.StatusConflict, "conflict", "order is not awaiting approval")
+		return gen.Order{}, false
+	}
+	if order.CustomerUserID != nil && *order.CustomerUserID == approver.ID {
+		response.Fail(w, http.StatusForbidden, "forbidden", "you cannot approve an order you placed")
+		return gen.Order{}, false
+	}
+	return order, true
+}
+
+func (h *Handler) decideOrder(w http.ResponseWriter, r *http.Request, toStatus, verb string) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	approver, ok := h.requireApprover(w, r, p)
+	if !ok {
+		return
+	}
+	order, ok := h.loadHeldOrder(w, r, p, approver)
+	if !ok {
+		return
+	}
+	updated, err := h.q.SetOrderStatus(r.Context(), gen.SetOrderStatusParams{ID: order.ID, Status: toStatus})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not update order")
+		return
+	}
+	from := "on_hold"
+	if err := h.q.AddOrderStatusHistory(r.Context(), gen.AddOrderStatusHistoryParams{
+		OrderID: order.ID, FromStatus: &from, ToStatus: toStatus,
+		ChangedBy: "customer_user:" + strconv.FormatInt(approver.ID, 10),
+		Note:      strPtr(verb + " by company approver"),
+	}); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not record decision")
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"public_id": updated.PublicID.String(), "status": updated.Status})
+}
+
+func (h *Handler) approveOrder(w http.ResponseWriter, r *http.Request) {
+	// Approval releases the hold; the order resumes the normal pending flow.
+	h.decideOrder(w, r, "pending", "approved")
+}
+
+func (h *Handler) rejectOrder(w http.ResponseWriter, r *http.Request) {
+	h.decideOrder(w, r, "cancelled", "rejected")
+}
+
+func strPtr(s string) *string { return &s }
 
 // ---- Addresses -----------------------------------------------------------
 

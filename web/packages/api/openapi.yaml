@@ -287,6 +287,26 @@ components:
             role: { type: string, enum: [buyer, approver, admin] }
             spending_limit: { type: string, nullable: true }
 
+    ApprovalSummary:
+      type: object
+      required: [public_id, grand_total, currency]
+      properties:
+        public_id: { type: string, format: uuid }
+        grand_total: { type: string }
+        currency: { type: string }
+        placed_by_user: { type: integer, format: int64, nullable: true }
+        requested_at: { type: string, format: date-time }
+    ListWrapperApproval:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ApprovalSummary' } }
+    ApprovalDecision:
+      type: object
+      required: [public_id, status]
+      properties:
+        public_id: { type: string, format: uuid }
+        status: { type: string }
+
     CustomerAddress:
       type: object
       required: [id, customer_id, type, line1, city, country]
@@ -2636,6 +2656,44 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/account/approvals:
+    get:
+      tags: [Customers]
+      operationId: storefrontListApprovals
+      summary: Orders awaiting approval for the company (approver/admin only).
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperApproval' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/account/approvals/{publicID}/approve:
+    parameters:
+      - { name: publicID, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Customers]
+      operationId: storefrontApproveOrder
+      summary: Approve a held order — releases it to the normal flow (approver/admin only).
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/account/approvals/{publicID}/reject:
+    parameters:
+      - { name: publicID, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Customers]
+      operationId: storefrontRejectOrder
+      summary: Reject a held order — cancels it (approver/admin only).
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
 
   /storefront/shopping-lists:
     get:
