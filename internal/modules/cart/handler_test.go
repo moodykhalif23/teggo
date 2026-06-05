@@ -340,6 +340,71 @@ func TestShoppingListConvertAndDefault(t *testing.T) {
 	}
 }
 
+// ---- Contract pricing visibility -----------------------------------------
+
+func TestProductPricingTiers(t *testing.T) {
+	h, _, pool := newServer(t)
+	q := gen.New(pool)
+	ctx := context.Background()
+	s := seedCustomer(t, pool, "acme", "buyer@acme.test")
+
+	// Add a volume tier (buy 10+ at 8) on the priced product's price list, rewarm.
+	lists, _ := q.ListPriceLists(ctx, 1)
+	var listID int64
+	for _, l := range lists {
+		if l.Currency == "USD" {
+			listID = l.ID
+		}
+	}
+	if _, err := q.UpsertPrice(ctx, gen.UpsertPriceParams{PriceListID: listID, ProductID: s.productPriced, Unit: "each", MinQuantity: "10", Value: "8.0000"}); err != nil {
+		t.Fatalf("tier price: %v", err)
+	}
+	wid := int64(1)
+	if err := jobs.RecomputeForCustomer(ctx, pool, jobs.RecomputeCombinedPricesArgs{CustomerID: s.customerID, WebsiteID: &wid, Currency: "USD"}); err != nil {
+		t.Fatalf("recompute: %v", err)
+	}
+
+	tok := login(t, h, s.email)
+	rr := do(t, h, http.MethodGet, "/storefront/products/acme-priced/pricing", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("pricing: want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var res struct {
+		Currency       string `json:"currency"`
+		PriceOnRequest bool   `json:"price_on_request"`
+		Tiers          []struct {
+			MinQuantity string `json:"min_quantity"`
+			Value       string `json:"value"`
+		} `json:"tiers"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &res)
+	if res.PriceOnRequest || len(res.Tiers) != 2 {
+		t.Fatalf("tiers: want 2 priced tiers, got price_on_request=%v tiers=%+v", res.PriceOnRequest, res.Tiers)
+	}
+	// Tiers are ordered by min_quantity: 1 -> 10.0000, 10 -> 8.0000.
+	if res.Tiers[1].Value != "8.0000" {
+		t.Errorf("volume tier: want 8.0000 at qty 10, got %+v", res.Tiers)
+	}
+}
+
+func TestProductPricingOnRequest(t *testing.T) {
+	h, _, pool := newServer(t)
+	s := seedCustomer(t, pool, "acme", "buyer@acme.test")
+	tok := login(t, h, s.email)
+	// The unpriced product has no resolved tiers.
+	rr := do(t, h, http.MethodGet, "/storefront/products/acme-free/pricing", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("pricing: want 200, got %d", rr.Code)
+	}
+	var res struct {
+		PriceOnRequest bool `json:"price_on_request"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &res)
+	if !res.PriceOnRequest {
+		t.Errorf("unpriced product: want price_on_request=true")
+	}
+}
+
 // ---- Reorder -------------------------------------------------------------
 
 func TestReorderFromOrder(t *testing.T) {

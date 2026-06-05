@@ -526,6 +526,21 @@ components:
               old_price: { type: string }
               new_price: { type: string }
 
+    PriceTier:
+      type: object
+      required: [unit, min_quantity, value]
+      properties:
+        unit: { type: string }
+        min_quantity: { type: string }
+        value: { type: string }
+    ProductPricing:
+      type: object
+      required: [currency, price_on_request, tiers]
+      properties:
+        currency: { type: string }
+        price_on_request: { type: boolean }
+        tiers: { type: array, items: { $ref: '#/components/schemas/PriceTier' } }
+
     ReorderRequest:
       type: object
       required: [order_public_id]
@@ -2565,6 +2580,17 @@ paths:
         '200':
           description: OK
           content: { application/json: { schema: { $ref: '#/components/schemas/RevalidateResult' } } }
+
+  /storefront/products/{slug}/pricing:
+    parameters:
+      - { name: slug, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Pricing]
+      operationId: storefrontProductPricing
+      summary: The authenticated buyer's contract price tiers for a product.
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ProductPricing' } } } }
 
   /storefront/cart/reorder:
     post:

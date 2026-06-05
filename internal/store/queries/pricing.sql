@@ -138,6 +138,16 @@ LIMIT 1;
 SELECT * FROM combined_prices WHERE customer_id = $1 AND currency = $2
 ORDER BY product_id, min_quantity;
 
+-- ListCustomerPriceTiersForSlug returns every volume tier (min_quantity break)
+-- resolved for a customer on a product, so the storefront can show the buyer
+-- their contract pricing ("buy 100+ at X").
+-- name: ListCustomerPriceTiersForSlug :many
+SELECT cp.unit, cp.min_quantity, cp.value
+FROM combined_prices cp
+JOIN products p ON p.id = cp.product_id
+WHERE cp.customer_id = $1 AND p.slug = $2 AND p.organization_id = $3 AND cp.currency = $4
+ORDER BY cp.unit, cp.min_quantity;
+
 -- name: DeleteCombinedPricesForCustomerCurrency :exec
 DELETE FROM combined_prices WHERE customer_id = $1 AND currency = $2;
 

@@ -351,6 +351,10 @@ type Querier interface {
 	ListContactsForCustomer(ctx context.Context, arg ListContactsForCustomerParams) ([]Contact, error)
 	ListCustomerAddresses(ctx context.Context, customerID int64) ([]CustomerAddress, error)
 	ListCustomerGroups(ctx context.Context, organizationID int64) ([]CustomerGroup, error)
+	// ListCustomerPriceTiersForSlug returns every volume tier (min_quantity break)
+	// resolved for a customer on a product, so the storefront can show the buyer
+	// their contract pricing ("buy 100+ at X").
+	ListCustomerPriceTiersForSlug(ctx context.Context, arg ListCustomerPriceTiersForSlugParams) ([]ListCustomerPriceTiersForSlugRow, error)
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
 	// ListDueReportSchedules returns active schedules whose cadence interval has

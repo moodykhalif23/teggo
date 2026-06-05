@@ -40,6 +40,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Post("/storefront/cart/revalidate", h.revalidate)
 		sr.Post("/storefront/cart/reorder", h.reorder)
 		sr.Post("/storefront/cart/bulk", h.addBulk)
+		sr.Get("/storefront/products/{slug}/pricing", h.productPricing)
 
 		sr.Get("/storefront/shopping-lists", h.listLists)
 		sr.Post("/storefront/shopping-lists", h.createList)
@@ -458,6 +459,44 @@ func (h *Handler) addBulk(w http.ResponseWriter, r *http.Request) {
 		"added":            added,
 		"not_found_skus":   notFound,
 		"price_on_request": priceOnRequest,
+	})
+}
+
+// productPricing returns the authenticated buyer's contract price tiers for a
+// product (the volume breaks resolved into combined_prices). An empty tier list
+// means price-on-request for this buyer. Lets the storefront show "buy N+ at X".
+func (h *Handler) productPricing(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	slug := chi.URLParam(r, "slug")
+	ws, err := h.q.GetDefaultWebsite(r.Context(), p.orgID)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "no website configured")
+		return
+	}
+	rows, err := h.q.ListCustomerPriceTiersForSlug(r.Context(), gen.ListCustomerPriceTiersForSlugParams{
+		CustomerID: p.customerID, Slug: slug, OrganizationID: p.orgID, Currency: ws.DefaultCurrency,
+	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load pricing")
+		return
+	}
+	type tier struct {
+		Unit        string `json:"unit"`
+		MinQuantity string `json:"min_quantity"`
+		Value       string `json:"value"`
+	}
+	tiers := make([]tier, 0, len(rows))
+	for _, row := range rows {
+		tiers = append(tiers, tier{Unit: row.Unit, MinQuantity: row.MinQuantity, Value: row.Value})
+	}
+	response.JSON(w, http.StatusOK, map[string]any{
+		"currency":         ws.DefaultCurrency,
+		"price_on_request": len(tiers) == 0,
+		"tiers":            tiers,
 	})
 }
 

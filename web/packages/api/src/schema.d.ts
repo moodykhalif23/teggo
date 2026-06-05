@@ -492,6 +492,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/products/{slug}/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        /** The authenticated buyer's contract price tiers for a product. */
+        get: operations["storefrontProductPricing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/cart/reorder": {
         parameters: {
             query?: never;
@@ -3045,6 +3064,16 @@ export interface components {
                 new_price: string;
             }[];
         };
+        PriceTier: {
+            unit: string;
+            min_quantity: string;
+            value: string;
+        };
+        ProductPricing: {
+            currency: string;
+            price_on_request: boolean;
+            tiers: components["schemas"]["PriceTier"][];
+        };
         ReorderRequest: {
             /** Format: uuid */
             order_public_id: string;
@@ -5531,6 +5560,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevalidateResult"];
+                };
+            };
+        };
+    };
+    storefrontProductPricing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductPricing"];
                 };
             };
         };

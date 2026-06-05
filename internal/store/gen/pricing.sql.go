@@ -307,6 +307,55 @@ func (q *Queries) ListCombinedPricesForCustomer(ctx context.Context, arg ListCom
 	return items, nil
 }
 
+const listCustomerPriceTiersForSlug = `-- name: ListCustomerPriceTiersForSlug :many
+SELECT cp.unit, cp.min_quantity, cp.value
+FROM combined_prices cp
+JOIN products p ON p.id = cp.product_id
+WHERE cp.customer_id = $1 AND p.slug = $2 AND p.organization_id = $3 AND cp.currency = $4
+ORDER BY cp.unit, cp.min_quantity
+`
+
+type ListCustomerPriceTiersForSlugParams struct {
+	CustomerID     int64  `json:"customer_id"`
+	Slug           string `json:"slug"`
+	OrganizationID int64  `json:"organization_id"`
+	Currency       string `json:"currency"`
+}
+
+type ListCustomerPriceTiersForSlugRow struct {
+	Unit        string `json:"unit"`
+	MinQuantity string `json:"min_quantity"`
+	Value       string `json:"value"`
+}
+
+// ListCustomerPriceTiersForSlug returns every volume tier (min_quantity break)
+// resolved for a customer on a product, so the storefront can show the buyer
+// their contract pricing ("buy 100+ at X").
+func (q *Queries) ListCustomerPriceTiersForSlug(ctx context.Context, arg ListCustomerPriceTiersForSlugParams) ([]ListCustomerPriceTiersForSlugRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerPriceTiersForSlug,
+		arg.CustomerID,
+		arg.Slug,
+		arg.OrganizationID,
+		arg.Currency,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerPriceTiersForSlugRow
+	for rows.Next() {
+		var i ListCustomerPriceTiersForSlugRow
+		if err := rows.Scan(&i.Unit, &i.MinQuantity, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPriceLists = `-- name: ListPriceLists :many
 SELECT id, organization_id, name, currency, is_default, is_active, created_at, updated_at, deleted_at FROM price_lists
 WHERE organization_id = $1 AND deleted_at IS NULL
