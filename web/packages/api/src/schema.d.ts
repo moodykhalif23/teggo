@@ -1501,6 +1501,164 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListReturns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/returns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetReturn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/returns/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminApproveReturn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/returns/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminRejectReturn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/returns/{id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark received — restock items and issue a credit note. */
+        post: operations["adminReceiveReturn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/orders/{id}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListOrderReturns"];
+        put?: never;
+        post: operations["adminCreateReturn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/credit-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListCreditNotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["storefrontListReturns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/orders/{publicID}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Buyer self-serve return request for their own order. */
+        post: operations["storefrontCreateReturn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/quotes": {
         parameters: {
             query?: never;
@@ -3728,6 +3886,76 @@ export interface components {
             unit_price: string;
             tax_amount?: string;
             row_total: string;
+        };
+        ReturnItem: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            order_item_id: number;
+            /** Format: int64 */
+            product_id: number;
+            quantity: string;
+            reason?: string | null;
+            sku: string;
+            name: string;
+            unit_price: string;
+        };
+        CreditNote: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            invoice_id?: number | null;
+            amount: string;
+            currency: string;
+            /** @enum {string} */
+            status: "draft" | "issued" | "void";
+        };
+        ReturnSummary: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            order_id: number;
+            /** Format: int64 */
+            customer_id: number;
+            /** @enum {string} */
+            status: "requested" | "approved" | "rejected" | "received" | "closed";
+            reason?: string | null;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        ReturnDetail: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            order_id: number;
+            /** Format: int64 */
+            customer_id: number;
+            /** @enum {string} */
+            status: "requested" | "approved" | "rejected" | "received" | "closed";
+            reason?: string | null;
+            items: components["schemas"]["ReturnItem"][];
+            credit_notes: components["schemas"]["CreditNote"][];
+        };
+        ReturnInput: {
+            reason?: string | null;
+            items: {
+                /** Format: int64 */
+                order_item_id: number;
+                quantity: string;
+                reason?: string | null;
+            }[];
+        };
+        ListWrapperReturn: {
+            items?: components["schemas"]["ReturnSummary"][];
+        };
+        ListWrapperCreditNote: {
+            items?: components["schemas"]["CreditNote"][];
         };
         AgingInvoice: {
             /** Format: uuid */
@@ -7679,6 +7907,234 @@ export interface operations {
                     "application/json": components["schemas"]["OverdueSweepResult"];
                 };
             };
+        };
+    };
+    adminListReturns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperReturn"];
+                };
+            };
+        };
+    };
+    adminGetReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminApproveReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminRejectReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminReceiveReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListOrderReturns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperReturn"];
+                };
+            };
+        };
+    };
+    adminCreateReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListCreditNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperCreditNote"];
+                };
+            };
+        };
+    };
+    storefrontListReturns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperReturn"];
+                };
+            };
+        };
+    };
+    storefrontCreateReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
         };
     };
     storefrontListQuotes: {

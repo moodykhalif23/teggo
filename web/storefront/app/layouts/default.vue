@@ -33,6 +33,7 @@ function signOut() {
         <NuxtLink v-if="isAuthenticated" to="/account/rfqs">RFQs</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/quotes">Quotes</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/orders">Orders</NuxtLink>
+        <NuxtLink v-if="isAuthenticated" to="/account/returns">Returns</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/invoices">Invoices</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/settings">Account</NuxtLink>
       </nav>

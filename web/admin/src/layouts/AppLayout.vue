@@ -61,6 +61,7 @@ const groups: NavGroup[] = [
       { label: 'Orders', icon: 'pi pi-shopping-cart', routeName: 'orders', permission: 'order.view' },
       { label: 'Invoices', icon: 'pi pi-receipt', routeName: 'invoices', permission: 'invoice.view' },
       { label: 'AR aging', icon: 'pi pi-chart-line', routeName: 'ar-aging', permission: 'invoice.view' },
+      { label: 'Returns', icon: 'pi pi-replay', routeName: 'returns', permission: 'return.view' },
     ],
   },
   {

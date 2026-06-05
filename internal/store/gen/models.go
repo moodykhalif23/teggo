@@ -192,6 +192,18 @@ type ContentPage struct {
 	UpdatedAt             time.Time          `json:"updated_at"`
 }
 
+type CreditNote struct {
+	ID         int64     `json:"id"`
+	PublicID   uuid.UUID `json:"public_id"`
+	ReturnID   *int64    `json:"return_id"`
+	InvoiceID  *int64    `json:"invoice_id"`
+	CustomerID int64     `json:"customer_id"`
+	Amount     string    `json:"amount"`
+	Currency   string    `json:"currency"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type Customer struct {
 	ID                 int64              `json:"id"`
 	PublicID           uuid.UUID          `json:"public_id"`
@@ -788,6 +800,26 @@ type ReportSchedule struct {
 	IsActive           bool               `json:"is_active"`
 	LastRunAt          pgtype.Timestamptz `json:"last_run_at"`
 	CreatedAt          time.Time          `json:"created_at"`
+}
+
+type Return struct {
+	ID         int64     `json:"id"`
+	PublicID   uuid.UUID `json:"public_id"`
+	OrderID    int64     `json:"order_id"`
+	CustomerID int64     `json:"customer_id"`
+	Status     string    `json:"status"`
+	Reason     *string   `json:"reason"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type ReturnItem struct {
+	ID          int64   `json:"id"`
+	ReturnID    int64   `json:"return_id"`
+	OrderItemID int64   `json:"order_item_id"`
+	ProductID   int64   `json:"product_id"`
+	Quantity    string  `json:"quantity"`
+	Reason      *string `json:"reason"`
 }
 
 type Rfq struct {

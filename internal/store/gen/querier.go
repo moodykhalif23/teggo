@@ -25,6 +25,7 @@ type Querier interface {
 	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
 	AddRFQItem(ctx context.Context, arg AddRFQItemParams) (RfqItem, error)
+	AddReturnItem(ctx context.Context, arg AddReturnItemParams) (ReturnItem, error)
 	AddShipmentItem(ctx context.Context, arg AddShipmentItemParams) (ShipmentItem, error)
 	AddWorkflowTransitionLog(ctx context.Context, arg AddWorkflowTransitionLogParams) error
 	// AdjustInventoryLevel applies signed deltas to on-hand and reserved.
@@ -62,6 +63,7 @@ type Querier interface {
 	CreateConfigRule(ctx context.Context, arg CreateConfigRuleParams) (ConfigRule, error)
 	// ===== Contacts ============================================================
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
+	CreateCreditNote(ctx context.Context, arg CreateCreditNoteParams) (CreditNote, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateCustomerAddress(ctx context.Context, arg CreateCustomerAddressParams) (CustomerAddress, error)
 	// Customers & accounts queries — Implementation Pack 1 §2 + §12.2.
@@ -135,6 +137,8 @@ type Querier interface {
 	CreateReportRun(ctx context.Context, arg CreateReportRunParams) (int64, error)
 	// ===== Schedules ===========================================================
 	CreateReportSchedule(ctx context.Context, arg CreateReportScheduleParams) (ReportSchedule, error)
+	// Returns / RMA + credit notes (migration 0038).
+	CreateReturn(ctx context.Context, arg CreateReturnParams) (Return, error)
 	// ===== Login state (CSRF/replay) ===========================================
 	CreateSSOState(ctx context.Context, arg CreateSSOStateParams) (SsoState, error)
 	// Order-to-cash queries — Implementation Pack 1 §7.
@@ -306,6 +310,10 @@ type Querier interface {
 	GetRendition(ctx context.Context, arg GetRenditionParams) (MediaRendition, error)
 	GetReportDefinition(ctx context.Context, arg GetReportDefinitionParams) (ReportDefinition, error)
 	GetReportRunArtifact(ctx context.Context, arg GetReportRunArtifactParams) (GetReportRunArtifactRow, error)
+	// GetReturn loads a return scoped to its org (via the order).
+	GetReturn(ctx context.Context, arg GetReturnParams) (Return, error)
+	// GetReturnByPublicID loads a return by public id within the customer (storefront).
+	GetReturnByPublicID(ctx context.Context, publicID uuid.UUID) (Return, error)
 	GetSSOState(ctx context.Context, state string) (SsoState, error)
 	GetShipment(ctx context.Context, id int64) (Shipment, error)
 	// GetShipmentWithOrg authorizes a shipment by org (via its order) and returns
@@ -375,6 +383,8 @@ type Querier interface {
 	// Hierarchical config settings (migration 0036).
 	ListConfigSettings(ctx context.Context, organizationID int64) ([]ConfigSetting, error)
 	ListContactsForCustomer(ctx context.Context, arg ListContactsForCustomerParams) ([]Contact, error)
+	ListCreditNotesAdmin(ctx context.Context, arg ListCreditNotesAdminParams) ([]CreditNote, error)
+	ListCreditNotesForReturn(ctx context.Context, returnID *int64) ([]CreditNote, error)
 	ListCustomerAddresses(ctx context.Context, customerID int64) ([]CustomerAddress, error)
 	ListCustomerGroups(ctx context.Context, organizationID int64) ([]CustomerGroup, error)
 	// ListCustomerPriceTiersForSlug returns every volume tier (min_quantity break)
@@ -448,6 +458,10 @@ type Querier interface {
 	ListReportDefinitions(ctx context.Context, organizationID int64) ([]ReportDefinition, error)
 	ListReportRuns(ctx context.Context, reportDefinitionID int64) ([]ListReportRunsRow, error)
 	ListReportSchedules(ctx context.Context, reportDefinitionID int64) ([]ReportSchedule, error)
+	ListReturnItems(ctx context.Context, returnID int64) ([]ListReturnItemsRow, error)
+	ListReturnsAdmin(ctx context.Context, arg ListReturnsAdminParams) ([]Return, error)
+	ListReturnsForCustomer(ctx context.Context, customerID int64) ([]Return, error)
+	ListReturnsForOrder(ctx context.Context, orderID int64) ([]Return, error)
 	// ListShipmentItemProducts resolves a shipment's lines to product + quantity
 	// (for converting reservations to fulfilment on ship).
 	ListShipmentItemProducts(ctx context.Context, shipmentID int64) ([]ListShipmentItemProductsRow, error)
@@ -561,6 +575,7 @@ type Querier interface {
 	SetQuoteSubtotal(ctx context.Context, arg SetQuoteSubtotalParams) error
 	SetRFQStatus(ctx context.Context, arg SetRFQStatusParams) (Rfq, error)
 	SetReportScheduleLastRun(ctx context.Context, arg SetReportScheduleLastRunParams) error
+	SetReturnStatus(ctx context.Context, arg SetReturnStatusParams) (Return, error)
 	SetShipmentStatus(ctx context.Context, arg SetShipmentStatusParams) (Shipment, error)
 	SetShipmentTracking(ctx context.Context, arg SetShipmentTrackingParams) (Shipment, error)
 	SetWorkflowInstanceState(ctx context.Context, arg SetWorkflowInstanceStateParams) error
@@ -575,6 +590,9 @@ type Querier interface {
 	// enforce the credit limit when paying on terms.
 	SumOpenInvoices(ctx context.Context, customerID int64) (string, error)
 	SumQuoteItems(ctx context.Context, quoteID int64) (string, error)
+	// SumReturnedForOrderItem totals quantity already returned for an order line
+	// across non-rejected returns (the returnable cap).
+	SumReturnedForOrderItem(ctx context.Context, orderItemID int64) (string, error)
 	// TopProducts ranks products by revenue in a month, joined to product names.
 	TopProducts(ctx context.Context, arg TopProductsParams) ([]TopProductsRow, error)
 	TouchUserLogin(ctx context.Context, id int64) error

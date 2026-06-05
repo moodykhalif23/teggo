@@ -129,6 +129,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'invoice.view' },
       },
       {
+        path: 'returns',
+        name: 'returns',
+        component: () => import('@/views/sales/ReturnsView.vue'),
+        meta: { permission: 'return.view' },
+      },
+      {
         path: 'invoices/:id',
         name: 'invoice-detail',
         component: () => import('@/views/sales/InvoiceDetailView.vue'),

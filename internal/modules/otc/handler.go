@@ -85,6 +85,15 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		ar.With(mw.RequirePermission("payment.view")).Get("/admin/invoices/{id}/payments", h.listPayments)
 		ar.With(mw.RequirePermission("payment.manage")).Post("/admin/payments", h.recordPayment)
 		ar.With(mw.RequirePermission("payment.manage")).Post("/admin/payments/{id}/refund", h.refundPayment)
+
+		ar.With(mw.RequirePermission("return.view")).Get("/admin/returns", h.adminListReturns)
+		ar.With(mw.RequirePermission("return.view")).Get("/admin/returns/{id}", h.adminGetReturn)
+		ar.With(mw.RequirePermission("return.manage")).Post("/admin/orders/{id}/returns", h.adminCreateReturn)
+		ar.With(mw.RequirePermission("return.view")).Get("/admin/orders/{id}/returns", h.listReturnsForOrderAdmin)
+		ar.With(mw.RequirePermission("return.manage")).Post("/admin/returns/{id}/approve", h.approveReturn)
+		ar.With(mw.RequirePermission("return.manage")).Post("/admin/returns/{id}/reject", h.rejectReturn)
+		ar.With(mw.RequirePermission("return.manage")).Post("/admin/returns/{id}/receive", h.receiveReturn)
+		ar.With(mw.RequirePermission("return.view")).Get("/admin/credit-notes", h.adminListCreditNotes)
 	})
 
 	r.Group(func(sr chi.Router) {
@@ -94,6 +103,9 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Get("/storefront/invoices", h.listMyInvoices)
 		sr.Get("/storefront/invoices/{publicID}", h.getMyInvoice)
 		sr.Post("/storefront/invoices/{publicID}/pay", h.payInvoiceByCard)
+
+		sr.Get("/storefront/returns", h.listMyReturns)
+		sr.Post("/storefront/orders/{publicID}/returns", h.createMyReturn)
 	})
 }
 
