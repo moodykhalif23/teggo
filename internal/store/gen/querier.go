@@ -460,6 +460,9 @@ type Querier interface {
 	// PipelineBoard: per-stage open count, total and probability-weighted amounts
 	// (Pack 2 §1.4). Sums cast to text via the numeric override; count is bigint.
 	PipelineBoard(ctx context.Context, pipelineID int64) ([]PipelineBoardRow, error)
+	// ProductAvailabilityByWarehouse lists per-warehouse available qty (on_hand -
+	// reserved) for a product, for storefront per-location availability display.
+	ProductAvailabilityByWarehouse(ctx context.Context, arg ProductAvailabilityByWarehouseParams) ([]ProductAvailabilityByWarehouseRow, error)
 	// ProductFacets unnests the JSONB attributes of the filtered result set into
 	// (attribute, value, count) for the storefront filter sidebar.
 	ProductFacets(ctx context.Context, arg ProductFacetsParams) ([]ProductFacetsRow, error)

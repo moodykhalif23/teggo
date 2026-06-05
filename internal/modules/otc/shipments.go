@@ -52,6 +52,7 @@ func (h *Handler) createShipment(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Carrier        *string `json:"carrier"`
 		TrackingNumber *string `json:"tracking_number"`
+		WarehouseID    *int64  `json:"warehouse_id"`
 		Items          []struct {
 			OrderItemID int64  `json:"order_item_id"`
 			Quantity    string `json:"quantity"`
@@ -60,6 +61,16 @@ func (h *Handler) createShipment(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Items) == 0 {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "at least one item is required")
 		return
+	}
+	// Resolve the fulfilling warehouse: an explicit one (validated to the org) or
+	// the org's default. Stored on the shipment so stock is drawn from it on ship.
+	if req.WarehouseID != nil {
+		if _, err := h.q.GetWarehouse(r.Context(), gen.GetWarehouseParams{OrganizationID: a.orgID, ID: *req.WarehouseID}); err != nil {
+			response.Fail(w, http.StatusBadRequest, "bad_request", "warehouse not found in organization")
+			return
+		}
+	} else if def, err := h.q.GetDefaultWarehouse(r.Context(), a.orgID); err == nil {
+		req.WarehouseID = &def.ID
 	}
 
 	// Validate quantities before writing anything.
@@ -85,7 +96,7 @@ func (h *Handler) createShipment(w http.ResponseWriter, r *http.Request) {
 	err := h.tx(r.Context(), func(q *gen.Queries) error {
 		var e error
 		shipment, e = q.CreateShipment(r.Context(), gen.CreateShipmentParams{
-			OrderID: order.ID, Carrier: req.Carrier, TrackingNumber: req.TrackingNumber,
+			OrderID: order.ID, Carrier: req.Carrier, TrackingNumber: req.TrackingNumber, WarehouseID: req.WarehouseID,
 		})
 		if e != nil {
 			return e

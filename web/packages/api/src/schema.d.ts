@@ -547,6 +547,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/products/{slug}/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        /** Per-warehouse available quantity for a product. */
+        get: operations["storefrontProductAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/products/{slug}/pricing": {
         parameters: {
             query?: never;
@@ -3448,10 +3467,22 @@ export interface components {
             status: "pending" | "shipped" | "delivered" | "returned";
             /** Format: date-time */
             shipped_at?: string | null;
+            /** Format: int64 */
+            warehouse_id?: number | null;
+        };
+        WarehouseAvailability: {
+            warehouses: {
+                /** Format: int64 */
+                warehouse_id: number;
+                warehouse_name: string;
+                available: string;
+            }[];
         };
         ShipmentInput: {
             carrier?: string | null;
             tracking_number?: string | null;
+            /** Format: int64 */
+            warehouse_id?: number | null;
             items: {
                 /** Format: int64 */
                 order_item_id: number;
@@ -5796,6 +5827,29 @@ export interface operations {
                 };
             };
             400: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontProductAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarehouseAvailability"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
         };
     };
     storefrontProductPricing: {

@@ -180,21 +180,27 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 const createShipment = `-- name: CreateShipment :one
 
 
-INSERT INTO shipments (order_id, carrier, tracking_number)
-VALUES ($1, $2, $3)
-RETURNING id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at
+INSERT INTO shipments (order_id, carrier, tracking_number, warehouse_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at, warehouse_id
 `
 
 type CreateShipmentParams struct {
 	OrderID        int64   `json:"order_id"`
 	Carrier        *string `json:"carrier"`
 	TrackingNumber *string `json:"tracking_number"`
+	WarehouseID    *int64  `json:"warehouse_id"`
 }
 
 // Order-to-cash queries — Implementation Pack 1 §7.
 // ===== Shipments ===========================================================
 func (q *Queries) CreateShipment(ctx context.Context, arg CreateShipmentParams) (Shipment, error) {
-	row := q.db.QueryRow(ctx, createShipment, arg.OrderID, arg.Carrier, arg.TrackingNumber)
+	row := q.db.QueryRow(ctx, createShipment,
+		arg.OrderID,
+		arg.Carrier,
+		arg.TrackingNumber,
+		arg.WarehouseID,
+	)
 	var i Shipment
 	err := row.Scan(
 		&i.ID,
@@ -206,6 +212,7 @@ func (q *Queries) CreateShipment(ctx context.Context, arg CreateShipmentParams) 
 		&i.ShippedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WarehouseID,
 	)
 	return i, err
 }
@@ -455,7 +462,7 @@ func (q *Queries) GetPayment(ctx context.Context, id int64) (Payment, error) {
 }
 
 const getShipment = `-- name: GetShipment :one
-SELECT id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at FROM shipments WHERE id = $1
+SELECT id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at, warehouse_id FROM shipments WHERE id = $1
 `
 
 func (q *Queries) GetShipment(ctx context.Context, id int64) (Shipment, error) {
@@ -471,6 +478,7 @@ func (q *Queries) GetShipment(ctx context.Context, id int64) (Shipment, error) {
 		&i.ShippedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WarehouseID,
 	)
 	return i, err
 }
@@ -703,7 +711,7 @@ func (q *Queries) ListShipmentItems(ctx context.Context, shipmentID int64) ([]Sh
 }
 
 const listShipmentsForOrder = `-- name: ListShipmentsForOrder :many
-SELECT id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at FROM shipments WHERE order_id = $1 ORDER BY created_at
+SELECT id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at, warehouse_id FROM shipments WHERE order_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListShipmentsForOrder(ctx context.Context, orderID int64) ([]Shipment, error) {
@@ -725,6 +733,7 @@ func (q *Queries) ListShipmentsForOrder(ctx context.Context, orderID int64) ([]S
 			&i.ShippedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WarehouseID,
 		); err != nil {
 			return nil, err
 		}
@@ -814,7 +823,7 @@ func (q *Queries) SetPaymentStatus(ctx context.Context, arg SetPaymentStatusPara
 }
 
 const setShipmentStatus = `-- name: SetShipmentStatus :one
-UPDATE shipments SET status = $2, shipped_at = COALESCE($3, shipped_at) WHERE id = $1 RETURNING id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at
+UPDATE shipments SET status = $2, shipped_at = COALESCE($3, shipped_at) WHERE id = $1 RETURNING id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at, warehouse_id
 `
 
 type SetShipmentStatusParams struct {
@@ -836,6 +845,7 @@ func (q *Queries) SetShipmentStatus(ctx context.Context, arg SetShipmentStatusPa
 		&i.ShippedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WarehouseID,
 	)
 	return i, err
 }

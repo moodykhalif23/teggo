@@ -494,3 +494,72 @@ func TestPaymentGatewayReferenceUnique(t *testing.T) {
 		t.Fatalf("manual payment 2 (NULL ref should be exempt): %v", err)
 	}
 }
+
+// ---- multi-warehouse fulfilment ------------------------------------------
+
+func TestShipmentWarehouseAssignmentAndFulfilment(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	tok := adminToken(t, issuer)
+	_, orderID, oiID := seedOrder(t, pool, 0, "0")
+	q := gen.New(pool)
+	ctx := context.Background()
+
+	oi, err := q.GetOrderItem(ctx, gen.GetOrderItemParams{ID: oiID, OrderID: orderID})
+	if err != nil {
+		t.Fatalf("order item: %v", err)
+	}
+	pid := oi.ProductID
+
+	// Two warehouses; stock the product in the non-default one (East).
+	whMain, err := q.CreateWarehouse(ctx, gen.CreateWarehouseParams{OrganizationID: 1, Name: "Main"})
+	if err != nil {
+		t.Fatalf("wh main: %v", err)
+	}
+	whEast, err := q.CreateWarehouse(ctx, gen.CreateWarehouseParams{OrganizationID: 1, Name: "East"})
+	if err != nil {
+		t.Fatalf("wh east: %v", err)
+	}
+	for _, wh := range []int64{whMain.ID, whEast.ID} {
+		if err := q.EnsureInventoryLevel(ctx, gen.EnsureInventoryLevelParams{ProductID: pid, WarehouseID: wh}); err != nil {
+			t.Fatalf("ensure level: %v", err)
+		}
+	}
+	// East: on_hand 100, reserved 2 (as if reserved here). Main: on_hand 100.
+	if _, err := q.AdjustInventoryLevel(ctx, gen.AdjustInventoryLevelParams{ProductID: pid, WarehouseID: whEast.ID, Column3: "100", Column4: "2"}); err != nil {
+		t.Fatalf("stock east: %v", err)
+	}
+	if _, err := q.AdjustInventoryLevel(ctx, gen.AdjustInventoryLevelParams{ProductID: pid, WarehouseID: whMain.ID, Column3: "100", Column4: "0"}); err != nil {
+		t.Fatalf("stock main: %v", err)
+	}
+
+	oid := strconv.FormatInt(orderID, 10)
+	// Create a shipment explicitly assigned to East.
+	cr := do(t, h, http.MethodPost, "/admin/orders/"+oid+"/shipments", tok, map[string]any{
+		"warehouse_id": whEast.ID,
+		"items":        []map[string]any{{"order_item_id": oiID, "quantity": "2"}},
+	})
+	if cr.Code != http.StatusCreated {
+		t.Fatalf("create shipment: %d (%s)", cr.Code, cr.Body.String())
+	}
+	var sh struct {
+		ID          int64  `json:"id"`
+		WarehouseID *int64 `json:"warehouse_id"`
+	}
+	_ = json.Unmarshal(cr.Body.Bytes(), &sh)
+	if sh.WarehouseID == nil || *sh.WarehouseID != whEast.ID {
+		t.Fatalf("shipment warehouse: want East(%d), got %v", whEast.ID, sh.WarehouseID)
+	}
+
+	// Ship it -> stock drawn from East, Main untouched.
+	if rr := do(t, h, http.MethodPatch, "/admin/shipments/"+strconv.FormatInt(sh.ID, 10)+"/status", tok, map[string]any{"status": "shipped"}); rr.Code != http.StatusOK {
+		t.Fatalf("ship: %d (%s)", rr.Code, rr.Body.String())
+	}
+	east, _ := q.GetInventoryLevel(ctx, gen.GetInventoryLevelParams{ProductID: pid, WarehouseID: whEast.ID})
+	main, _ := q.GetInventoryLevel(ctx, gen.GetInventoryLevelParams{ProductID: pid, WarehouseID: whMain.ID})
+	if east.QuantityOnHand != "98.0000" {
+		t.Errorf("East on_hand: want 98.0000, got %s", east.QuantityOnHand)
+	}
+	if main.QuantityOnHand != "100.0000" {
+		t.Errorf("Main on_hand: want 100.0000 (untouched), got %s", main.QuantityOnHand)
+	}
+}

@@ -74,3 +74,13 @@ SELECT si.order_item_id, oi.product_id, si.quantity
 FROM shipment_items si
 JOIN order_items oi ON oi.id = si.order_item_id
 WHERE si.shipment_id = $1;
+
+-- ProductAvailabilityByWarehouse lists per-warehouse available qty (on_hand -
+-- reserved) for a product, for storefront per-location availability display.
+-- name: ProductAvailabilityByWarehouse :many
+SELECT w.id AS warehouse_id, w.name AS warehouse_name,
+       (il.quantity_on_hand - il.quantity_reserved)::numeric AS available
+FROM inventory_levels il
+JOIN warehouses w ON w.id = il.warehouse_id
+WHERE il.product_id = $1 AND w.organization_id = $2 AND w.is_active = true
+ORDER BY w.name;

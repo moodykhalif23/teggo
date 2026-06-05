@@ -102,11 +102,18 @@ async function issueInvoice() {
 
 const shipDialog = ref(false)
 const savingShip = ref(false)
-const shipForm = reactive({ carrier: '', tracking_number: '', items: [] as { order_item_id: number; quantity: string }[] })
+const warehouses = ref<{ id: number; name: string }[]>([])
+const shipForm = reactive({ carrier: '', tracking_number: '', warehouse_id: null as number | null, items: [] as { order_item_id: number; quantity: string }[] })
+async function loadWarehouses() {
+  const { data } = await api.GET('/admin/warehouses')
+  warehouses.value = (data?.items ?? []).map((w) => ({ id: w.id, name: w.name }))
+}
 function openShip() {
   shipForm.carrier = ''
   shipForm.tracking_number = ''
+  shipForm.warehouse_id = null
   shipForm.items = (order.value?.items ?? []).map((it) => ({ order_item_id: it.id, quantity: it.quantity }))
+  loadWarehouses()
   shipDialog.value = true
 }
 async function saveShip() {
@@ -116,6 +123,7 @@ async function saveShip() {
     body: {
       carrier: shipForm.carrier || null,
       tracking_number: shipForm.tracking_number || null,
+      warehouse_id: shipForm.warehouse_id,
       items: shipForm.items.filter((i) => Number(i.quantity) > 0),
     },
   })
@@ -234,6 +242,10 @@ onMounted(load)
         <div class="grid2">
           <div class="field"><label>Carrier</label><InputText v-model="shipForm.carrier" fluid /></div>
           <div class="field"><label>Tracking #</label><InputText v-model="shipForm.tracking_number" fluid /></div>
+          <div class="field">
+            <label>Ship from warehouse</label>
+            <Select v-model="shipForm.warehouse_id" :options="warehouses" optionLabel="name" optionValue="id" placeholder="Default warehouse" showClear fluid />
+          </div>
         </div>
         <p class="hint">Quantities to ship (capped at ordered minus already shipped):</p>
         <div v-for="(it, idx) in shipForm.items" :key="it.order_item_id" class="shipline">

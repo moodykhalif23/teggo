@@ -42,6 +42,7 @@ func (h *Handler) RoutesWithOptionalAuth(r chi.Router, authMW, optAuthMW func(ht
 		}
 		sr.Get("/storefront/products", h.storefrontList)
 		sr.Get("/storefront/products/{slug}", h.storefrontGet)
+		sr.Get("/storefront/products/{slug}/availability", h.storefrontAvailability)
 		sr.Get("/storefront/catalog", h.storefrontFacetedSearch)
 	})
 
@@ -280,6 +281,42 @@ func (h *Handler) storefrontGet(w http.ResponseWriter, r *http.Request) {
 		PublicID: p.PublicID.String(), SKU: p.Sku, Name: p.Name, Slug: p.Slug,
 		Description: p.Description, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
 	})
+}
+
+// storefrontAvailability returns per-warehouse available quantity for a product
+// (multi-warehouse buyer visibility). Empty when the product is untracked.
+func (h *Handler) storefrontAvailability(w http.ResponseWriter, r *http.Request) {
+	orgID := h.resolveOrg(r)
+	p, err := h.q.GetProductBySlug(r.Context(), gen.GetProductBySlugParams{OrganizationID: orgID, Slug: chi.URLParam(r, "slug")})
+	if err != nil {
+		response.Fail(w, http.StatusNotFound, "not_found", "product not found")
+		return
+	}
+	// Respect catalog visibility: a hidden product reports as not-found.
+	pid, err := h.q.GetProductIDByPublicID(r.Context(), gen.GetProductIDByPublicIDParams{OrganizationID: orgID, PublicID: p.PublicID})
+	if err != nil {
+		response.Fail(w, http.StatusNotFound, "not_found", "product not found")
+		return
+	}
+	if hidden, herr := h.hiddenSet(r, orgID); herr == nil && hidden[pid] {
+		response.Fail(w, http.StatusNotFound, "not_found", "product not found")
+		return
+	}
+	rows, err := h.q.ProductAvailabilityByWarehouse(r.Context(), gen.ProductAvailabilityByWarehouseParams{ProductID: pid, OrganizationID: orgID})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load availability")
+		return
+	}
+	type loc struct {
+		WarehouseID   int64  `json:"warehouse_id"`
+		WarehouseName string `json:"warehouse_name"`
+		Available     string `json:"available"`
+	}
+	out := make([]loc, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, loc{WarehouseID: row.WarehouseID, WarehouseName: row.WarehouseName, Available: row.Available})
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"warehouses": out})
 }
 
 // storefrontFacetedSearch is the V1 faceted catalog endpoint (PRD §14): keyword

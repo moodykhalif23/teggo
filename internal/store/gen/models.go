@@ -809,6 +809,7 @@ type Shipment struct {
 	ShippedAt      pgtype.Timestamptz `json:"shipped_at"`
 	CreatedAt      time.Time          `json:"created_at"`
 	UpdatedAt      time.Time          `json:"updated_at"`
+	WarehouseID    *int64             `json:"warehouse_id"`
 }
 
 type ShipmentItem struct {

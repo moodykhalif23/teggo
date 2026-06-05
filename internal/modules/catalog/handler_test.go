@@ -627,3 +627,48 @@ func TestCatalogVisibilityByGroup(t *testing.T) {
 		}
 	}
 }
+
+// ---- per-warehouse availability ------------------------------------------
+
+func TestStorefrontPerWarehouseAvailability(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	q := gen.New(pool)
+	ctx := context.Background()
+	admin := catalogToken(t, issuer)
+
+	rr := do(t, h, http.MethodPost, "/admin/products", admin, map[string]any{"sku": "WH-1", "name": "WH1", "slug": "wh-1", "status": "active"})
+	var p struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &p)
+
+	wA, _ := q.CreateWarehouse(ctx, gen.CreateWarehouseParams{OrganizationID: 1, Name: "Main"})
+	wB, _ := q.CreateWarehouse(ctx, gen.CreateWarehouseParams{OrganizationID: 1, Name: "East"})
+	for _, w := range []int64{wA.ID, wB.ID} {
+		_ = q.EnsureInventoryLevel(ctx, gen.EnsureInventoryLevelParams{ProductID: p.ID, WarehouseID: w})
+	}
+	_, _ = q.AdjustInventoryLevel(ctx, gen.AdjustInventoryLevelParams{ProductID: p.ID, WarehouseID: wA.ID, Column3: "40", Column4: "0"})
+	_, _ = q.AdjustInventoryLevel(ctx, gen.AdjustInventoryLevelParams{ProductID: p.ID, WarehouseID: wB.ID, Column3: "10", Column4: "3"})
+
+	av := do(t, h, http.MethodGet, "/storefront/products/wh-1/availability", "", nil)
+	if av.Code != http.StatusOK {
+		t.Fatalf("availability: %d (%s)", av.Code, av.Body.String())
+	}
+	var resp struct {
+		Warehouses []struct {
+			WarehouseName string `json:"warehouse_name"`
+			Available     string `json:"available"`
+		} `json:"warehouses"`
+	}
+	_ = json.Unmarshal(av.Body.Bytes(), &resp)
+	if len(resp.Warehouses) != 2 {
+		t.Fatalf("want 2 warehouses, got %d (%+v)", len(resp.Warehouses), resp.Warehouses)
+	}
+	got := map[string]string{}
+	for _, w := range resp.Warehouses {
+		got[w.WarehouseName] = w.Available
+	}
+	if got["Main"] != "40.0000" || got["East"] != "7.0000" {
+		t.Errorf("availability: want Main 40, East 7 (10-3), got %+v", got)
+	}
+}

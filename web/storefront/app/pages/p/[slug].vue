@@ -35,7 +35,20 @@ async function loadPricing() {
   })
   pricing.value = data ?? null
 }
-onMounted(loadPricing)
+
+type Availability = components['schemas']['WarehouseAvailability']
+const availability = ref<Availability | null>(null)
+async function loadAvailability() {
+  const { data } = await client.GET('/storefront/products/{slug}/availability', {
+    params: { path: { slug: route.params.slug as string } },
+  })
+  availability.value = data ?? null
+}
+
+onMounted(() => {
+  loadPricing()
+  loadAvailability()
+})
 
 async function addToCart() {
   if (!product.value) return
@@ -95,6 +108,16 @@ useSeoMeta({
           </table>
         </div>
 
+        <div v-if="availability && availability.warehouses.length" class="avail">
+          <h3>Availability</h3>
+          <ul>
+            <li v-for="wloc in availability.warehouses" :key="wloc.warehouse_id">
+              <span>{{ wloc.warehouse_name }}</span>
+              <span :class="Number(wloc.available) > 0 ? 'in' : 'out'">{{ Number(wloc.available) > 0 ? `${wloc.available} available` : 'Out of stock' }}</span>
+            </li>
+          </ul>
+        </div>
+
         <Message v-if="feedback" :severity="feedback.severity" :closable="false" class="feedback">{{ feedback.text }}</Message>
         <div class="actions">
           <Button label="Add to cart" icon="pi pi-shopping-cart" :loading="adding" @click="addToCart" />
@@ -148,6 +171,12 @@ useSeoMeta({
 }
 .pricing h3 { margin: 0 0 0.6rem; font-size: 0.95rem; }
 .por { margin: 0; color: var(--p-text-muted-color, #64748b); }
+.avail { margin: 1.25rem 0; }
+.avail h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.avail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.avail li { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.9rem; max-width: 22rem; }
+.avail .in { color: var(--p-green-600, #16a34a); font-weight: 600; }
+.avail .out { color: var(--p-text-muted-color, #64748b); }
 .tiers { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .tiers th { text-align: left; font-size: 0.78rem; color: var(--p-text-muted-color, #64748b); font-weight: 600; padding-bottom: 0.35rem; }
 .tiers td { padding: 0.3rem 0; border-top: 1px solid var(--p-surface-100, #f1f5f9); }

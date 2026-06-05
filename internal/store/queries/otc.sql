@@ -3,8 +3,8 @@
 -- ===== Shipments ===========================================================
 
 -- name: CreateShipment :one
-INSERT INTO shipments (order_id, carrier, tracking_number)
-VALUES ($1, $2, $3)
+INSERT INTO shipments (order_id, carrier, tracking_number, warehouse_id)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: AddShipmentItem :one

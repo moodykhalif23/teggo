@@ -385,6 +385,48 @@ func (q *Queries) ListWarehouses(ctx context.Context, organizationID int64) ([]W
 	return items, nil
 }
 
+const productAvailabilityByWarehouse = `-- name: ProductAvailabilityByWarehouse :many
+SELECT w.id AS warehouse_id, w.name AS warehouse_name,
+       (il.quantity_on_hand - il.quantity_reserved)::numeric AS available
+FROM inventory_levels il
+JOIN warehouses w ON w.id = il.warehouse_id
+WHERE il.product_id = $1 AND w.organization_id = $2 AND w.is_active = true
+ORDER BY w.name
+`
+
+type ProductAvailabilityByWarehouseParams struct {
+	ProductID      int64 `json:"product_id"`
+	OrganizationID int64 `json:"organization_id"`
+}
+
+type ProductAvailabilityByWarehouseRow struct {
+	WarehouseID   int64  `json:"warehouse_id"`
+	WarehouseName string `json:"warehouse_name"`
+	Available     string `json:"available"`
+}
+
+// ProductAvailabilityByWarehouse lists per-warehouse available qty (on_hand -
+// reserved) for a product, for storefront per-location availability display.
+func (q *Queries) ProductAvailabilityByWarehouse(ctx context.Context, arg ProductAvailabilityByWarehouseParams) ([]ProductAvailabilityByWarehouseRow, error) {
+	rows, err := q.db.Query(ctx, productAvailabilityByWarehouse, arg.ProductID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProductAvailabilityByWarehouseRow
+	for rows.Next() {
+		var i ProductAvailabilityByWarehouseRow
+		if err := rows.Scan(&i.WarehouseID, &i.WarehouseName, &i.Available); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setInventoryLevelConfig = `-- name: SetInventoryLevelConfig :one
 INSERT INTO inventory_levels (product_id, warehouse_id, reorder_threshold, allow_backorder)
 VALUES ($1, $2, $3, $4)

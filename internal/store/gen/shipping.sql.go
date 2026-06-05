@@ -138,7 +138,7 @@ func (q *Queries) ListShippingRatesByCountry(ctx context.Context, arg ListShippi
 
 const setShipmentTracking = `-- name: SetShipmentTracking :one
 UPDATE shipments SET tracking_number = $2, carrier = $3 WHERE id = $1
-RETURNING id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at
+RETURNING id, public_id, order_id, carrier, tracking_number, status, shipped_at, created_at, updated_at, warehouse_id
 `
 
 type SetShipmentTrackingParams struct {
@@ -160,6 +160,7 @@ func (q *Queries) SetShipmentTracking(ctx context.Context, arg SetShipmentTracki
 		&i.ShippedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WarehouseID,
 	)
 	return i, err
 }

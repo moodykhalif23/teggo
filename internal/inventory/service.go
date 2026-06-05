@@ -66,13 +66,22 @@ func ReserveForOrder(ctx context.Context, q *gen.Queries, orgID, orderID int64, 
 // on-hand and reserved both drop by the shipped quantity. Untracked products
 // are skipped.
 func FulfilShipment(ctx context.Context, q *gen.Queries, orgID, shipmentID int64, by string) error {
-	wh, err := q.GetDefaultWarehouse(ctx, orgID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+	// Decrement from the shipment's assigned warehouse (multi-warehouse), falling
+	// back to the org's default warehouse for shipments with none set.
+	var whID int64
+	if sh, err := q.GetShipment(ctx, shipmentID); err == nil && sh.WarehouseID != nil {
+		whID = *sh.WarehouseID
+	} else {
+		def, derr := q.GetDefaultWarehouse(ctx, orgID)
+		if errors.Is(derr, pgx.ErrNoRows) {
+			return nil
+		}
+		if derr != nil {
+			return derr
+		}
+		whID = def.ID
 	}
-	if err != nil {
-		return err
-	}
+	wh := struct{ ID int64 }{ID: whID}
 	lines, err := q.ListShipmentItemProducts(ctx, shipmentID)
 	if err != nil {
 		return err

@@ -881,6 +881,21 @@ components:
         tracking_number: { type: string, nullable: true }
         status: { type: string, enum: [pending, shipped, delivered, returned] }
         shipped_at: { type: string, format: date-time, nullable: true }
+        warehouse_id: { type: integer, format: int64, nullable: true }
+
+    WarehouseAvailability:
+      type: object
+      required: [warehouses]
+      properties:
+        warehouses:
+          type: array
+          items:
+            type: object
+            required: [warehouse_id, warehouse_name, available]
+            properties:
+              warehouse_id: { type: integer, format: int64 }
+              warehouse_name: { type: string }
+              available: { type: string }
 
     ShipmentInput:
       type: object
@@ -888,6 +903,7 @@ components:
       properties:
         carrier: { type: string, nullable: true }
         tracking_number: { type: string, nullable: true }
+        warehouse_id: { type: integer, format: int64, nullable: true }
         items:
           type: array
           items:
@@ -2671,6 +2687,17 @@ paths:
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Ack' } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/products/{slug}/availability:
+    parameters:
+      - { name: slug, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Catalog]
+      operationId: storefrontProductAvailability
+      summary: Per-warehouse available quantity for a product.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WarehouseAvailability' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /storefront/products/{slug}/pricing:
     parameters:
