@@ -43,8 +43,12 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 
 		sr.Get("/storefront/shopping-lists", h.listLists)
 		sr.Post("/storefront/shopping-lists", h.createList)
+		sr.Patch("/storefront/shopping-lists/{id}", h.renameList)
+		sr.Delete("/storefront/shopping-lists/{id}", h.deleteList)
 		sr.Get("/storefront/shopping-lists/{id}/items", h.listListItems)
 		sr.Post("/storefront/shopping-lists/{id}/items", h.addListItem)
+		sr.Patch("/storefront/shopping-lists/{id}/items/{itemID}", h.updateListItem)
+		sr.Delete("/storefront/shopping-lists/{id}/items/{itemID}", h.removeListItem)
 		sr.Post("/storefront/shopping-lists/{id}/convert-to-cart", h.convertList)
 	})
 }
@@ -579,6 +583,120 @@ func (h *Handler) addListItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) updateListItem(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	l, ok := h.loadList(w, r, p)
+	if !ok {
+		return
+	}
+	itemID, err := strconv.ParseInt(chi.URLParam(r, "itemID"), 10, 64)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	var req struct {
+		Quantity string `json:"quantity"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Quantity == "" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "quantity required")
+		return
+	}
+	item, err := h.q.UpdateShoppingListItem(r.Context(), gen.UpdateShoppingListItemParams{ID: itemID, ShoppingListID: l.ID, Quantity: req.Quantity})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.Fail(w, http.StatusNotFound, "not_found", "list item not found")
+			return
+		}
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not update item")
+		return
+	}
+	response.JSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) removeListItem(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	l, ok := h.loadList(w, r, p)
+	if !ok {
+		return
+	}
+	itemID, err := strconv.ParseInt(chi.URLParam(r, "itemID"), 10, 64)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	n, err := h.q.DeleteShoppingListItem(r.Context(), gen.DeleteShoppingListItemParams{ID: itemID, ShoppingListID: l.ID})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not remove item")
+		return
+	}
+	if n == 0 {
+		response.Fail(w, http.StatusNotFound, "not_found", "list item not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) renameList(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Name) == "" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "name required")
+		return
+	}
+	l, err := h.q.RenameShoppingList(r.Context(), gen.RenameShoppingListParams{ID: id, CustomerID: p.customerID, Name: strings.TrimSpace(req.Name)})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.Fail(w, http.StatusNotFound, "not_found", "shopping list not found")
+			return
+		}
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not rename list")
+		return
+	}
+	response.JSON(w, http.StatusOK, l)
+}
+
+func (h *Handler) deleteList(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return
+	}
+	n, err := h.q.DeleteShoppingList(r.Context(), gen.DeleteShoppingListParams{ID: id, CustomerID: p.customerID})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not delete list")
+		return
+	}
+	if n == 0 {
+		response.Fail(w, http.StatusNotFound, "not_found", "shopping list not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // convertList copies a shopping list into the active cart, resolving current

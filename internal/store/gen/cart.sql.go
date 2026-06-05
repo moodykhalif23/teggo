@@ -96,6 +96,40 @@ func (q *Queries) DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) 
 	return result.RowsAffected(), nil
 }
 
+const deleteShoppingList = `-- name: DeleteShoppingList :execrows
+DELETE FROM shopping_lists WHERE id = $1 AND customer_id = $2
+`
+
+type DeleteShoppingListParams struct {
+	ID         int64 `json:"id"`
+	CustomerID int64 `json:"customer_id"`
+}
+
+func (q *Queries) DeleteShoppingList(ctx context.Context, arg DeleteShoppingListParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteShoppingList, arg.ID, arg.CustomerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteShoppingListItem = `-- name: DeleteShoppingListItem :execrows
+DELETE FROM shopping_list_items WHERE id = $1 AND shopping_list_id = $2
+`
+
+type DeleteShoppingListItemParams struct {
+	ID             int64 `json:"id"`
+	ShoppingListID int64 `json:"shopping_list_id"`
+}
+
+func (q *Queries) DeleteShoppingListItem(ctx context.Context, arg DeleteShoppingListItemParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteShoppingListItem, arg.ID, arg.ShoppingListID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveCart = `-- name: GetActiveCart :one
 
 
@@ -326,6 +360,33 @@ func (q *Queries) MarkCartConverted(ctx context.Context, id int64) error {
 	return err
 }
 
+const renameShoppingList = `-- name: RenameShoppingList :one
+UPDATE shopping_lists SET name = $3, updated_at = now()
+WHERE id = $1 AND customer_id = $2
+RETURNING id, customer_id, customer_user_id, name, is_default, created_at, updated_at
+`
+
+type RenameShoppingListParams struct {
+	ID         int64  `json:"id"`
+	CustomerID int64  `json:"customer_id"`
+	Name       string `json:"name"`
+}
+
+func (q *Queries) RenameShoppingList(ctx context.Context, arg RenameShoppingListParams) (ShoppingList, error) {
+	row := q.db.QueryRow(ctx, renameShoppingList, arg.ID, arg.CustomerID, arg.Name)
+	var i ShoppingList
+	err := row.Scan(
+		&i.ID,
+		&i.CustomerID,
+		&i.CustomerUserID,
+		&i.Name,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateCartItemPrice = `-- name: UpdateCartItemPrice :exec
 UPDATE cart_items SET unit_price = $3 WHERE id = $1 AND cart_id = $2
 `
@@ -363,6 +424,31 @@ func (q *Queries) UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItem
 		&i.Quantity,
 		&i.Unit,
 		&i.UnitPrice,
+	)
+	return i, err
+}
+
+const updateShoppingListItem = `-- name: UpdateShoppingListItem :one
+UPDATE shopping_list_items SET quantity = $3
+WHERE id = $1 AND shopping_list_id = $2
+RETURNING id, shopping_list_id, product_id, quantity, unit
+`
+
+type UpdateShoppingListItemParams struct {
+	ID             int64  `json:"id"`
+	ShoppingListID int64  `json:"shopping_list_id"`
+	Quantity       string `json:"quantity"`
+}
+
+func (q *Queries) UpdateShoppingListItem(ctx context.Context, arg UpdateShoppingListItemParams) (ShoppingListItem, error) {
+	row := q.db.QueryRow(ctx, updateShoppingListItem, arg.ID, arg.ShoppingListID, arg.Quantity)
+	var i ShoppingListItem
+	err := row.Scan(
+		&i.ID,
+		&i.ShoppingListID,
+		&i.ProductID,
+		&i.Quantity,
+		&i.Unit,
 	)
 	return i, err
 }

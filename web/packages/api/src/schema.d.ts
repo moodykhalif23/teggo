@@ -526,6 +526,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/shopping-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["storefrontListShoppingLists"];
+        put?: never;
+        post: operations["storefrontCreateShoppingList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/shopping-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["storefrontDeleteShoppingList"];
+        options?: never;
+        head?: never;
+        patch: operations["storefrontRenameShoppingList"];
+        trace?: never;
+    };
+    "/storefront/shopping-lists/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["storefrontListShoppingListItems"];
+        put?: never;
+        post: operations["storefrontAddShoppingListItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/shopping-lists/{id}/items/{itemID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                itemID: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["storefrontRemoveShoppingListItem"];
+        options?: never;
+        head?: never;
+        patch: operations["storefrontUpdateShoppingListItem"];
+        trace?: never;
+    };
+    "/storefront/shopping-lists/{id}/convert-to-cart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["storefrontConvertShoppingList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/rfqs": {
         parameters: {
             query?: never;
@@ -2808,6 +2897,49 @@ export interface components {
             added: number;
             not_found_skus: string[];
             price_on_request: string[];
+        };
+        ShoppingList: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            is_default: boolean;
+        };
+        ListWrapperShoppingList: {
+            items?: components["schemas"]["ShoppingList"][];
+        };
+        ShoppingListItem: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            product_id: number;
+            sku: string;
+            name: string;
+            quantity: string;
+            unit: string;
+        };
+        ListWrapperShoppingListItem: {
+            items?: components["schemas"]["ShoppingListItem"][];
+        };
+        CreateShoppingList: {
+            name: string;
+            is_default?: boolean;
+        };
+        RenameShoppingList: {
+            name: string;
+        };
+        AddShoppingListItem: {
+            /** Format: uuid */
+            product_public_id: string;
+            quantity?: string;
+            unit?: string;
+        };
+        UpdateShoppingListItemQty: {
+            quantity: string;
+        };
+        ConvertListResult: {
+            /** Format: uuid */
+            cart_public_id: string;
+            skipped_product_ids: number[];
         };
         RfqItem: {
             /** Format: int64 */
@@ -5279,6 +5411,222 @@ export interface operations {
                     "application/json": components["schemas"]["BulkAddResult"];
                 };
             };
+        };
+    };
+    storefrontListShoppingLists: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperShoppingList"];
+                };
+            };
+        };
+    };
+    storefrontCreateShoppingList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateShoppingList"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingList"];
+                };
+            };
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontDeleteShoppingList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontRenameShoppingList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameShoppingList"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingList"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontListShoppingListItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperShoppingListItem"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontAddShoppingListItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddShoppingListItem"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingListItem"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontRemoveShoppingListItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                itemID: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontUpdateShoppingListItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                itemID: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateShoppingListItemQty"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingListItem"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontConvertShoppingList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvertListResult"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
         };
     };
     adminListRfqs: {

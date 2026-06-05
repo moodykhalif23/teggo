@@ -75,3 +75,19 @@ FROM shopping_list_items sli
 JOIN products p ON p.id = sli.product_id
 WHERE sli.shopping_list_id = $1
 ORDER BY p.name;
+
+-- name: UpdateShoppingListItem :one
+UPDATE shopping_list_items SET quantity = $3
+WHERE id = $1 AND shopping_list_id = $2
+RETURNING *;
+
+-- name: DeleteShoppingListItem :execrows
+DELETE FROM shopping_list_items WHERE id = $1 AND shopping_list_id = $2;
+
+-- name: RenameShoppingList :one
+UPDATE shopping_lists SET name = $3, updated_at = now()
+WHERE id = $1 AND customer_id = $2
+RETURNING *;
+
+-- name: DeleteShoppingList :execrows
+DELETE FROM shopping_lists WHERE id = $1 AND customer_id = $2;

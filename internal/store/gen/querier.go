@@ -173,6 +173,8 @@ type Querier interface {
 	DeleteReportSchedule(ctx context.Context, arg DeleteReportScheduleParams) error
 	DeleteSSOState(ctx context.Context, id int64) error
 	DeleteShippingRate(ctx context.Context, arg DeleteShippingRateParams) error
+	DeleteShoppingList(ctx context.Context, arg DeleteShoppingListParams) (int64, error)
+	DeleteShoppingListItem(ctx context.Context, arg DeleteShoppingListItemParams) (int64, error)
 	DeleteTaxRate(ctx context.Context, arg DeleteTaxRateParams) error
 	// ===== Levels ==============================================================
 	EnsureInventoryLevel(ctx context.Context, arg EnsureInventoryLevelParams) error
@@ -449,6 +451,7 @@ type Querier interface {
 	RecomputeCombinedPricesForCustomer(ctx context.Context, arg RecomputeCombinedPricesForCustomerParams) error
 	RecordAutomationExecution(ctx context.Context, arg RecordAutomationExecutionParams) error
 	RemoveProductFromCategory(ctx context.Context, arg RemoveProductFromCategoryParams) error
+	RenameShoppingList(ctx context.Context, arg RenameShoppingListParams) (ShoppingList, error)
 	// ===== Resolution (§12.1, on-the-fly) ======================================
 	// ResolvePrice returns the single unit price plus the source price list for a
 	// (customer, product, quantity, currency, website, at). Priority: customer (3)
@@ -526,6 +529,7 @@ type Querier interface {
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateReportDefinition(ctx context.Context, arg UpdateReportDefinitionParams) (ReportDefinition, error)
+	UpdateShoppingListItem(ctx context.Context, arg UpdateShoppingListItemParams) (ShoppingListItem, error)
 	UpdateTradingPartner(ctx context.Context, arg UpdateTradingPartnerParams) (TradingPartner, error)
 	UpdateWebsite(ctx context.Context, arg UpdateWebsiteParams) (Website, error)
 	// UpdateWorkflowTransitionConfig edits a transition's guards/actions JSONB,

@@ -518,6 +518,65 @@ components:
           type: array
           items: { type: string }
 
+    ShoppingList:
+      type: object
+      required: [id, name, is_default]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        is_default: { type: boolean }
+    ListWrapperShoppingList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ShoppingList' } }
+
+    ShoppingListItem:
+      type: object
+      required: [id, product_id, sku, name, quantity, unit]
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        sku: { type: string }
+        name: { type: string }
+        quantity: { type: string }
+        unit: { type: string }
+    ListWrapperShoppingListItem:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ShoppingListItem' } }
+
+    CreateShoppingList:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        is_default: { type: boolean }
+    RenameShoppingList:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+    AddShoppingListItem:
+      type: object
+      required: [product_public_id]
+      properties:
+        product_public_id: { type: string, format: uuid }
+        quantity: { type: string }
+        unit: { type: string }
+    UpdateShoppingListItemQty:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: string }
+    ConvertListResult:
+      type: object
+      required: [cart_public_id, skipped_product_ids]
+      properties:
+        cart_public_id: { type: string, format: uuid }
+        skipped_product_ids:
+          type: array
+          items: { type: integer, format: int64 }
+
     RfqItem:
       type: object
       required: [id, product_id, sku, name, quantity, unit]
@@ -2484,6 +2543,91 @@ paths:
         '200':
           description: OK
           content: { application/json: { schema: { $ref: '#/components/schemas/BulkAddResult' } } }
+
+  /storefront/shopping-lists:
+    get:
+      tags: [Cart]
+      operationId: storefrontListShoppingLists
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperShoppingList' } } } }
+    post:
+      tags: [Cart]
+      operationId: storefrontCreateShoppingList
+      security: [{ storefrontAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateShoppingList' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ShoppingList' } } } }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/shopping-lists/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [Cart]
+      operationId: storefrontRenameShoppingList
+      security: [{ storefrontAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RenameShoppingList' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ShoppingList' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Cart]
+      operationId: storefrontDeleteShoppingList
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/shopping-lists/{id}/items:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Cart]
+      operationId: storefrontListShoppingListItems
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperShoppingListItem' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Cart]
+      operationId: storefrontAddShoppingListItem
+      security: [{ storefrontAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AddShoppingListItem' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ShoppingListItem' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/shopping-lists/{id}/items/{itemID}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      - { name: itemID, in: path, required: true, schema: { type: integer, format: int64 } }
+    patch:
+      tags: [Cart]
+      operationId: storefrontUpdateShoppingListItem
+      security: [{ storefrontAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateShoppingListItemQty' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ShoppingListItem' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Cart]
+      operationId: storefrontRemoveShoppingListItem
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/shopping-lists/{id}/convert-to-cart:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [Cart]
+      operationId: storefrontConvertShoppingList
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConvertListResult' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /admin/rfqs:
     get:

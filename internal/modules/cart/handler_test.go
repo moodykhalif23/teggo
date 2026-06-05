@@ -433,6 +433,99 @@ func TestBulkAddEmptyRejected(t *testing.T) {
 	}
 }
 
+// ---- Shopping list management --------------------------------------------
+
+func TestShoppingListManageItemsRenameDelete(t *testing.T) {
+	h, _, pool := newServer(t)
+	s := seedCustomer(t, pool, "acme", "buyer@acme.test")
+	tok := login(t, h, s.email)
+
+	// Create a list and add an item.
+	l := do(t, h, http.MethodPost, "/storefront/shopping-lists", tok, map[string]any{"name": "Weekly"})
+	if l.Code != http.StatusCreated {
+		t.Fatalf("create list: %d (%s)", l.Code, l.Body.String())
+	}
+	var list gen.ShoppingList
+	_ = json.Unmarshal(l.Body.Bytes(), &list)
+	base := "/storefront/shopping-lists/" + strconv.FormatInt(list.ID, 10)
+
+	add := do(t, h, http.MethodPost, base+"/items", tok, map[string]any{"product_public_id": s.pricedPublicID, "quantity": "2"})
+	if add.Code != http.StatusCreated {
+		t.Fatalf("add item: %d (%s)", add.Code, add.Body.String())
+	}
+	var item struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(add.Body.Bytes(), &item)
+
+	// Update quantity.
+	upd := do(t, h, http.MethodPatch, base+"/items/"+strconv.FormatInt(item.ID, 10), tok, map[string]any{"quantity": "5"})
+	if upd.Code != http.StatusOK {
+		t.Fatalf("update item: %d (%s)", upd.Code, upd.Body.String())
+	}
+	var updated struct {
+		Quantity string `json:"quantity"`
+	}
+	_ = json.Unmarshal(upd.Body.Bytes(), &updated)
+	if updated.Quantity != "5.0000" && updated.Quantity != "5" {
+		t.Errorf("update qty: want 5, got %s", updated.Quantity)
+	}
+
+	// Rename the list.
+	rn := do(t, h, http.MethodPatch, base, tok, map[string]any{"name": "Renamed"})
+	if rn.Code != http.StatusOK {
+		t.Fatalf("rename: %d (%s)", rn.Code, rn.Body.String())
+	}
+	var renamed gen.ShoppingList
+	_ = json.Unmarshal(rn.Body.Bytes(), &renamed)
+	if renamed.Name != "Renamed" {
+		t.Errorf("rename: want Renamed, got %s", renamed.Name)
+	}
+
+	// Remove the item.
+	if rm := do(t, h, http.MethodDelete, base+"/items/"+strconv.FormatInt(item.ID, 10), tok, nil); rm.Code != http.StatusNoContent {
+		t.Fatalf("remove item: want 204, got %d (%s)", rm.Code, rm.Body.String())
+	}
+	items := do(t, h, http.MethodGet, base+"/items", tok, nil)
+	var ir struct {
+		Items []any `json:"items"`
+	}
+	_ = json.Unmarshal(items.Body.Bytes(), &ir)
+	if len(ir.Items) != 0 {
+		t.Errorf("after remove: want 0 items, got %d", len(ir.Items))
+	}
+
+	// Delete the list.
+	if del := do(t, h, http.MethodDelete, base, tok, nil); del.Code != http.StatusNoContent {
+		t.Fatalf("delete list: want 204, got %d (%s)", del.Code, del.Body.String())
+	}
+	// Subsequent item fetch is 404 (list gone).
+	if again := do(t, h, http.MethodGet, base+"/items", tok, nil); again.Code != http.StatusNotFound {
+		t.Errorf("after delete: want 404, got %d", again.Code)
+	}
+}
+
+func TestShoppingListForeignAccessIsNotFound(t *testing.T) {
+	h, _, pool := newServer(t)
+	a := seedCustomer(t, pool, "acme", "buyer@acme.test")
+	b := seedCustomer(t, pool, "beta", "buyer@beta.test")
+	tokA := login(t, h, a.email)
+	tokB := login(t, h, b.email)
+
+	l := do(t, h, http.MethodPost, "/storefront/shopping-lists", tokA, map[string]any{"name": "Private"})
+	var list gen.ShoppingList
+	_ = json.Unmarshal(l.Body.Bytes(), &list)
+	base := "/storefront/shopping-lists/" + strconv.FormatInt(list.ID, 10)
+
+	// Customer B cannot rename or delete customer A's list.
+	if rn := do(t, h, http.MethodPatch, base, tokB, map[string]any{"name": "Hijacked"}); rn.Code != http.StatusNotFound {
+		t.Errorf("foreign rename: want 404, got %d", rn.Code)
+	}
+	if del := do(t, h, http.MethodDelete, base, tokB, nil); del.Code != http.StatusNotFound {
+		t.Errorf("foreign delete: want 404, got %d", del.Code)
+	}
+}
+
 // ---- Isolation -----------------------------------------------------------
 
 func TestCartCustomerIsolation(t *testing.T) {
