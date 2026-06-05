@@ -403,6 +403,9 @@ type Querier interface {
 	ListMediaTags(ctx context.Context, mediaAssetID int64) ([]string, error)
 	ListMenuItems(ctx context.Context, menuID int64) ([]MenuItem, error)
 	ListMenusForWebsite(ctx context.Context, websiteID int64) ([]Menu, error)
+	// ListOpenInvoicesForOrg returns the org's unpaid (issued/overdue) invoices for
+	// the AR-aging report.
+	ListOpenInvoicesForOrg(ctx context.Context, organizationID int64) ([]ListOpenInvoicesForOrgRow, error)
 	ListOpportunities(ctx context.Context, arg ListOpportunitiesParams) ([]Opportunity, error)
 	ListOptionGroups(ctx context.Context, productID int64) ([]ProductOptionGroup, error)
 	// ListOptionsForProduct returns every option of a product's groups, ordered for
@@ -462,6 +465,13 @@ type Querier interface {
 	// MarkLeadConverted records the conversion result; only converts a not-yet-
 	// converted lead (idempotency guard at the DB level).
 	MarkLeadConverted(ctx context.Context, arg MarkLeadConvertedParams) (Lead, error)
+	// MarkOverdueInvoicesForOrg is the org-scoped variant used by the admin
+	// manual "run sweep" action.
+	MarkOverdueInvoicesForOrg(ctx context.Context, organizationID int64) ([]MarkOverdueInvoicesForOrgRow, error)
+	// ===== AR aging & dunning (revenue ops) ====================================
+	// MarkOverdueInvoicesGlobal flips every past-due 'issued' invoice to 'overdue'
+	// across all orgs — driven by the scheduled mark_overdue automation action.
+	MarkOverdueInvoicesGlobal(ctx context.Context) ([]MarkOverdueInvoicesGlobalRow, error)
 	// MaxScopedCursor is the current high-water mark for the rep's scope (used when
 	// a pull returns no rows so the client still advances its cursor).
 	MaxScopedCursor(ctx context.Context, arg MaxScopedCursorParams) (int64, error)

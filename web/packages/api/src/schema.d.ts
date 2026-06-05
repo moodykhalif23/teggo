@@ -1450,6 +1450,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/invoices/aging": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AR-aging report — open invoices bucketed by days past due. */
+        get: operations["adminInvoiceAging"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/invoices/overdue-sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flip past-due issued invoices to overdue and dun the customers. */
+        post: operations["adminRunOverdueSweep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/quotes": {
         parameters: {
             query?: never;
@@ -3661,6 +3695,30 @@ export interface components {
             unit_price: string;
             tax_amount?: string;
             row_total: string;
+        };
+        AgingInvoice: {
+            /** Format: uuid */
+            public_id: string;
+            /** Format: int64 */
+            customer_id: number;
+            status: string;
+            grand_total: string;
+            currency: string;
+            /** Format: date-time */
+            due_at?: string;
+            days_overdue: number;
+            /** @enum {string} */
+            bucket: "current" | "1-30" | "31-60" | "61-90" | "90+";
+        };
+        ARAgingReport: {
+            buckets: {
+                [key: string]: string;
+            };
+            open_total: string;
+            items: components["schemas"]["AgingInvoice"][];
+        };
+        OverdueSweepResult: {
+            marked_overdue: number;
         };
         InvoiceDetail: {
             /** Format: int64 */
@@ -7526,6 +7584,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListWrapperInvoiceSummary"];
+                };
+            };
+        };
+    };
+    adminInvoiceAging: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ARAgingReport"];
+                };
+            };
+        };
+    };
+    adminRunOverdueSweep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverdueSweepResult"];
                 };
             };
         };

@@ -25,8 +25,6 @@ import (
 // run via run_automation_action, and an hourly periodic job emits
 // schedule.hourly into the dispatcher (driving quote-expiry, overdue sweeps).
 func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sender, store blob.Store, proc imageproc.Processor) (*river.Client[pgx.Tx], error) {
-	// Automation: a dedicated insert-only enqueuer lets the dispatcher schedule
-	// actions, and email-capable actions reuse the same enqueuer.
 	enq, err := NewEnqueuer(pool)
 	if err != nil {
 		return nil, err
@@ -35,6 +33,7 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 	reg := automation.NewRegistry()
 	reg.Register(automation.NewExpireQuotes(pool, enq))
 	reg.Register(automation.NewEmailCustomer(pool, enq))
+	reg.Register(automation.NewMarkOverdue(pool, enq))
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &jobs.SendEmailWorker{Sender: sender})

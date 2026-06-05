@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/auth"
+	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/pdf"
 	"b2bcommerce/internal/queue/jobs"
 	"b2bcommerce/internal/server"
@@ -563,3 +565,71 @@ func TestShipmentWarehouseAssignmentAndFulfilment(t *testing.T) {
 		t.Errorf("Main on_hand: want 100.0000 (untouched), got %s", main.QuantityOnHand)
 	}
 }
+
+// ---- AR aging + overdue sweep --------------------------------------------
+
+func TestInvoiceAgingAndOverdueSweep(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	tok := adminToken(t, issuer)
+	custID, orderID, _ := seedOrder(t, pool, 30, "100000")
+	q := gen.New(pool)
+	ctx := context.Background()
+
+	ts := func(d time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: d, Valid: true} }
+	// An issued invoice that fell due 45 days ago.
+	inv, err := q.CreateInvoice(ctx, gen.CreateInvoiceParams{
+		OrderID: orderID, CustomerID: custID, Currency: "USD",
+		Subtotal: "100.0000", TaxTotal: "0", GrandTotal: "100.0000",
+		IssuedAt: ts(time.Now().AddDate(0, 0, -75)), DueAt: ts(time.Now().AddDate(0, 0, -45)),
+	})
+	if err != nil {
+		t.Fatalf("create invoice: %v", err)
+	}
+	pid := inv.PublicID.String()
+
+	// Sweep flips it issued -> overdue.
+	sw := do(t, h, http.MethodPost, "/admin/invoices/overdue-sweep", tok, nil)
+	if sw.Code != http.StatusOK {
+		t.Fatalf("sweep: %d (%s)", sw.Code, sw.Body.String())
+	}
+	var swres struct {
+		Marked int `json:"marked_overdue"`
+	}
+	_ = json.Unmarshal(sw.Body.Bytes(), &swres)
+	if swres.Marked < 1 {
+		t.Fatalf("sweep: want >=1 marked, got %d", swres.Marked)
+	}
+
+	// Aging report: our invoice is overdue, ~45 days, in the 31-60 bucket.
+	ag := do(t, h, http.MethodGet, "/admin/invoices/aging", tok, nil)
+	if ag.Code != http.StatusOK {
+		t.Fatalf("aging: %d (%s)", ag.Code, ag.Body.String())
+	}
+	var rep struct {
+		Buckets map[string]string `json:"buckets"`
+		Items   []struct {
+			PublicID    string `json:"public_id"`
+			Status      string `json:"status"`
+			DaysOverdue int    `json:"days_overdue"`
+			Bucket      string `json:"bucket"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(ag.Body.Bytes(), &rep)
+	var found bool
+	for _, it := range rep.Items {
+		if it.PublicID == pid {
+			found = true
+			if it.Status != "overdue" || it.Bucket != "31-60" || it.DaysOverdue < 44 || it.DaysOverdue > 46 {
+				t.Errorf("aged invoice: want overdue/31-60/~45d, got %s/%s/%d", it.Status, it.Bucket, it.DaysOverdue)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("invoice %s not in aging report", pid)
+	}
+	if c, _ := moneyCmp(rep.Buckets["31-60"], "100.0000"); c < 0 {
+		t.Errorf("31-60 bucket should be >= 100.0000, got %s", rep.Buckets["31-60"])
+	}
+}
+
+func moneyCmp(a, b string) (int, error) { return money.Cmp(a, b) }

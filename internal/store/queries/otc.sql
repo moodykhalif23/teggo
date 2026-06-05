@@ -140,3 +140,30 @@ FROM payments WHERE invoice_id = $1 AND status = 'captured';
 -- name: GetCustomerBilling :one
 SELECT id, organization_id, payment_terms_days, credit_limit
 FROM customers WHERE id = $1 AND deleted_at IS NULL;
+
+-- ===== AR aging & dunning (revenue ops) ====================================
+
+-- MarkOverdueInvoicesGlobal flips every past-due 'issued' invoice to 'overdue'
+-- across all orgs — driven by the scheduled mark_overdue automation action.
+-- name: MarkOverdueInvoicesGlobal :many
+UPDATE invoices SET status = 'overdue', updated_at = now()
+WHERE status = 'issued' AND due_at IS NOT NULL AND due_at < now()
+RETURNING id, public_id, customer_id, grand_total, currency, due_at;
+
+-- MarkOverdueInvoicesForOrg is the org-scoped variant used by the admin
+-- manual "run sweep" action.
+-- name: MarkOverdueInvoicesForOrg :many
+UPDATE invoices i SET status = 'overdue', updated_at = now()
+FROM customers c
+WHERE i.customer_id = c.id AND c.organization_id = $1
+  AND i.status = 'issued' AND i.due_at IS NOT NULL AND i.due_at < now()
+RETURNING i.id, i.public_id, i.customer_id, i.grand_total, i.currency, i.due_at;
+
+-- ListOpenInvoicesForOrg returns the org's unpaid (issued/overdue) invoices for
+-- the AR-aging report.
+-- name: ListOpenInvoicesForOrg :many
+SELECT i.id, i.public_id, i.customer_id, i.status, i.grand_total, i.currency, i.due_at, i.issued_at
+FROM invoices i
+JOIN customers c ON c.id = i.customer_id
+WHERE c.organization_id = $1 AND i.status IN ('issued', 'overdue')
+ORDER BY i.due_at NULLS LAST, i.id;

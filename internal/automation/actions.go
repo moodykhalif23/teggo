@@ -133,3 +133,41 @@ func (a ExpireQuotes) Run(ctx context.Context, _, _ map[string]any) error {
 	}
 	return nil
 }
+
+// MarkOverdue is the `mark_overdue` action (revenue ops / dunning): it flips
+// every past-due issued invoice to 'overdue' and dunns the customer's primary
+// contact. Wired to a schedule.hourly/daily automation rule, like expire_quotes.
+type MarkOverdue struct {
+	pool  *pgxpool.Pool
+	email EmailEnqueuer
+}
+
+func NewMarkOverdue(pool *pgxpool.Pool, email EmailEnqueuer) MarkOverdue {
+	return MarkOverdue{pool: pool, email: email}
+}
+
+func (MarkOverdue) Key() string { return "mark_overdue" }
+
+func (a MarkOverdue) Run(ctx context.Context, _, _ map[string]any) error {
+	q := gen.New(a.pool)
+	invoices, err := q.MarkOverdueInvoicesGlobal(ctx)
+	if err != nil {
+		return err
+	}
+	for _, inv := range invoices {
+		if a.email == nil {
+			continue
+		}
+		users, err := q.ListCustomerUsers(ctx, inv.CustomerID)
+		if err != nil || len(users) == 0 {
+			continue
+		}
+		_ = a.email.EnqueueEmail(ctx, users[0].Email, "invoice_overdue", map[string]any{
+			"name":           users[0].FullName,
+			"invoice_number": "INV-" + inv.PublicID.String()[:8],
+			"amount":         inv.GrandTotal,
+			"currency":       inv.Currency,
+		})
+	}
+	return nil
+}

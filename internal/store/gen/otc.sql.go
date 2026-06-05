@@ -642,6 +642,56 @@ func (q *Queries) ListInvoicesForOrder(ctx context.Context, orderID int64) ([]In
 	return items, nil
 }
 
+const listOpenInvoicesForOrg = `-- name: ListOpenInvoicesForOrg :many
+SELECT i.id, i.public_id, i.customer_id, i.status, i.grand_total, i.currency, i.due_at, i.issued_at
+FROM invoices i
+JOIN customers c ON c.id = i.customer_id
+WHERE c.organization_id = $1 AND i.status IN ('issued', 'overdue')
+ORDER BY i.due_at NULLS LAST, i.id
+`
+
+type ListOpenInvoicesForOrgRow struct {
+	ID         int64              `json:"id"`
+	PublicID   uuid.UUID          `json:"public_id"`
+	CustomerID int64              `json:"customer_id"`
+	Status     string             `json:"status"`
+	GrandTotal string             `json:"grand_total"`
+	Currency   string             `json:"currency"`
+	DueAt      pgtype.Timestamptz `json:"due_at"`
+	IssuedAt   pgtype.Timestamptz `json:"issued_at"`
+}
+
+// ListOpenInvoicesForOrg returns the org's unpaid (issued/overdue) invoices for
+// the AR-aging report.
+func (q *Queries) ListOpenInvoicesForOrg(ctx context.Context, organizationID int64) ([]ListOpenInvoicesForOrgRow, error) {
+	rows, err := q.db.Query(ctx, listOpenInvoicesForOrg, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenInvoicesForOrgRow
+	for rows.Next() {
+		var i ListOpenInvoicesForOrgRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.CustomerID,
+			&i.Status,
+			&i.GrandTotal,
+			&i.Currency,
+			&i.DueAt,
+			&i.IssuedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentsForInvoice = `-- name: ListPaymentsForInvoice :many
 SELECT id, public_id, invoice_id, order_id, customer_id, method, gateway, gateway_reference, amount, currency, status, captured_at, created_at, updated_at FROM payments WHERE invoice_id = $1 ORDER BY created_at
 `
@@ -734,6 +784,98 @@ func (q *Queries) ListShipmentsForOrder(ctx context.Context, orderID int64) ([]S
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.WarehouseID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markOverdueInvoicesForOrg = `-- name: MarkOverdueInvoicesForOrg :many
+UPDATE invoices i SET status = 'overdue', updated_at = now()
+FROM customers c
+WHERE i.customer_id = c.id AND c.organization_id = $1
+  AND i.status = 'issued' AND i.due_at IS NOT NULL AND i.due_at < now()
+RETURNING i.id, i.public_id, i.customer_id, i.grand_total, i.currency, i.due_at
+`
+
+type MarkOverdueInvoicesForOrgRow struct {
+	ID         int64              `json:"id"`
+	PublicID   uuid.UUID          `json:"public_id"`
+	CustomerID int64              `json:"customer_id"`
+	GrandTotal string             `json:"grand_total"`
+	Currency   string             `json:"currency"`
+	DueAt      pgtype.Timestamptz `json:"due_at"`
+}
+
+// MarkOverdueInvoicesForOrg is the org-scoped variant used by the admin
+// manual "run sweep" action.
+func (q *Queries) MarkOverdueInvoicesForOrg(ctx context.Context, organizationID int64) ([]MarkOverdueInvoicesForOrgRow, error) {
+	rows, err := q.db.Query(ctx, markOverdueInvoicesForOrg, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MarkOverdueInvoicesForOrgRow
+	for rows.Next() {
+		var i MarkOverdueInvoicesForOrgRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.CustomerID,
+			&i.GrandTotal,
+			&i.Currency,
+			&i.DueAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markOverdueInvoicesGlobal = `-- name: MarkOverdueInvoicesGlobal :many
+
+UPDATE invoices SET status = 'overdue', updated_at = now()
+WHERE status = 'issued' AND due_at IS NOT NULL AND due_at < now()
+RETURNING id, public_id, customer_id, grand_total, currency, due_at
+`
+
+type MarkOverdueInvoicesGlobalRow struct {
+	ID         int64              `json:"id"`
+	PublicID   uuid.UUID          `json:"public_id"`
+	CustomerID int64              `json:"customer_id"`
+	GrandTotal string             `json:"grand_total"`
+	Currency   string             `json:"currency"`
+	DueAt      pgtype.Timestamptz `json:"due_at"`
+}
+
+// ===== AR aging & dunning (revenue ops) ====================================
+// MarkOverdueInvoicesGlobal flips every past-due 'issued' invoice to 'overdue'
+// across all orgs — driven by the scheduled mark_overdue automation action.
+func (q *Queries) MarkOverdueInvoicesGlobal(ctx context.Context) ([]MarkOverdueInvoicesGlobalRow, error) {
+	rows, err := q.db.Query(ctx, markOverdueInvoicesGlobal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MarkOverdueInvoicesGlobalRow
+	for rows.Next() {
+		var i MarkOverdueInvoicesGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.CustomerID,
+			&i.GrandTotal,
+			&i.Currency,
+			&i.DueAt,
 		); err != nil {
 			return nil, err
 		}
