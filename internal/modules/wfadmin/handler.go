@@ -35,6 +35,10 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		ar.With(mw.RequirePermission("workflow.view")).Get("/admin/automation-rules", h.listRules)
 		ar.With(mw.RequirePermission("workflow.manage")).Post("/admin/automation-rules", h.createRule)
 		ar.With(mw.RequirePermission("workflow.manage")).Patch("/admin/automation-rules/{id}", h.updateRule)
+
+		ar.With(mw.RequirePermission("workflow.view")).Get("/admin/approval-routing-rules", h.listApprovalRules)
+		ar.With(mw.RequirePermission("workflow.manage")).Post("/admin/approval-routing-rules", h.createApprovalRule)
+		ar.With(mw.RequirePermission("workflow.manage")).Delete("/admin/approval-routing-rules/{id}", h.deleteApprovalRule)
 	})
 }
 

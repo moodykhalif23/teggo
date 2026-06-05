@@ -29,6 +29,16 @@ type Activity struct {
 	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
+type ApprovalRoutingRule struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	MinAmount      string    `json:"min_amount"`
+	MaxAmount      *string   `json:"max_amount"`
+	RequiredRole   string    `json:"required_role"`
+	SortOrder      int32     `json:"sort_order"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type Attribute struct {
 	ID             int64  `json:"id"`
 	OrganizationID int64  `json:"organization_id"`

@@ -153,6 +153,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'workflow.view' },
       },
       {
+        path: 'approval-routing',
+        name: 'approval-routing',
+        component: () => import('@/views/workflow/ApprovalRoutingView.vue'),
+        meta: { permission: 'workflow.view' },
+      },
+      {
         path: 'pages',
         name: 'pages',
         component: () => import('@/views/cms/PagesView.vue'),

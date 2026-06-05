@@ -6,6 +6,7 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"b2bcommerce/internal/auth"
+	"b2bcommerce/internal/money"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
@@ -359,6 +361,20 @@ func (h *Handler) decideOrder(w http.ResponseWriter, r *http.Request, toStatus, 
 	if !ok {
 		return
 	}
+	// Tiered approval routing: APPROVING (releasing) an order must be done by an
+	// approver whose role meets the tier the order's amount falls into. Rejecting
+	// needs no tier check. With no tiers configured, any approver/admin passes.
+	if toStatus == "pending" {
+		need, err := h.requiredRoleRank(r.Context(), p.orgID, order.GrandTotal)
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not evaluate approval routing")
+			return
+		}
+		if need > 0 && roleRank(approver.Role) < need {
+			response.Fail(w, http.StatusForbidden, "forbidden", "this order's amount requires a higher approver role")
+			return
+		}
+	}
 	updated, err := h.q.SetOrderStatus(r.Context(), gen.SetOrderStatusParams{ID: order.ID, Status: toStatus})
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not update order")
@@ -374,6 +390,42 @@ func (h *Handler) decideOrder(w http.ResponseWriter, r *http.Request, toStatus, 
 		return
 	}
 	response.JSON(w, http.StatusOK, map[string]any{"public_id": updated.PublicID.String(), "status": updated.Status})
+}
+
+// roleRank orders the customer-user roles for "at least this role" checks.
+func roleRank(role string) int {
+	switch role {
+	case "admin":
+		return 3
+	case "approver":
+		return 2
+	default:
+		return 1
+	}
+}
+
+// requiredRoleRank returns the highest approver role rank required by any
+// configured routing tier the amount falls into (0 = no tier applies).
+func (h *Handler) requiredRoleRank(ctx context.Context, orgID int64, amount string) (int, error) {
+	rules, err := h.q.ListApprovalRoutingRules(ctx, orgID)
+	if err != nil {
+		return 0, err
+	}
+	need := 0
+	for _, rule := range rules {
+		if c, err := money.Cmp(amount, rule.MinAmount); err != nil || c < 0 {
+			continue // below this tier's floor
+		}
+		if rule.MaxAmount != nil {
+			if c, err := money.Cmp(amount, *rule.MaxAmount); err != nil || c > 0 {
+				continue // above this tier's ceiling
+			}
+		}
+		if r := roleRank(rule.RequiredRole); r > need {
+			need = r
+		}
+	}
+	return need, nil
 }
 
 func (h *Handler) approveOrder(w http.ResponseWriter, r *http.Request) {

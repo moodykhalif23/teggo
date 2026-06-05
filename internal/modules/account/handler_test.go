@@ -80,13 +80,17 @@ func addUser(t *testing.T, pool *pgxpool.Pool, customerID int64, email, fullName
 // seedHeldOrder creates an order in on_hold status (awaiting approval) for a
 // company, placed by the given customer-user.
 func seedHeldOrder(t *testing.T, pool *pgxpool.Pool, customerID int64, placedBy *int64) gen.Order {
+	return seedHeldOrderAmount(t, pool, customerID, placedBy, "1000")
+}
+
+func seedHeldOrderAmount(t *testing.T, pool *pgxpool.Pool, customerID int64, placedBy *int64, amount string) gen.Order {
 	t.Helper()
 	q := gen.New(pool)
 	ctx := context.Background()
 	o, err := q.CreateOrder(ctx, gen.CreateOrderParams{
 		OrganizationID: 1, WebsiteID: 1, CustomerID: customerID, CustomerUserID: placedBy, Currency: "USD",
 		BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"),
-		Subtotal: "1000", TaxTotal: "0", ShippingTotal: "0", GrandTotal: "1000",
+		Subtotal: amount, TaxTotal: "0", ShippingTotal: "0", GrandTotal: amount,
 	})
 	if err != nil {
 		t.Fatalf("create order: %v", err)
@@ -341,6 +345,41 @@ func TestApprovalAuthorizationAndSeparationOfDuties(t *testing.T) {
 	o := seedHeldOrder(t, pool, custID, nil)
 	if rr := do(t, h, http.MethodPost, "/storefront/account/approvals/"+o.PublicID.String()+"/approve", betaTok, nil); rr.Code != http.StatusNotFound {
 		t.Errorf("foreign approve: want 404, got %d", rr.Code)
+	}
+}
+
+func TestApprovalRoutingTierRequiresHigherRole(t *testing.T) {
+	h, pool := newServer(t)
+	custID := seedCustomer(t, pool, "acme", "buyer@acme.test")
+	buyerID := addUser(t, pool, custID, "junior@acme.test", "Junior", "buyer")
+	addUser(t, pool, custID, "approver@acme.test", "Approver", "approver")
+	addUser(t, pool, custID, "admin@acme.test", "Admin", "admin")
+
+	// Org tier: orders >= 500 require an admin to release.
+	max := (*string)(nil)
+	if _, err := gen.New(pool).CreateApprovalRoutingRule(context.Background(), gen.CreateApprovalRoutingRuleParams{
+		OrganizationID: 1, MinAmount: "500", MaxAmount: max, RequiredRole: "admin", SortOrder: 0,
+	}); err != nil {
+		t.Fatalf("routing rule: %v", err)
+	}
+
+	approverTok := login(t, h, "approver@acme.test")
+	adminTok := login(t, h, "admin@acme.test")
+
+	// A 1000 order is in the admin tier — an approver may NOT release it.
+	big := seedHeldOrderAmount(t, pool, custID, &buyerID, "1000")
+	if rr := do(t, h, http.MethodPost, "/storefront/account/approvals/"+big.PublicID.String()+"/approve", approverTok, nil); rr.Code != http.StatusForbidden {
+		t.Errorf("approver on admin-tier order: want 403, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	// But an admin can.
+	if rr := do(t, h, http.MethodPost, "/storefront/account/approvals/"+big.PublicID.String()+"/approve", adminTok, nil); rr.Code != http.StatusOK {
+		t.Errorf("admin on admin-tier order: want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	// A 100 order is below the tier — an approver may release it (fallback).
+	small := seedHeldOrderAmount(t, pool, custID, &buyerID, "100")
+	if rr := do(t, h, http.MethodPost, "/storefront/account/approvals/"+small.PublicID.String()+"/approve", approverTok, nil); rr.Code != http.StatusOK {
+		t.Errorf("approver on sub-tier order: want 200, got %d (%s)", rr.Code, rr.Body.String())
 	}
 }
 

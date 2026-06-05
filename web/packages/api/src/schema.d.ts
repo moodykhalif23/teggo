@@ -1632,6 +1632,40 @@ export interface paths {
         patch: operations["adminUpdateTransitionConfig"];
         trace?: never;
     };
+    "/admin/approval-routing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListApprovalRoutingRules"];
+        put?: never;
+        post: operations["adminCreateApprovalRoutingRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/approval-routing-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteApprovalRoutingRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/automation-rules": {
         parameters: {
             query?: never;
@@ -3797,6 +3831,27 @@ export interface components {
                 [key: string]: unknown;
             }[];
             is_active: boolean;
+        };
+        ApprovalRoutingRule: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            organization_id?: number;
+            min_amount: string;
+            max_amount?: string | null;
+            /** @enum {string} */
+            required_role: "approver" | "admin";
+            sort_order?: number;
+        };
+        ApprovalRoutingRuleInput: {
+            min_amount?: string;
+            max_amount?: string | null;
+            /** @enum {string} */
+            required_role: "approver" | "admin";
+            sort_order?: number;
+        };
+        ListWrapperApprovalRoutingRule: {
+            items?: components["schemas"]["ApprovalRoutingRule"][];
         };
         AutomationRuleInput: {
             name: string;
@@ -7526,6 +7581,72 @@ export interface operations {
                 };
             };
             400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListApprovalRoutingRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperApprovalRoutingRule"];
+                };
+            };
+        };
+    };
+    adminCreateApprovalRoutingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRoutingRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRoutingRule"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteApprovalRoutingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             404: components["responses"]["ErrorResponse"];
         };
     };

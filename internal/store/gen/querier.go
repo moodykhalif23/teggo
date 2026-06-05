@@ -46,6 +46,7 @@ type Querier interface {
 	CountTransitionLog(ctx context.Context, instanceID int64) (int64, error)
 	// ===== Activities ==========================================================
 	CreateActivity(ctx context.Context, arg CreateActivityParams) (Activity, error)
+	CreateApprovalRoutingRule(ctx context.Context, arg CreateApprovalRoutingRuleParams) (ApprovalRoutingRule, error)
 	// ===== Attributes & families ==============================================
 	CreateAttribute(ctx context.Context, arg CreateAttributeParams) (Attribute, error)
 	CreateAttributeFamily(ctx context.Context, arg CreateAttributeFamilyParams) (AttributeFamily, error)
@@ -164,6 +165,7 @@ type Querier interface {
 	// DailySales returns the daily revenue/order series within a date range
 	// (aggregated across currencies for the dashboard line chart).
 	DailySales(ctx context.Context, arg DailySalesParams) ([]DailySalesRow, error)
+	DeleteApprovalRoutingRule(ctx context.Context, arg DeleteApprovalRoutingRuleParams) (int64, error)
 	DeleteAssignment(ctx context.Context, id int64) (int64, error)
 	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
@@ -336,6 +338,8 @@ type Querier interface {
 	// ListActiveProductsInCategory returns active products in a category's whole
 	// subtree (storefront browse, §12.3). $1 org, $2 root category, $3 limit, $4 offset.
 	ListActiveProductsInCategory(ctx context.Context, arg ListActiveProductsInCategoryParams) ([]ListActiveProductsInCategoryRow, error)
+	// Approval routing rules (migration 0033).
+	ListApprovalRoutingRules(ctx context.Context, organizationID int64) ([]ApprovalRoutingRule, error)
 	ListAssignmentsForList(ctx context.Context, priceListID int64) ([]PriceListAssignment, error)
 	ListAttributeFamilies(ctx context.Context, organizationID int64) ([]AttributeFamily, error)
 	ListAttributes(ctx context.Context, organizationID int64) ([]Attribute, error)

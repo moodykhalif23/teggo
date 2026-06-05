@@ -212,3 +212,50 @@ func TestWorkflowAdminAuth(t *testing.T) {
 		t.Errorf("storefront token: want 403, got %d", rr.Code)
 	}
 }
+
+// ---- approval routing rules ----------------------------------------------
+
+func TestApprovalRoutingRuleCRUD(t *testing.T) {
+	h, issuer, _ := newServer(t)
+	tok := tokenWith(t, issuer, "workflow.view", "workflow.manage")
+
+	// Create a tier: orders >= 1000 require an admin.
+	cr := do(t, h, http.MethodPost, "/admin/approval-routing-rules", tok, map[string]any{
+		"min_amount": "1000", "required_role": "admin", "sort_order": 1,
+	})
+	if cr.Code != http.StatusCreated {
+		t.Fatalf("create rule: want 201, got %d (%s)", cr.Code, cr.Body.String())
+	}
+	var rule struct {
+		ID int64 `json:"id"`
+	}
+	decode(t, cr, &rule)
+
+	// Bad role is rejected.
+	if bad := do(t, h, http.MethodPost, "/admin/approval-routing-rules", tok, map[string]any{
+		"min_amount": "0", "required_role": "buyer",
+	}); bad.Code != http.StatusBadRequest {
+		t.Errorf("bad role: want 400, got %d", bad.Code)
+	}
+
+	// List shows the rule.
+	lr := do(t, h, http.MethodGet, "/admin/approval-routing-rules", tok, nil)
+	var resp struct {
+		Items []struct {
+			ID           int64  `json:"id"`
+			RequiredRole string `json:"required_role"`
+		} `json:"items"`
+	}
+	decode(t, lr, &resp)
+	if len(resp.Items) != 1 || resp.Items[0].RequiredRole != "admin" {
+		t.Fatalf("list rules: want 1 admin tier, got %+v", resp.Items)
+	}
+
+	// Delete it.
+	if del := do(t, h, http.MethodDelete, "/admin/approval-routing-rules/"+strconv.FormatInt(rule.ID, 10), tok, nil); del.Code != http.StatusNoContent {
+		t.Fatalf("delete rule: want 204, got %d", del.Code)
+	}
+	if del2 := do(t, h, http.MethodDelete, "/admin/approval-routing-rules/"+strconv.FormatInt(rule.ID, 10), tok, nil); del2.Code != http.StatusNotFound {
+		t.Errorf("re-delete: want 404, got %d", del2.Code)
+	}
+}

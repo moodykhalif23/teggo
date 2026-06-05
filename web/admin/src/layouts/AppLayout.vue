@@ -86,6 +86,7 @@ const groups: NavGroup[] = [
     items: [
       { label: 'Workflows', icon: 'pi pi-sitemap', routeName: 'workflows', permission: 'workflow.view' },
       { label: 'Automation rules', icon: 'pi pi-bolt', routeName: 'automation-rules', permission: 'workflow.view' },
+      { label: 'Approval routing', icon: 'pi pi-check-circle', routeName: 'approval-routing', permission: 'workflow.view' },
     ],
   },
   {
