@@ -171,3 +171,94 @@ func (a MarkOverdue) Run(ctx context.Context, _, _ map[string]any) error {
 	}
 	return nil
 }
+
+// paramInt reads an integer action param with a default (JSON numbers decode as
+// float64).
+func paramInt(params map[string]any, key string, def int) int {
+	if params != nil {
+		if v, ok := params[key]; ok {
+			switch t := v.(type) {
+			case float64: // JSON number
+				return int(t)
+			case string: // the admin rule builder stores params as strings
+				if n, err := strconv.Atoi(t); err == nil {
+					return n
+				}
+			}
+		}
+	}
+	return def
+}
+
+// QuoteFollowup is the `quote_followup` action: nudge buyers about 'sent' quotes
+// expiring within `within_days` (default 3), once per quote.
+type QuoteFollowup struct {
+	pool  *pgxpool.Pool
+	email EmailEnqueuer
+}
+
+func NewQuoteFollowup(pool *pgxpool.Pool, email EmailEnqueuer) QuoteFollowup {
+	return QuoteFollowup{pool: pool, email: email}
+}
+
+func (QuoteFollowup) Key() string { return "quote_followup" }
+
+func (a QuoteFollowup) Run(ctx context.Context, params, _ map[string]any) error {
+	q := gen.New(a.pool)
+	withinDays := paramInt(params, "within_days", 3)
+	cutoff := pgtype.Timestamptz{Time: time.Now().Add(time.Duration(withinDays) * 24 * time.Hour), Valid: true}
+	quotes, err := q.ListQuotesForFollowup(ctx, cutoff)
+	if err != nil {
+		return err
+	}
+	for _, qt := range quotes {
+		if a.email != nil {
+			if users, err := q.ListCustomerUsers(ctx, qt.CustomerID); err == nil && len(users) > 0 {
+				_ = a.email.EnqueueEmail(ctx, users[0].Email, "quote_followup", map[string]any{
+					"name":         users[0].FullName,
+					"quote_number": "Q-" + qt.PublicID.String()[:8],
+				})
+			}
+		}
+		if err := q.MarkQuoteFollowedUp(ctx, qt.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CartRecovery is the `cart_recovery` action: nudge buyers about active carts
+// idle longer than `idle_hours` (default 24), once per idle episode.
+type CartRecovery struct {
+	pool  *pgxpool.Pool
+	email EmailEnqueuer
+}
+
+func NewCartRecovery(pool *pgxpool.Pool, email EmailEnqueuer) CartRecovery {
+	return CartRecovery{pool: pool, email: email}
+}
+
+func (CartRecovery) Key() string { return "cart_recovery" }
+
+func (a CartRecovery) Run(ctx context.Context, params, _ map[string]any) error {
+	q := gen.New(a.pool)
+	idleHours := paramInt(params, "idle_hours", 24)
+	cutoff := time.Now().Add(-time.Duration(idleHours) * time.Hour)
+	carts, err := q.ListAbandonedCarts(ctx, cutoff)
+	if err != nil {
+		return err
+	}
+	for _, c := range carts {
+		if a.email != nil {
+			if users, err := q.ListCustomerUsers(ctx, c.CustomerID); err == nil && len(users) > 0 {
+				_ = a.email.EnqueueEmail(ctx, users[0].Email, "cart_recovery", map[string]any{
+					"name": users[0].FullName,
+				})
+			}
+		}
+		if err := q.MarkCartReminded(ctx, c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}

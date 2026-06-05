@@ -158,7 +158,7 @@ func (q *Queries) ListAutomationRulesByEvent(ctx context.Context, triggerEvent s
 }
 
 const listExpirableQuotes = `-- name: ListExpirableQuotes :many
-SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at FROM quotes
+SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at FROM quotes
 WHERE status IN ('sent', 'revised')
   AND valid_until IS NOT NULL
   AND valid_until < $1
@@ -191,6 +191,7 @@ func (q *Queries) ListExpirableQuotes(ctx context.Context, validUntil pgtype.Tim
 			&i.Subtotal,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FollowupAt,
 		); err != nil {
 			return nil, err
 		}

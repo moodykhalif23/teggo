@@ -7,12 +7,15 @@ package gen
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 const createCart = `-- name: CreateCart :one
 INSERT INTO carts (customer_id, customer_user_id, website_id, currency, status)
 VALUES ($1, $2, $3, $4, 'active')
-RETURNING id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at
+RETURNING id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at
 `
 
 type CreateCartParams struct {
@@ -40,6 +43,7 @@ func (q *Queries) CreateCart(ctx context.Context, arg CreateCartParams) (Cart, e
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RemindedAt,
 	)
 	return i, err
 }
@@ -133,7 +137,7 @@ func (q *Queries) DeleteShoppingListItem(ctx context.Context, arg DeleteShopping
 const getActiveCart = `-- name: GetActiveCart :one
 
 
-SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at FROM carts
+SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at FROM carts
 WHERE customer_id = $1 AND website_id = $2 AND status = 'active'
 `
 
@@ -157,12 +161,13 @@ func (q *Queries) GetActiveCart(ctx context.Context, arg GetActiveCartParams) (C
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RemindedAt,
 	)
 	return i, err
 }
 
 const getCartByID = `-- name: GetCartByID :one
-SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at FROM carts WHERE id = $1
+SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at FROM carts WHERE id = $1
 `
 
 func (q *Queries) GetCartByID(ctx context.Context, id int64) (Cart, error) {
@@ -178,6 +183,7 @@ func (q *Queries) GetCartByID(ctx context.Context, id int64) (Cart, error) {
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RemindedAt,
 	)
 	return i, err
 }
@@ -227,6 +233,41 @@ func (q *Queries) GetShoppingList(ctx context.Context, arg GetShoppingListParams
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listAbandonedCarts = `-- name: ListAbandonedCarts :many
+SELECT c.id, c.public_id, c.customer_id FROM carts c
+WHERE c.status = 'active' AND c.updated_at < $1
+  AND (c.reminded_at IS NULL OR c.reminded_at < c.updated_at)
+  AND EXISTS (SELECT 1 FROM cart_items ci WHERE ci.cart_id = c.id)
+`
+
+type ListAbandonedCartsRow struct {
+	ID         int64     `json:"id"`
+	PublicID   uuid.UUID `json:"public_id"`
+	CustomerID int64     `json:"customer_id"`
+}
+
+// ListAbandonedCarts returns active carts with items that have gone idle past
+// the cutoff and weren't reminded since their last change. $1 = idle cutoff.
+func (q *Queries) ListAbandonedCarts(ctx context.Context, updatedAt time.Time) ([]ListAbandonedCartsRow, error) {
+	rows, err := q.db.Query(ctx, listAbandonedCarts, updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAbandonedCartsRow
+	for rows.Next() {
+		var i ListAbandonedCartsRow
+		if err := rows.Scan(&i.ID, &i.PublicID, &i.CustomerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCartItems = `-- name: ListCartItems :many
@@ -357,6 +398,15 @@ UPDATE carts SET status = 'converted' WHERE id = $1
 
 func (q *Queries) MarkCartConverted(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, markCartConverted, id)
+	return err
+}
+
+const markCartReminded = `-- name: MarkCartReminded :exec
+UPDATE carts SET reminded_at = now() WHERE id = $1
+`
+
+func (q *Queries) MarkCartReminded(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, markCartReminded, id)
 	return err
 }
 

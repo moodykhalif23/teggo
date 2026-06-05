@@ -84,15 +84,16 @@ type AutomationRule struct {
 }
 
 type Cart struct {
-	ID             int64     `json:"id"`
-	PublicID       uuid.UUID `json:"public_id"`
-	CustomerID     int64     `json:"customer_id"`
-	CustomerUserID *int64    `json:"customer_user_id"`
-	WebsiteID      int64     `json:"website_id"`
-	Currency       string    `json:"currency"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             int64              `json:"id"`
+	PublicID       uuid.UUID          `json:"public_id"`
+	CustomerID     int64              `json:"customer_id"`
+	CustomerUserID *int64             `json:"customer_user_id"`
+	WebsiteID      int64              `json:"website_id"`
+	Currency       string             `json:"currency"`
+	Status         string             `json:"status"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+	RemindedAt     pgtype.Timestamptz `json:"reminded_at"`
 }
 
 type CartItem struct {
@@ -718,6 +719,7 @@ type Quote struct {
 	Subtotal       string             `json:"subtotal"`
 	CreatedAt      time.Time          `json:"created_at"`
 	UpdatedAt      time.Time          `json:"updated_at"`
+	FollowupAt     pgtype.Timestamptz `json:"followup_at"`
 }
 
 type QuoteItem struct {

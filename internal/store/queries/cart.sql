@@ -91,3 +91,14 @@ RETURNING *;
 
 -- name: DeleteShoppingList :execrows
 DELETE FROM shopping_lists WHERE id = $1 AND customer_id = $2;
+
+-- ListAbandonedCarts returns active carts with items that have gone idle past
+-- the cutoff and weren't reminded since their last change. $1 = idle cutoff.
+-- name: ListAbandonedCarts :many
+SELECT c.id, c.public_id, c.customer_id FROM carts c
+WHERE c.status = 'active' AND c.updated_at < $1
+  AND (c.reminded_at IS NULL OR c.reminded_at < c.updated_at)
+  AND EXISTS (SELECT 1 FROM cart_items ci WHERE ci.cart_id = c.id);
+
+-- name: MarkCartReminded :exec
+UPDATE carts SET reminded_at = now() WHERE id = $1;

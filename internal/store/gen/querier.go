@@ -6,6 +6,7 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -343,6 +344,9 @@ type Querier interface {
 	// a product or to any category the product belongs to. With cust+grp both null
 	// (anonymous) it returns nothing — the default catalog is fully visible.
 	HiddenProductIDsForCustomer(ctx context.Context, arg HiddenProductIDsForCustomerParams) ([]int64, error)
+	// ListAbandonedCarts returns active carts with items that have gone idle past
+	// the cutoff and weren't reminded since their last change. $1 = idle cutoff.
+	ListAbandonedCarts(ctx context.Context, updatedAt time.Time) ([]ListAbandonedCartsRow, error)
 	// ListActiveIntegrationConnections (all orgs) drives the periodic sweep.
 	ListActiveIntegrationConnections(ctx context.Context) ([]IntegrationConnection, error)
 	// Price adjustment rules (migration 0035).
@@ -433,6 +437,9 @@ type Querier interface {
 	ListQuoteRevisions(ctx context.Context, quoteID int64) ([]ListQuoteRevisionsRow, error)
 	ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams) ([]Quote, error)
 	ListQuotesForCustomer(ctx context.Context, customerID int64) ([]Quote, error)
+	// ListQuotesForFollowup returns 'sent' quotes expiring within the cutoff that
+	// haven't been followed up yet (one nudge per quote). $1 = cutoff timestamp.
+	ListQuotesForFollowup(ctx context.Context, validUntil pgtype.Timestamptz) ([]ListQuotesForFollowupRow, error)
 	ListRFQItems(ctx context.Context, rfqID int64) ([]ListRFQItemsRow, error)
 	ListRFQsAdmin(ctx context.Context, arg ListRFQsAdminParams) ([]Rfq, error)
 	ListRFQsForCustomer(ctx context.Context, customerID int64) ([]Rfq, error)
@@ -462,6 +469,7 @@ type Querier interface {
 	ListWorkflowStates(ctx context.Context, definitionID int64) ([]WorkflowState, error)
 	ListWorkflowTransitions(ctx context.Context, definitionID int64) ([]WorkflowTransition, error)
 	MarkCartConverted(ctx context.Context, id int64) error
+	MarkCartReminded(ctx context.Context, id int64) error
 	// MarkLeadConverted records the conversion result; only converts a not-yet-
 	// converted lead (idempotency guard at the DB level).
 	MarkLeadConverted(ctx context.Context, arg MarkLeadConvertedParams) (Lead, error)
@@ -472,6 +480,7 @@ type Querier interface {
 	// MarkOverdueInvoicesGlobal flips every past-due 'issued' invoice to 'overdue'
 	// across all orgs — driven by the scheduled mark_overdue automation action.
 	MarkOverdueInvoicesGlobal(ctx context.Context) ([]MarkOverdueInvoicesGlobalRow, error)
+	MarkQuoteFollowedUp(ctx context.Context, id int64) error
 	// MaxScopedCursor is the current high-water mark for the rep's scope (used when
 	// a pull returns no rows so the client still advances its cursor).
 	MaxScopedCursor(ctx context.Context, arg MaxScopedCursorParams) (int64, error)

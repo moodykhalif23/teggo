@@ -34,6 +34,8 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 	reg.Register(automation.NewExpireQuotes(pool, enq))
 	reg.Register(automation.NewEmailCustomer(pool, enq))
 	reg.Register(automation.NewMarkOverdue(pool, enq))
+	reg.Register(automation.NewQuoteFollowup(pool, enq))
+	reg.Register(automation.NewCartRecovery(pool, enq))
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &jobs.SendEmailWorker{Sender: sender})

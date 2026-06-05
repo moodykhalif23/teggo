@@ -239,7 +239,7 @@ const createQuote = `-- name: CreateQuote :one
 
 INSERT INTO quotes (organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, currency, valid_until)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at
+RETURNING id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at
 `
 
 type CreateQuoteParams struct {
@@ -279,6 +279,7 @@ func (q *Queries) CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote
 		&i.Subtotal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FollowupAt,
 	)
 	return i, err
 }
@@ -468,7 +469,7 @@ func (q *Queries) GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (O
 }
 
 const getQuoteByID = `-- name: GetQuoteByID :one
-SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at FROM quotes WHERE organization_id = $1 AND id = $2
+SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at FROM quotes WHERE organization_id = $1 AND id = $2
 `
 
 type GetQuoteByIDParams struct {
@@ -494,12 +495,13 @@ func (q *Queries) GetQuoteByID(ctx context.Context, arg GetQuoteByIDParams) (Quo
 		&i.Subtotal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FollowupAt,
 	)
 	return i, err
 }
 
 const getQuoteByPublicID = `-- name: GetQuoteByPublicID :one
-SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at FROM quotes WHERE public_id = $1
+SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at FROM quotes WHERE public_id = $1
 `
 
 func (q *Queries) GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Quote, error) {
@@ -520,6 +522,7 @@ func (q *Queries) GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Q
 		&i.Subtotal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FollowupAt,
 	)
 	return i, err
 }
@@ -887,7 +890,7 @@ func (q *Queries) ListQuoteRevisions(ctx context.Context, quoteID int64) ([]List
 }
 
 const listQuotesAdmin = `-- name: ListQuotesAdmin :many
-SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at FROM quotes WHERE organization_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at FROM quotes WHERE organization_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListQuotesAdminParams struct {
@@ -920,6 +923,7 @@ func (q *Queries) ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams
 			&i.Subtotal,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FollowupAt,
 		); err != nil {
 			return nil, err
 		}
@@ -932,7 +936,7 @@ func (q *Queries) ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams
 }
 
 const listQuotesForCustomer = `-- name: ListQuotesForCustomer :many
-SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at FROM quotes WHERE customer_id = $1 ORDER BY created_at DESC
+SELECT id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at FROM quotes WHERE customer_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListQuotesForCustomer(ctx context.Context, customerID int64) ([]Quote, error) {
@@ -959,7 +963,43 @@ func (q *Queries) ListQuotesForCustomer(ctx context.Context, customerID int64) (
 			&i.Subtotal,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FollowupAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuotesForFollowup = `-- name: ListQuotesForFollowup :many
+SELECT id, public_id, customer_id FROM quotes
+WHERE status = 'sent' AND valid_until IS NOT NULL
+  AND valid_until > now() AND valid_until <= $1
+  AND followup_at IS NULL
+`
+
+type ListQuotesForFollowupRow struct {
+	ID         int64     `json:"id"`
+	PublicID   uuid.UUID `json:"public_id"`
+	CustomerID int64     `json:"customer_id"`
+}
+
+// ListQuotesForFollowup returns 'sent' quotes expiring within the cutoff that
+// haven't been followed up yet (one nudge per quote). $1 = cutoff timestamp.
+func (q *Queries) ListQuotesForFollowup(ctx context.Context, validUntil pgtype.Timestamptz) ([]ListQuotesForFollowupRow, error) {
+	rows, err := q.db.Query(ctx, listQuotesForFollowup, validUntil)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListQuotesForFollowupRow
+	for rows.Next() {
+		var i ListQuotesForFollowupRow
+		if err := rows.Scan(&i.ID, &i.PublicID, &i.CustomerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1094,6 +1134,15 @@ func (q *Queries) ListRFQsForCustomer(ctx context.Context, customerID int64) ([]
 	return items, nil
 }
 
+const markQuoteFollowedUp = `-- name: MarkQuoteFollowedUp :exec
+UPDATE quotes SET followup_at = now() WHERE id = $1
+`
+
+func (q *Queries) MarkQuoteFollowedUp(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, markQuoteFollowedUp, id)
+	return err
+}
+
 const reorderCadence = `-- name: ReorderCadence :many
 SELECT oi.product_id,
        max(p.slug)::text        AS slug,
@@ -1157,7 +1206,7 @@ func (q *Queries) ReorderCadence(ctx context.Context, customerID int64) ([]Reord
 const sendQuote = `-- name: SendQuote :one
 UPDATE quotes SET status = 'sent', version = version + 1, valid_until = COALESCE($2, valid_until)
 WHERE id = $1
-RETURNING id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at
+RETURNING id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at
 `
 
 type SendQuoteParams struct {
@@ -1185,6 +1234,7 @@ func (q *Queries) SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, er
 		&i.Subtotal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FollowupAt,
 	)
 	return i, err
 }
@@ -1227,7 +1277,7 @@ func (q *Queries) SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) 
 }
 
 const setQuoteStatus = `-- name: SetQuoteStatus :one
-UPDATE quotes SET status = $2 WHERE id = $1 RETURNING id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at
+UPDATE quotes SET status = $2 WHERE id = $1 RETURNING id, public_id, organization_id, website_id, customer_id, rfq_id, sales_rep_user_id, status, currency, version, valid_until, subtotal, created_at, updated_at, followup_at
 `
 
 type SetQuoteStatusParams struct {
@@ -1253,6 +1303,7 @@ func (q *Queries) SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) 
 		&i.Subtotal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FollowupAt,
 	)
 	return i, err
 }

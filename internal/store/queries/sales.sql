@@ -164,3 +164,14 @@ JOIN products p ON p.id = oi.product_id
 WHERE o.customer_id = $1 AND o.status <> 'cancelled' AND p.deleted_at IS NULL
 GROUP BY oi.product_id
 HAVING count(DISTINCT o.id) >= 2;
+
+-- ListQuotesForFollowup returns 'sent' quotes expiring within the cutoff that
+-- haven't been followed up yet (one nudge per quote). $1 = cutoff timestamp.
+-- name: ListQuotesForFollowup :many
+SELECT id, public_id, customer_id FROM quotes
+WHERE status = 'sent' AND valid_until IS NOT NULL
+  AND valid_until > now() AND valid_until <= $1
+  AND followup_at IS NULL;
+
+-- name: MarkQuoteFollowedUp :exec
+UPDATE quotes SET followup_at = now() WHERE id = $1;

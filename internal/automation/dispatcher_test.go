@@ -145,3 +145,100 @@ func TestEmailCustomerAction(t *testing.T) {
 		t.Fatalf("want one order_status_update email to the buyer, got %v", mail.sent)
 	}
 }
+
+// countEmail tallies enqueued emails by template.
+type countEmail struct{ byTemplate map[string]int }
+
+func (c *countEmail) EnqueueEmail(_ context.Context, _, template string, _ map[string]any) error {
+	if c.byTemplate == nil {
+		c.byTemplate = map[string]int{}
+	}
+	c.byTemplate[template]++
+	return nil
+}
+
+func TestQuoteFollowupSweep(t *testing.T) {
+	pool := testsupport.NewDB(t)
+	ctx := context.Background()
+	q := gen.New(pool)
+
+	cust, _ := q.CreateCustomer(ctx, gen.CreateCustomerParams{OrganizationID: 1, Name: "Acme", CreditLimit: "0"})
+	_, _ = q.CreateCustomerUser(ctx, gen.CreateCustomerUserParams{CustomerID: cust.ID, Email: "buyer@acme.test", PasswordHash: "x", FullName: "Buyer", Role: "buyer"})
+
+	mk := func(daysOut int) int64 {
+		var id int64
+		_ = pool.QueryRow(ctx,
+			`INSERT INTO quotes (organization_id, website_id, customer_id, status, currency, version, valid_until, subtotal)
+			 VALUES (1, 1, $1, 'sent', 'USD', 1, now() + make_interval(days => $2), '0') RETURNING id`, cust.ID, daysOut).Scan(&id)
+		return id
+	}
+	soon := mk(2)   // within the default 3-day window
+	later := mk(10) // outside it
+
+	mail := &countEmail{}
+	if err := automation.NewQuoteFollowup(pool, mail).Run(ctx, nil, nil); err != nil {
+		t.Fatalf("quote_followup: %v", err)
+	}
+	if mail.byTemplate["quote_followup"] != 1 {
+		t.Fatalf("quote_followup emails: want 1, got %d", mail.byTemplate["quote_followup"])
+	}
+	fu := func(id int64) bool {
+		var set bool
+		_ = pool.QueryRow(ctx, `SELECT followup_at IS NOT NULL FROM quotes WHERE id=$1`, id).Scan(&set)
+		return set
+	}
+	if !fu(soon) || fu(later) {
+		t.Errorf("followup_at: soon should be set, later not (soon=%v later=%v)", fu(soon), fu(later))
+	}
+	// Re-run is a no-op (dedup).
+	mail2 := &countEmail{}
+	_ = automation.NewQuoteFollowup(pool, mail2).Run(ctx, nil, nil)
+	if mail2.byTemplate["quote_followup"] != 0 {
+		t.Errorf("re-run should not re-nudge, got %d", mail2.byTemplate["quote_followup"])
+	}
+}
+
+func TestCartRecoverySweep(t *testing.T) {
+	pool := testsupport.NewDB(t)
+	ctx := context.Background()
+	q := gen.New(pool)
+
+	cust, _ := q.CreateCustomer(ctx, gen.CreateCustomerParams{OrganizationID: 1, Name: "Acme", CreditLimit: "0"})
+	_, _ = q.CreateCustomerUser(ctx, gen.CreateCustomerUserParams{CustomerID: cust.ID, Email: "buyer@acme.test", PasswordHash: "x", FullName: "Buyer", Role: "buyer"})
+	prod, _ := q.CreateProduct(ctx, gen.CreateProductParams{OrganizationID: 1, Sku: "CR-1", Type: "simple", Name: "Cart Widget", Slug: "cr-1", Status: "active", Attributes: []byte("{}"), Unit: "each"})
+
+	mkCart := func(idleDays int) int64 {
+		c, _ := q.CreateCart(ctx, gen.CreateCartParams{CustomerID: cust.ID, WebsiteID: 1, Currency: "USD"})
+		_, _ = q.UpsertCartItem(ctx, gen.UpsertCartItemParams{CartID: c.ID, ProductID: prod.ID, Quantity: "1", Unit: "each", UnitPrice: "10"})
+		if idleDays > 0 {
+			_, _ = pool.Exec(ctx, `ALTER TABLE carts DISABLE TRIGGER trg_carts_updated`)
+			_, _ = pool.Exec(ctx, `UPDATE carts SET updated_at = now() - make_interval(days => $1) WHERE id = $2`, idleDays, c.ID)
+			_, _ = pool.Exec(ctx, `ALTER TABLE carts ENABLE TRIGGER trg_carts_updated`)
+		}
+		return c.ID
+	}
+	stale := mkCart(2) // idle 2 days -> recover (default idle 24h)
+	fresh := mkCart(0) // just touched -> skip
+
+	mail := &countEmail{}
+	if err := automation.NewCartRecovery(pool, mail).Run(ctx, nil, nil); err != nil {
+		t.Fatalf("cart_recovery: %v", err)
+	}
+	if mail.byTemplate["cart_recovery"] != 1 {
+		t.Fatalf("cart_recovery emails: want 1, got %d", mail.byTemplate["cart_recovery"])
+	}
+	reminded := func(id int64) bool {
+		var set bool
+		_ = pool.QueryRow(ctx, `SELECT reminded_at IS NOT NULL FROM carts WHERE id=$1`, id).Scan(&set)
+		return set
+	}
+	if !reminded(stale) || reminded(fresh) {
+		t.Errorf("reminded_at: stale set, fresh not (stale=%v fresh=%v)", reminded(stale), reminded(fresh))
+	}
+	// Re-run is a no-op (reminded_at >= updated_at).
+	mail2 := &countEmail{}
+	_ = automation.NewCartRecovery(pool, mail2).Run(ctx, nil, nil)
+	if mail2.byTemplate["cart_recovery"] != 0 {
+		t.Errorf("re-run should not re-remind, got %d", mail2.byTemplate["cart_recovery"])
+	}
+}

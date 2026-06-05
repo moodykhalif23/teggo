@@ -33,6 +33,9 @@ interface ActionDef { key: string; label: string; params: { name: string; label:
 const ACTION_CATALOG: ActionDef[] = [
   { key: 'email_customer', label: 'Email the customer', params: [{ name: 'template', label: 'Email template', placeholder: 'order_status_update' }] },
   { key: 'expire_quotes', label: 'Expire stale quotes', params: [] },
+  { key: 'mark_overdue', label: 'Mark invoices overdue + dun', params: [] },
+  { key: 'quote_followup', label: 'Follow up on expiring quotes', params: [{ name: 'within_days', label: 'Days before expiry', placeholder: '3' }] },
+  { key: 'cart_recovery', label: 'Recover abandoned carts', params: [{ name: 'idle_hours', label: 'Idle hours before nudge', placeholder: '24' }] },
 ]
 function actionDef(key: string) {
   return ACTION_CATALOG.find((a) => a.key === key)
