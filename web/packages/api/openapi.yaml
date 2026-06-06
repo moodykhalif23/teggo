@@ -2373,6 +2373,7 @@ components:
         reference: { type: string, nullable: true }
     VendorOrderSummary:
       type: object
+      required: [id, public_id, order_public_id, status, currency, gross_total, net_total]
       properties:
         id: { type: integer, format: int64 }
         public_id: { type: string }
@@ -2391,6 +2392,7 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/VendorOrderSummary' } }
     VendorOrderLine:
       type: object
+      required: [id, sku, name, quantity, unit, unit_price, row_total]
       properties:
         id: { type: integer, format: int64 }
         sku: { type: string }
@@ -2401,6 +2403,7 @@ components:
         row_total: { type: string }
     VendorOrderDetail:
       type: object
+      required: [id, public_id, order_public_id, status, currency, gross_total, commission_rate, commission_total, net_total, items]
       properties:
         id: { type: integer, format: int64 }
         public_id: { type: string }
@@ -2419,6 +2422,7 @@ components:
         status: { type: string, enum: [accepted, shipped, delivered, cancelled] }
     VendorDashboard:
       type: object
+      required: [order_count, gross_total, commission_total, net_total]
       properties:
         order_count: { type: integer, format: int64 }
         gross_total: { type: string }
@@ -2426,6 +2430,7 @@ components:
         net_total: { type: string }
     VendorProduct:
       type: object
+      required: [id, sku, name, approval_status]
       properties:
         id: { type: integer, format: int64 }
         sku: { type: string }

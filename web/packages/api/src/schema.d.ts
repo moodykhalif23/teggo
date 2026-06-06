@@ -5603,15 +5603,15 @@ export interface components {
         };
         VendorOrderSummary: {
             /** Format: int64 */
-            id?: number;
-            public_id?: string;
-            order_public_id?: string;
-            status?: string;
+            id: number;
+            public_id: string;
+            order_public_id: string;
+            status: string;
             order_status?: string;
-            currency?: string;
-            gross_total?: string;
+            currency: string;
+            gross_total: string;
             commission_total?: string;
-            net_total?: string;
+            net_total: string;
             /** Format: int64 */
             payout_id?: number | null;
             created_at?: string;
@@ -5621,26 +5621,26 @@ export interface components {
         };
         VendorOrderLine: {
             /** Format: int64 */
-            id?: number;
-            sku?: string;
-            name?: string;
-            quantity?: string;
-            unit?: string;
-            unit_price?: string;
-            row_total?: string;
+            id: number;
+            sku: string;
+            name: string;
+            quantity: string;
+            unit: string;
+            unit_price: string;
+            row_total: string;
         };
         VendorOrderDetail: {
             /** Format: int64 */
-            id?: number;
-            public_id?: string;
-            order_public_id?: string;
-            status?: string;
-            currency?: string;
-            gross_total?: string;
-            commission_rate?: string;
-            commission_total?: string;
-            net_total?: string;
-            items?: components["schemas"]["VendorOrderLine"][];
+            id: number;
+            public_id: string;
+            order_public_id: string;
+            status: string;
+            currency: string;
+            gross_total: string;
+            commission_rate: string;
+            commission_total: string;
+            net_total: string;
+            items: components["schemas"]["VendorOrderLine"][];
         };
         VendorOrderStatusInput: {
             /** @enum {string} */
@@ -5648,20 +5648,20 @@ export interface components {
         };
         VendorDashboard: {
             /** Format: int64 */
-            order_count?: number;
-            gross_total?: string;
-            commission_total?: string;
-            net_total?: string;
+            order_count: number;
+            gross_total: string;
+            commission_total: string;
+            net_total: string;
         };
         VendorProduct: {
             /** Format: int64 */
-            id?: number;
-            sku?: string;
-            name?: string;
+            id: number;
+            sku: string;
+            name: string;
             slug?: string;
             status?: string;
             /** @enum {string} */
-            approval_status?: "draft" | "pending" | "approved" | "rejected";
+            approval_status: "draft" | "pending" | "approved" | "rejected";
             created_at?: string;
         };
         VendorProductList: {

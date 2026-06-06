@@ -158,6 +158,40 @@ importers:
         specifier: ^2.1.0
         version: 2.2.12(typescript@5.6.3)
 
+  vendor:
+    dependencies:
+      '@primeuix/themes':
+        specifier: ^2.0.0
+        version: 2.0.3
+      '@teggo/api':
+        specifier: workspace:*
+        version: link:../packages/api
+      primeicons:
+        specifier: ^7.0.0
+        version: 7.0.0
+      primevue:
+        specifier: ^4.5.5
+        version: 4.5.5(vue@3.5.35(typescript@5.6.3))
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.35(typescript@5.6.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.35(typescript@5.6.3))
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.7(vite@7.3.5(@types/node@25.9.1)(jiti@2.7.0)(sass@1.100.0)(terser@5.48.0)(yaml@2.9.0))(vue@3.5.35(typescript@5.6.3))
+      typescript:
+        specifier: ^5.6.0
+        version: 5.6.3
+      vite:
+        specifier: ^7.0.0
+        version: 7.3.5(@types/node@25.9.1)(jiti@2.7.0)(sass@1.100.0)(terser@5.48.0)(yaml@2.9.0)
+      vue-tsc:
+        specifier: ^2.1.0
+        version: 2.2.12(typescript@5.6.3)
+
 packages:
 
   '@algolia/abtesting@1.19.0':

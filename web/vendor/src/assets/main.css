@@ -1,0 +1,26 @@
+:root {
+  --teggo-sidebar-width: 240px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--p-content-background, #f8fafc);
+  color: var(--p-text-color, #1e293b);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

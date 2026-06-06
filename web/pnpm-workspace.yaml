@@ -1,6 +1,7 @@
 packages:
   - 'admin'
   - 'storefront'
+  - 'vendor'
   - 'docs'
   - 'packages/*'
 
