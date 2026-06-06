@@ -348,6 +348,7 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
 	GetUserPermissions(ctx context.Context, userID int64) ([]string, error)
 	GetVendor(ctx context.Context, arg GetVendorParams) (Vendor, error)
+	GetVendorOrderForVendor(ctx context.Context, arg GetVendorOrderForVendorParams) (GetVendorOrderForVendorRow, error)
 	// GetVendorUserForLogin resolves a vendor-user by email within an org for vendor
 	// portal authentication (email is citext, so case-insensitive).
 	GetVendorUserForLogin(ctx context.Context, arg GetVendorUserForLoginParams) (GetVendorUserForLoginRow, error)
@@ -467,6 +468,8 @@ type Querier interface {
 	ListPricesForList(ctx context.Context, priceListID int64) ([]Price, error)
 	ListProductCategoryIDs(ctx context.Context, productID int64) ([]int64, error)
 	ListProductsAdmin(ctx context.Context, arg ListProductsAdminParams) ([]Product, error)
+	// ---- vendor portal (audience 'vendor') ----------------------------------
+	ListProductsByVendor(ctx context.Context, vendorID *int64) ([]ListProductsByVendorRow, error)
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]ListQuoteItemsRow, error)
 	ListQuoteRevisions(ctx context.Context, quoteID int64) ([]ListQuoteRevisionsRow, error)
 	ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams) ([]Quote, error)
@@ -501,7 +504,9 @@ type Querier interface {
 	// ListTaxRatesByCountry feeds the local VAT provider for a destination.
 	ListTaxRatesByCountry(ctx context.Context, arg ListTaxRatesByCountryParams) ([]ListTaxRatesByCountryRow, error)
 	ListTradingPartners(ctx context.Context, organizationID int64) ([]TradingPartner, error)
+	ListVendorOrderItems(ctx context.Context, arg ListVendorOrderItemsParams) ([]ListVendorOrderItemsRow, error)
 	ListVendorOrdersForOrder(ctx context.Context, orderID int64) ([]VendorOrder, error)
+	ListVendorOrdersForVendor(ctx context.Context, vendorID int64) ([]ListVendorOrdersForVendorRow, error)
 	ListVendorUsers(ctx context.Context, vendorID int64) ([]ListVendorUsersRow, error)
 	ListVendors(ctx context.Context, organizationID int64) ([]Vendor, error)
 	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
@@ -607,6 +612,7 @@ type Querier interface {
 	SetReturnStatus(ctx context.Context, arg SetReturnStatusParams) (Return, error)
 	SetShipmentStatus(ctx context.Context, arg SetShipmentStatusParams) (Shipment, error)
 	SetShipmentTracking(ctx context.Context, arg SetShipmentTrackingParams) (Shipment, error)
+	SetVendorOrderStatus(ctx context.Context, arg SetVendorOrderStatusParams) (VendorOrder, error)
 	SetWorkflowInstanceState(ctx context.Context, arg SetWorkflowInstanceStateParams) error
 	// ShippedQtyForOrderItem returns the total already shipped for an order line,
 	// used to cap new shipment quantities (§7 AC).
@@ -675,6 +681,9 @@ type Querier interface {
 	UpsertShoppingListItem(ctx context.Context, arg UpsertShoppingListItemParams) (ShoppingListItem, error)
 	// Tax/VAT adapter (Pack 2 §4.4): rate config + product tax-class lookup.
 	UpsertTaxRate(ctx context.Context, arg UpsertTaxRateParams) (TaxRate, error)
+	// VendorSalesSummary aggregates lifetime gross/commission/net for a vendor's
+	// dashboard.
+	VendorSalesSummary(ctx context.Context, vendorID int64) (VendorSalesSummaryRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

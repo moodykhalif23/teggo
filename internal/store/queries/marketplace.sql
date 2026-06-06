@@ -58,6 +58,49 @@ RETURNING *;
 -- name: ListVendorOrdersForOrder :many
 SELECT * FROM vendor_orders WHERE order_id = $1 ORDER BY vendor_id;
 
+-- ---- vendor portal (audience 'vendor') ----------------------------------
+
+-- name: ListProductsByVendor :many
+SELECT id, sku, name, status, approval_status, created_at
+FROM products
+WHERE vendor_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC;
+
+-- name: ListVendorOrdersForVendor :many
+SELECT vo.*, o.public_id AS order_public_id, o.status AS order_status, o.created_at AS order_created_at
+FROM vendor_orders vo
+JOIN orders o ON o.id = vo.order_id
+WHERE vo.vendor_id = $1
+ORDER BY vo.created_at DESC;
+
+-- name: GetVendorOrderForVendor :one
+SELECT vo.*, o.public_id AS order_public_id
+FROM vendor_orders vo
+JOIN orders o ON o.id = vo.order_id
+WHERE vo.id = $1 AND vo.vendor_id = $2;
+
+-- name: ListVendorOrderItems :many
+SELECT oi.id, oi.sku, oi.name, oi.quantity, oi.unit, oi.unit_price, oi.row_total
+FROM order_items oi
+WHERE oi.order_id = $1 AND oi.vendor_id = $2
+ORDER BY oi.id;
+
+-- name: SetVendorOrderStatus :one
+UPDATE vendor_orders SET status = $3
+WHERE id = $1 AND vendor_id = $2
+RETURNING *;
+
+-- VendorSalesSummary aggregates lifetime gross/commission/net for a vendor's
+-- dashboard.
+-- name: VendorSalesSummary :one
+SELECT
+  COUNT(*)::bigint                                   AS order_count,
+  COALESCE(SUM(gross_total), 0)::numeric(15,4)       AS gross_total,
+  COALESCE(SUM(commission_total), 0)::numeric(15,4)  AS commission_total,
+  COALESCE(SUM(net_total), 0)::numeric(15,4)         AS net_total
+FROM vendor_orders
+WHERE vendor_id = $1;
+
 -- GetVendorUserForLogin resolves a vendor-user by email within an org for vendor
 -- portal authentication (email is citext, so case-insensitive).
 -- name: GetVendorUserForLogin :one

@@ -8,6 +8,8 @@ package gen
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const createVendor = `-- name: CreateVendor :one
@@ -182,6 +184,59 @@ func (q *Queries) GetVendor(ctx context.Context, arg GetVendorParams) (Vendor, e
 	return i, err
 }
 
+const getVendorOrderForVendor = `-- name: GetVendorOrderForVendor :one
+SELECT vo.id, vo.public_id, vo.organization_id, vo.order_id, vo.vendor_id, vo.status, vo.currency, vo.gross_total, vo.commission_rate, vo.commission_total, vo.net_total, vo.payout_id, vo.created_at, vo.updated_at, o.public_id AS order_public_id
+FROM vendor_orders vo
+JOIN orders o ON o.id = vo.order_id
+WHERE vo.id = $1 AND vo.vendor_id = $2
+`
+
+type GetVendorOrderForVendorParams struct {
+	ID       int64 `json:"id"`
+	VendorID int64 `json:"vendor_id"`
+}
+
+type GetVendorOrderForVendorRow struct {
+	ID              int64     `json:"id"`
+	PublicID        uuid.UUID `json:"public_id"`
+	OrganizationID  int64     `json:"organization_id"`
+	OrderID         int64     `json:"order_id"`
+	VendorID        int64     `json:"vendor_id"`
+	Status          string    `json:"status"`
+	Currency        string    `json:"currency"`
+	GrossTotal      string    `json:"gross_total"`
+	CommissionRate  string    `json:"commission_rate"`
+	CommissionTotal string    `json:"commission_total"`
+	NetTotal        string    `json:"net_total"`
+	PayoutID        *int64    `json:"payout_id"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	OrderPublicID   uuid.UUID `json:"order_public_id"`
+}
+
+func (q *Queries) GetVendorOrderForVendor(ctx context.Context, arg GetVendorOrderForVendorParams) (GetVendorOrderForVendorRow, error) {
+	row := q.db.QueryRow(ctx, getVendorOrderForVendor, arg.ID, arg.VendorID)
+	var i GetVendorOrderForVendorRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.OrderID,
+		&i.VendorID,
+		&i.Status,
+		&i.Currency,
+		&i.GrossTotal,
+		&i.CommissionRate,
+		&i.CommissionTotal,
+		&i.NetTotal,
+		&i.PayoutID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrderPublicID,
+	)
+	return i, err
+}
+
 const getVendorUserForLogin = `-- name: GetVendorUserForLogin :one
 SELECT vu.id, vu.vendor_id, v.organization_id, vu.password_hash, vu.is_active
 FROM vendor_users vu
@@ -257,6 +312,101 @@ func (q *Queries) ListOrderItemsWithVendor(ctx context.Context, orderID int64) (
 	return items, nil
 }
 
+const listProductsByVendor = `-- name: ListProductsByVendor :many
+
+SELECT id, sku, name, status, approval_status, created_at
+FROM products
+WHERE vendor_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC
+`
+
+type ListProductsByVendorRow struct {
+	ID             int64     `json:"id"`
+	Sku            string    `json:"sku"`
+	Name           string    `json:"name"`
+	Status         string    `json:"status"`
+	ApprovalStatus string    `json:"approval_status"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// ---- vendor portal (audience 'vendor') ----------------------------------
+func (q *Queries) ListProductsByVendor(ctx context.Context, vendorID *int64) ([]ListProductsByVendorRow, error) {
+	rows, err := q.db.Query(ctx, listProductsByVendor, vendorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProductsByVendorRow
+	for rows.Next() {
+		var i ListProductsByVendorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sku,
+			&i.Name,
+			&i.Status,
+			&i.ApprovalStatus,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVendorOrderItems = `-- name: ListVendorOrderItems :many
+SELECT oi.id, oi.sku, oi.name, oi.quantity, oi.unit, oi.unit_price, oi.row_total
+FROM order_items oi
+WHERE oi.order_id = $1 AND oi.vendor_id = $2
+ORDER BY oi.id
+`
+
+type ListVendorOrderItemsParams struct {
+	OrderID  int64  `json:"order_id"`
+	VendorID *int64 `json:"vendor_id"`
+}
+
+type ListVendorOrderItemsRow struct {
+	ID        int64  `json:"id"`
+	Sku       string `json:"sku"`
+	Name      string `json:"name"`
+	Quantity  string `json:"quantity"`
+	Unit      string `json:"unit"`
+	UnitPrice string `json:"unit_price"`
+	RowTotal  string `json:"row_total"`
+}
+
+func (q *Queries) ListVendorOrderItems(ctx context.Context, arg ListVendorOrderItemsParams) ([]ListVendorOrderItemsRow, error) {
+	rows, err := q.db.Query(ctx, listVendorOrderItems, arg.OrderID, arg.VendorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVendorOrderItemsRow
+	for rows.Next() {
+		var i ListVendorOrderItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sku,
+			&i.Name,
+			&i.Quantity,
+			&i.Unit,
+			&i.UnitPrice,
+			&i.RowTotal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVendorOrdersForOrder = `-- name: ListVendorOrdersForOrder :many
 SELECT id, public_id, organization_id, order_id, vendor_id, status, currency, gross_total, commission_rate, commission_total, net_total, payout_id, created_at, updated_at FROM vendor_orders WHERE order_id = $1 ORDER BY vendor_id
 `
@@ -285,6 +435,72 @@ func (q *Queries) ListVendorOrdersForOrder(ctx context.Context, orderID int64) (
 			&i.PayoutID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVendorOrdersForVendor = `-- name: ListVendorOrdersForVendor :many
+SELECT vo.id, vo.public_id, vo.organization_id, vo.order_id, vo.vendor_id, vo.status, vo.currency, vo.gross_total, vo.commission_rate, vo.commission_total, vo.net_total, vo.payout_id, vo.created_at, vo.updated_at, o.public_id AS order_public_id, o.status AS order_status, o.created_at AS order_created_at
+FROM vendor_orders vo
+JOIN orders o ON o.id = vo.order_id
+WHERE vo.vendor_id = $1
+ORDER BY vo.created_at DESC
+`
+
+type ListVendorOrdersForVendorRow struct {
+	ID              int64     `json:"id"`
+	PublicID        uuid.UUID `json:"public_id"`
+	OrganizationID  int64     `json:"organization_id"`
+	OrderID         int64     `json:"order_id"`
+	VendorID        int64     `json:"vendor_id"`
+	Status          string    `json:"status"`
+	Currency        string    `json:"currency"`
+	GrossTotal      string    `json:"gross_total"`
+	CommissionRate  string    `json:"commission_rate"`
+	CommissionTotal string    `json:"commission_total"`
+	NetTotal        string    `json:"net_total"`
+	PayoutID        *int64    `json:"payout_id"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	OrderPublicID   uuid.UUID `json:"order_public_id"`
+	OrderStatus     string    `json:"order_status"`
+	OrderCreatedAt  time.Time `json:"order_created_at"`
+}
+
+func (q *Queries) ListVendorOrdersForVendor(ctx context.Context, vendorID int64) ([]ListVendorOrdersForVendorRow, error) {
+	rows, err := q.db.Query(ctx, listVendorOrdersForVendor, vendorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVendorOrdersForVendorRow
+	for rows.Next() {
+		var i ListVendorOrdersForVendorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.OrderID,
+			&i.VendorID,
+			&i.Status,
+			&i.Currency,
+			&i.GrossTotal,
+			&i.CommissionRate,
+			&i.CommissionTotal,
+			&i.NetTotal,
+			&i.PayoutID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OrderPublicID,
+			&i.OrderStatus,
+			&i.OrderCreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -396,6 +612,40 @@ func (q *Queries) SetOrderItemVendor(ctx context.Context, arg SetOrderItemVendor
 	return err
 }
 
+const setVendorOrderStatus = `-- name: SetVendorOrderStatus :one
+UPDATE vendor_orders SET status = $3
+WHERE id = $1 AND vendor_id = $2
+RETURNING id, public_id, organization_id, order_id, vendor_id, status, currency, gross_total, commission_rate, commission_total, net_total, payout_id, created_at, updated_at
+`
+
+type SetVendorOrderStatusParams struct {
+	ID       int64  `json:"id"`
+	VendorID int64  `json:"vendor_id"`
+	Status   string `json:"status"`
+}
+
+func (q *Queries) SetVendorOrderStatus(ctx context.Context, arg SetVendorOrderStatusParams) (VendorOrder, error) {
+	row := q.db.QueryRow(ctx, setVendorOrderStatus, arg.ID, arg.VendorID, arg.Status)
+	var i VendorOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.OrderID,
+		&i.VendorID,
+		&i.Status,
+		&i.Currency,
+		&i.GrossTotal,
+		&i.CommissionRate,
+		&i.CommissionTotal,
+		&i.NetTotal,
+		&i.PayoutID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const softDeleteVendor = `-- name: SoftDeleteVendor :exec
 UPDATE vendors SET deleted_at = now()
 WHERE id = $1 AND organization_id = $2
@@ -452,6 +702,37 @@ func (q *Queries) UpdateVendor(ctx context.Context, arg UpdateVendorParams) (Ven
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const vendorSalesSummary = `-- name: VendorSalesSummary :one
+SELECT
+  COUNT(*)::bigint                                   AS order_count,
+  COALESCE(SUM(gross_total), 0)::numeric(15,4)       AS gross_total,
+  COALESCE(SUM(commission_total), 0)::numeric(15,4)  AS commission_total,
+  COALESCE(SUM(net_total), 0)::numeric(15,4)         AS net_total
+FROM vendor_orders
+WHERE vendor_id = $1
+`
+
+type VendorSalesSummaryRow struct {
+	OrderCount      int64  `json:"order_count"`
+	GrossTotal      string `json:"gross_total"`
+	CommissionTotal string `json:"commission_total"`
+	NetTotal        string `json:"net_total"`
+}
+
+// VendorSalesSummary aggregates lifetime gross/commission/net for a vendor's
+// dashboard.
+func (q *Queries) VendorSalesSummary(ctx context.Context, vendorID int64) (VendorSalesSummaryRow, error) {
+	row := q.db.QueryRow(ctx, vendorSalesSummary, vendorID)
+	var i VendorSalesSummaryRow
+	err := row.Scan(
+		&i.OrderCount,
+		&i.GrossTotal,
+		&i.CommissionTotal,
+		&i.NetTotal,
 	)
 	return i, err
 }
