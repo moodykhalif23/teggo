@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
     'data-layer',
     'background-jobs',
     'integrations',
+    'marketplace',
     'frontend',
     'configuration',
   ],

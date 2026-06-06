@@ -5,13 +5,14 @@ sidebar_position: 10
 
 # Frontend
 
-A pnpm workspace under `web/` holds three apps + a shared API package.
+A pnpm workspace under `web/` holds four apps + a shared API package.
 
 ```
 web/
   packages/api/   @teggo/api  — OpenAPI 3.1 spec → typed client
   admin/          Vue 3 + Vite SPA (seller back-office)
   storefront/     Nuxt (B2B buyer storefront)
+  vendor/         Vue 3 + Vite SPA (marketplace vendor portal — audience 'vendor')
   docs/           Docusaurus (this site)
 ```
 

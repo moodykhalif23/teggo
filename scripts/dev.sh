@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Spin the whole app for local development:
 #   - backend (postgres + migrate + api + worker + gotenberg) via Docker Compose, detached
-#   - admin SPA + storefront dev servers in the foreground (concurrent, with cleanup)
+#   - admin SPA + storefront + vendor portal dev servers in the foreground (concurrent, with cleanup)
 # Docs are served separately (heavier build): `make docs`.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,13 +23,15 @@ trap cleanup EXIT INT TERM
 
 ( cd "$ROOT/web" && pnpm --filter @teggo/admin dev )      & pids+=($!)
 ( cd "$ROOT/web" && pnpm --filter @teggo/storefront dev ) & pids+=($!)
+( cd "$ROOT/web" && pnpm --filter @teggo/vendor dev )     & pids+=($!)
 
 cat <<'EOF'
 ──────────────────────────────────────────────
-  Admin SPA   → http://localhost:5173
-  Storefront  → http://localhost:3000
-  API         → http://localhost:8080
-  Docs        → run `make docs`  (http://localhost:3001)
+  Admin SPA      → http://localhost:5173   (admin@demo.test / admin1234)
+  Storefront     → http://localhost:3000   (buyer@demo.test / buyer1234)
+  Vendor portal  → http://localhost:5174   (vendor@demo.test / vendor1234)
+  API            → http://localhost:8080
+  Docs           → run `make docs`  (http://localhost:3001)
 
   Ctrl-C stops the frontends. The backend stays up; `make down` to stop it.
 ──────────────────────────────────────────────
