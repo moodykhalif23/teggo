@@ -101,6 +101,38 @@ SELECT
 FROM vendor_orders
 WHERE vendor_id = $1;
 
+-- ---- payouts -------------------------------------------------------------
+
+-- ListSettledUnpaidVendorOrders returns delivered vendor_orders not yet attached
+-- to a payout, for batching a vendor disbursement.
+-- name: ListSettledUnpaidVendorOrders :many
+SELECT * FROM vendor_orders
+WHERE vendor_id = $1 AND status = 'delivered' AND payout_id IS NULL
+ORDER BY id;
+
+-- name: CreateVendorPayout :one
+INSERT INTO vendor_payouts (organization_id, vendor_id, status, currency, amount, reference)
+VALUES ($1, $2, 'pending', $3, $4, $5)
+RETURNING *;
+
+-- AttachOrdersToPayout settles every delivered, not-yet-paid vendor_order of a
+-- vendor into a payout (same predicate used to total the payout, run in the same
+-- tx so the set is consistent). Returns the number of orders attached.
+-- name: AttachOrdersToPayout :execrows
+UPDATE vendor_orders SET payout_id = $1
+WHERE vendor_id = $2 AND status = 'delivered' AND payout_id IS NULL;
+
+-- name: MarkVendorPayoutPaid :one
+UPDATE vendor_payouts SET status = 'paid', paid_at = now(), reference = $3
+WHERE id = $1 AND organization_id = $2 AND status = 'pending'
+RETURNING *;
+
+-- name: ListVendorPayouts :many
+SELECT * FROM vendor_payouts WHERE vendor_id = $1 AND organization_id = $2 ORDER BY created_at DESC;
+
+-- name: ListVendorPayoutsForVendor :many
+SELECT * FROM vendor_payouts WHERE vendor_id = $1 ORDER BY created_at DESC;
+
 -- GetVendorUserForLogin resolves a vendor-user by email within an org for vendor
 -- portal authentication (email is citext, so case-insensitive).
 -- name: GetVendorUserForLogin :one

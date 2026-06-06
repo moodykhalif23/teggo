@@ -161,7 +161,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	catalog.New(st.Queries()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))
 	customers.New(st.Queries()).Routes(r, authMW)
 	account.New(st.Queries()).Routes(r, authMW)
-	mp := marketplace.New(st.Queries())
+	mp := marketplace.New(st.Pool())
 	mp.Routes(r, authMW)
 	mp.RoutesVendor(r, authMW)
 	settings.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))

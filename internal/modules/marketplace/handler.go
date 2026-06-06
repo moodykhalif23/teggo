@@ -5,6 +5,7 @@
 package marketplace
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/auth"
 	mw "b2bcommerce/internal/server/middleware"
@@ -22,10 +24,24 @@ import (
 )
 
 type Handler struct {
-	q *gen.Queries
+	pool *pgxpool.Pool
+	q    *gen.Queries
 }
 
-func New(q *gen.Queries) *Handler { return &Handler{q: q} }
+func New(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool, q: gen.New(pool)} }
+
+// tx runs fn in a single transaction bound to a fresh *gen.Queries.
+func (h *Handler) tx(ctx context.Context, fn func(*gen.Queries) error) error {
+	t, err := h.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer t.Rollback(ctx) //nolint:errcheck // no-op after commit
+	if err := fn(gen.New(t)); err != nil {
+		return err
+	}
+	return t.Commit(ctx)
+}
 
 // Routes mounts the operator-facing vendor-management endpoints. The vendor
 // self-service portal is mounted separately (see RoutesVendor).
@@ -42,6 +58,10 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 
 		ar.With(mw.RequirePermission("vendor.view")).Get("/admin/vendors/{id}/users", h.listUsers)
 		ar.With(mw.RequirePermission("vendor.manage")).Post("/admin/vendors/{id}/users", h.createUser)
+
+		ar.With(mw.RequirePermission("vendor.view")).Get("/admin/vendors/{id}/payouts", h.listPayouts)
+		ar.With(mw.RequirePermission("vendor.manage")).Post("/admin/vendors/{id}/payouts", h.generatePayout)
+		ar.With(mw.RequirePermission("vendor.manage")).Post("/admin/payouts/{id}/pay", h.markPayoutPaid)
 	})
 }
 

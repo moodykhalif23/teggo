@@ -27,6 +27,7 @@ func (h *Handler) RoutesVendor(r chi.Router, authMW func(http.Handler) http.Hand
 		vr.Get("/vendor/orders", h.vendorOrders)
 		vr.Get("/vendor/orders/{id}", h.vendorOrderDetail)
 		vr.Patch("/vendor/orders/{id}/status", h.vendorOrderStatus)
+		vr.Get("/vendor/payouts", h.vendorPayouts)
 	})
 }
 

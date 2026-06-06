@@ -12,6 +12,27 @@ import (
 	"github.com/google/uuid"
 )
 
+const attachOrdersToPayout = `-- name: AttachOrdersToPayout :execrows
+UPDATE vendor_orders SET payout_id = $1
+WHERE vendor_id = $2 AND status = 'delivered' AND payout_id IS NULL
+`
+
+type AttachOrdersToPayoutParams struct {
+	PayoutID *int64 `json:"payout_id"`
+	VendorID int64  `json:"vendor_id"`
+}
+
+// AttachOrdersToPayout settles every delivered, not-yet-paid vendor_order of a
+// vendor into a payout (same predicate used to total the payout, run in the same
+// tx so the set is consistent). Returns the number of orders attached.
+func (q *Queries) AttachOrdersToPayout(ctx context.Context, arg AttachOrdersToPayoutParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attachOrdersToPayout, arg.PayoutID, arg.VendorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createVendor = `-- name: CreateVendor :one
 
 INSERT INTO vendors (organization_id, name, slug, contact_email, status, commission_rate, payout_terms_days)
@@ -103,6 +124,44 @@ func (q *Queries) CreateVendorOrder(ctx context.Context, arg CreateVendorOrderPa
 		&i.PayoutID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createVendorPayout = `-- name: CreateVendorPayout :one
+INSERT INTO vendor_payouts (organization_id, vendor_id, status, currency, amount, reference)
+VALUES ($1, $2, 'pending', $3, $4, $5)
+RETURNING id, public_id, organization_id, vendor_id, status, currency, amount, reference, created_at, paid_at
+`
+
+type CreateVendorPayoutParams struct {
+	OrganizationID int64   `json:"organization_id"`
+	VendorID       int64   `json:"vendor_id"`
+	Currency       string  `json:"currency"`
+	Amount         string  `json:"amount"`
+	Reference      *string `json:"reference"`
+}
+
+func (q *Queries) CreateVendorPayout(ctx context.Context, arg CreateVendorPayoutParams) (VendorPayout, error) {
+	row := q.db.QueryRow(ctx, createVendorPayout,
+		arg.OrganizationID,
+		arg.VendorID,
+		arg.Currency,
+		arg.Amount,
+		arg.Reference,
+	)
+	var i VendorPayout
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.VendorID,
+		&i.Status,
+		&i.Currency,
+		&i.Amount,
+		&i.Reference,
+		&i.CreatedAt,
+		&i.PaidAt,
 	)
 	return i, err
 }
@@ -357,6 +416,51 @@ func (q *Queries) ListProductsByVendor(ctx context.Context, vendorID *int64) ([]
 	return items, nil
 }
 
+const listSettledUnpaidVendorOrders = `-- name: ListSettledUnpaidVendorOrders :many
+
+SELECT id, public_id, organization_id, order_id, vendor_id, status, currency, gross_total, commission_rate, commission_total, net_total, payout_id, created_at, updated_at FROM vendor_orders
+WHERE vendor_id = $1 AND status = 'delivered' AND payout_id IS NULL
+ORDER BY id
+`
+
+// ---- payouts -------------------------------------------------------------
+// ListSettledUnpaidVendorOrders returns delivered vendor_orders not yet attached
+// to a payout, for batching a vendor disbursement.
+func (q *Queries) ListSettledUnpaidVendorOrders(ctx context.Context, vendorID int64) ([]VendorOrder, error) {
+	rows, err := q.db.Query(ctx, listSettledUnpaidVendorOrders, vendorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VendorOrder
+	for rows.Next() {
+		var i VendorOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.OrderID,
+			&i.VendorID,
+			&i.Status,
+			&i.Currency,
+			&i.GrossTotal,
+			&i.CommissionRate,
+			&i.CommissionTotal,
+			&i.NetTotal,
+			&i.PayoutID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVendorOrderItems = `-- name: ListVendorOrderItems :many
 SELECT oi.id, oi.sku, oi.name, oi.quantity, oi.unit, oi.unit_price, oi.row_total
 FROM order_items oi
@@ -512,6 +616,81 @@ func (q *Queries) ListVendorOrdersForVendor(ctx context.Context, vendorID int64)
 	return items, nil
 }
 
+const listVendorPayouts = `-- name: ListVendorPayouts :many
+SELECT id, public_id, organization_id, vendor_id, status, currency, amount, reference, created_at, paid_at FROM vendor_payouts WHERE vendor_id = $1 AND organization_id = $2 ORDER BY created_at DESC
+`
+
+type ListVendorPayoutsParams struct {
+	VendorID       int64 `json:"vendor_id"`
+	OrganizationID int64 `json:"organization_id"`
+}
+
+func (q *Queries) ListVendorPayouts(ctx context.Context, arg ListVendorPayoutsParams) ([]VendorPayout, error) {
+	rows, err := q.db.Query(ctx, listVendorPayouts, arg.VendorID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VendorPayout
+	for rows.Next() {
+		var i VendorPayout
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.VendorID,
+			&i.Status,
+			&i.Currency,
+			&i.Amount,
+			&i.Reference,
+			&i.CreatedAt,
+			&i.PaidAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVendorPayoutsForVendor = `-- name: ListVendorPayoutsForVendor :many
+SELECT id, public_id, organization_id, vendor_id, status, currency, amount, reference, created_at, paid_at FROM vendor_payouts WHERE vendor_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) ListVendorPayoutsForVendor(ctx context.Context, vendorID int64) ([]VendorPayout, error) {
+	rows, err := q.db.Query(ctx, listVendorPayoutsForVendor, vendorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VendorPayout
+	for rows.Next() {
+		var i VendorPayout
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.VendorID,
+			&i.Status,
+			&i.Currency,
+			&i.Amount,
+			&i.Reference,
+			&i.CreatedAt,
+			&i.PaidAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVendorUsers = `-- name: ListVendorUsers :many
 SELECT id, vendor_id, email, full_name, role, is_active, created_at, updated_at
 FROM vendor_users
@@ -596,6 +775,36 @@ func (q *Queries) ListVendors(ctx context.Context, organizationID int64) ([]Vend
 		return nil, err
 	}
 	return items, nil
+}
+
+const markVendorPayoutPaid = `-- name: MarkVendorPayoutPaid :one
+UPDATE vendor_payouts SET status = 'paid', paid_at = now(), reference = $3
+WHERE id = $1 AND organization_id = $2 AND status = 'pending'
+RETURNING id, public_id, organization_id, vendor_id, status, currency, amount, reference, created_at, paid_at
+`
+
+type MarkVendorPayoutPaidParams struct {
+	ID             int64   `json:"id"`
+	OrganizationID int64   `json:"organization_id"`
+	Reference      *string `json:"reference"`
+}
+
+func (q *Queries) MarkVendorPayoutPaid(ctx context.Context, arg MarkVendorPayoutPaidParams) (VendorPayout, error) {
+	row := q.db.QueryRow(ctx, markVendorPayoutPaid, arg.ID, arg.OrganizationID, arg.Reference)
+	var i VendorPayout
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.VendorID,
+		&i.Status,
+		&i.Currency,
+		&i.Amount,
+		&i.Reference,
+		&i.CreatedAt,
+		&i.PaidAt,
+	)
+	return i, err
 }
 
 const setOrderItemVendor = `-- name: SetOrderItemVendor :exec

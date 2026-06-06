@@ -36,6 +36,10 @@ type Querier interface {
 	AdjustInventoryLevel(ctx context.Context, arg AdjustInventoryLevelParams) (InventoryLevel, error)
 	AssignAttributeToFamily(ctx context.Context, arg AssignAttributeToFamilyParams) error
 	AssignProductToCategory(ctx context.Context, arg AssignProductToCategoryParams) error
+	// AttachOrdersToPayout settles every delivered, not-yet-paid vendor_order of a
+	// vendor into a payout (same predicate used to total the payout, run in the same
+	// tx so the set is consistent). Returns the number of orders attached.
+	AttachOrdersToPayout(ctx context.Context, arg AttachOrdersToPayoutParams) (int64, error)
 	// AvailableToPromise sums available across warehouses for a set of products (§12.4).
 	AvailableToPromise(ctx context.Context, dollar_1 []int64) ([]AvailableToPromiseRow, error)
 	// CategoryDescendantIDs returns the category and all of its descendants
@@ -161,6 +165,7 @@ type Querier interface {
 	// commission ledger and payouts. (migration 0041)
 	CreateVendor(ctx context.Context, arg CreateVendorParams) (Vendor, error)
 	CreateVendorOrder(ctx context.Context, arg CreateVendorOrderParams) (VendorOrder, error)
+	CreateVendorPayout(ctx context.Context, arg CreateVendorPayoutParams) (VendorPayout, error)
 	CreateVendorUser(ctx context.Context, arg CreateVendorUserParams) (CreateVendorUserRow, error)
 	// Inventory queries — Implementation Pack 1 §8 + §12.4 (ATP).
 	// ===== Warehouses ==========================================================
@@ -489,6 +494,10 @@ type Querier interface {
 	ListReturnsAdmin(ctx context.Context, arg ListReturnsAdminParams) ([]Return, error)
 	ListReturnsForCustomer(ctx context.Context, customerID int64) ([]Return, error)
 	ListReturnsForOrder(ctx context.Context, orderID int64) ([]Return, error)
+	// ---- payouts -------------------------------------------------------------
+	// ListSettledUnpaidVendorOrders returns delivered vendor_orders not yet attached
+	// to a payout, for batching a vendor disbursement.
+	ListSettledUnpaidVendorOrders(ctx context.Context, vendorID int64) ([]VendorOrder, error)
 	// ListShipmentItemProducts resolves a shipment's lines to product + quantity
 	// (for converting reservations to fulfilment on ship).
 	ListShipmentItemProducts(ctx context.Context, shipmentID int64) ([]ListShipmentItemProductsRow, error)
@@ -507,6 +516,8 @@ type Querier interface {
 	ListVendorOrderItems(ctx context.Context, arg ListVendorOrderItemsParams) ([]ListVendorOrderItemsRow, error)
 	ListVendorOrdersForOrder(ctx context.Context, orderID int64) ([]VendorOrder, error)
 	ListVendorOrdersForVendor(ctx context.Context, vendorID int64) ([]ListVendorOrdersForVendorRow, error)
+	ListVendorPayouts(ctx context.Context, arg ListVendorPayoutsParams) ([]VendorPayout, error)
+	ListVendorPayoutsForVendor(ctx context.Context, vendorID int64) ([]VendorPayout, error)
 	ListVendorUsers(ctx context.Context, vendorID int64) ([]ListVendorUsersRow, error)
 	ListVendors(ctx context.Context, organizationID int64) ([]Vendor, error)
 	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
@@ -527,6 +538,7 @@ type Querier interface {
 	// across all orgs — driven by the scheduled mark_overdue automation action.
 	MarkOverdueInvoicesGlobal(ctx context.Context) ([]MarkOverdueInvoicesGlobalRow, error)
 	MarkQuoteFollowedUp(ctx context.Context, id int64) error
+	MarkVendorPayoutPaid(ctx context.Context, arg MarkVendorPayoutPaidParams) (VendorPayout, error)
 	// MaxScopedCursor is the current high-water mark for the rep's scope (used when
 	// a pull returns no rows so the client still advances its cursor).
 	MaxScopedCursor(ctx context.Context, arg MaxScopedCursorParams) (int64, error)
