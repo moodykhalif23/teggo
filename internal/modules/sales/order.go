@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"b2bcommerce/internal/inventory"
+	"b2bcommerce/internal/modules/marketplace"
 	"b2bcommerce/internal/money"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
@@ -97,6 +98,11 @@ func (h *Handler) acceptQuote(w http.ResponseWriter, r *http.Request) {
 			if e := h.addOrderItemSnapshot(r.Context(), q, quote.OrganizationID, order.ID, it.ProductID, it.Quantity, it.Unit, it.UnitPrice, it.RowTotal, perLineTax[i]); e != nil {
 				return e
 			}
+		}
+		// Fan the order into per-vendor sub-orders + commission (no-op when all
+		// lines are operator-owned).
+		if e := marketplace.SplitOrder(r.Context(), q, quote.OrganizationID, order.ID, quote.Currency); e != nil {
+			return e
 		}
 		if _, e := q.SetQuoteStatus(r.Context(), gen.SetQuoteStatusParams{ID: quote.ID, Status: "accepted"}); e != nil {
 			return e
@@ -257,6 +263,11 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 				return e
 			}
 		}
+		// Fan the order into per-vendor sub-orders + commission (no-op when all
+		// lines are operator-owned).
+		if e := marketplace.SplitOrder(r.Context(), q, cc.orgID, order.ID, cart.Currency); e != nil {
+			return e
+		}
 		if e := q.MarkCartConverted(r.Context(), cart.ID); e != nil {
 			return e
 		}
@@ -381,6 +392,11 @@ func (h *Handler) createOrderOnBehalf(w http.ResponseWriter, r *http.Request) {
 			if e := h.addOrderItemSnapshot(r.Context(), q, a.orgID, order.ID, ln.pid, ln.qty, ln.unit, ln.price, ln.rt, perLineTax[i]); e != nil {
 				return e
 			}
+		}
+		// Fan the order into per-vendor sub-orders + commission (no-op when all
+		// lines are operator-owned).
+		if e := marketplace.SplitOrder(r.Context(), q, a.orgID, order.ID, req.Currency); e != nil {
+			return e
 		}
 		by := "rep:0"
 		if a.userID != nil {

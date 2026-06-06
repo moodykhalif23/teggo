@@ -57,6 +57,54 @@ func (q *Queries) CreateVendor(ctx context.Context, arg CreateVendorParams) (Ven
 	return i, err
 }
 
+const createVendorOrder = `-- name: CreateVendorOrder :one
+INSERT INTO vendor_orders (organization_id, order_id, vendor_id, currency, gross_total, commission_rate, commission_total, net_total)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, public_id, organization_id, order_id, vendor_id, status, currency, gross_total, commission_rate, commission_total, net_total, payout_id, created_at, updated_at
+`
+
+type CreateVendorOrderParams struct {
+	OrganizationID  int64  `json:"organization_id"`
+	OrderID         int64  `json:"order_id"`
+	VendorID        int64  `json:"vendor_id"`
+	Currency        string `json:"currency"`
+	GrossTotal      string `json:"gross_total"`
+	CommissionRate  string `json:"commission_rate"`
+	CommissionTotal string `json:"commission_total"`
+	NetTotal        string `json:"net_total"`
+}
+
+func (q *Queries) CreateVendorOrder(ctx context.Context, arg CreateVendorOrderParams) (VendorOrder, error) {
+	row := q.db.QueryRow(ctx, createVendorOrder,
+		arg.OrganizationID,
+		arg.OrderID,
+		arg.VendorID,
+		arg.Currency,
+		arg.GrossTotal,
+		arg.CommissionRate,
+		arg.CommissionTotal,
+		arg.NetTotal,
+	)
+	var i VendorOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.OrderID,
+		&i.VendorID,
+		&i.Status,
+		&i.Currency,
+		&i.GrossTotal,
+		&i.CommissionRate,
+		&i.CommissionTotal,
+		&i.NetTotal,
+		&i.PayoutID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createVendorUser = `-- name: CreateVendorUser :one
 INSERT INTO vendor_users (vendor_id, email, password_hash, full_name, role)
 VALUES ($1, $2, $3, $4, $5)
@@ -171,6 +219,83 @@ func (q *Queries) GetVendorUserForLogin(ctx context.Context, arg GetVendorUserFo
 	return i, err
 }
 
+const listOrderItemsWithVendor = `-- name: ListOrderItemsWithVendor :many
+
+SELECT oi.id, oi.row_total, p.vendor_id
+FROM order_items oi
+JOIN products p ON p.id = oi.product_id
+WHERE oi.order_id = $1
+`
+
+type ListOrderItemsWithVendorRow struct {
+	ID       int64  `json:"id"`
+	RowTotal string `json:"row_total"`
+	VendorID *int64 `json:"vendor_id"`
+}
+
+// ---- order splitting & commission ledger --------------------------------
+// ListOrderItemsWithVendor returns each line of an order with the owning vendor
+// of its product (NULL = operator-owned), for fanning an order into per-vendor
+// sub-orders at placement time.
+func (q *Queries) ListOrderItemsWithVendor(ctx context.Context, orderID int64) ([]ListOrderItemsWithVendorRow, error) {
+	rows, err := q.db.Query(ctx, listOrderItemsWithVendor, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrderItemsWithVendorRow
+	for rows.Next() {
+		var i ListOrderItemsWithVendorRow
+		if err := rows.Scan(&i.ID, &i.RowTotal, &i.VendorID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVendorOrdersForOrder = `-- name: ListVendorOrdersForOrder :many
+SELECT id, public_id, organization_id, order_id, vendor_id, status, currency, gross_total, commission_rate, commission_total, net_total, payout_id, created_at, updated_at FROM vendor_orders WHERE order_id = $1 ORDER BY vendor_id
+`
+
+func (q *Queries) ListVendorOrdersForOrder(ctx context.Context, orderID int64) ([]VendorOrder, error) {
+	rows, err := q.db.Query(ctx, listVendorOrdersForOrder, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VendorOrder
+	for rows.Next() {
+		var i VendorOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.OrderID,
+			&i.VendorID,
+			&i.Status,
+			&i.Currency,
+			&i.GrossTotal,
+			&i.CommissionRate,
+			&i.CommissionTotal,
+			&i.NetTotal,
+			&i.PayoutID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVendorUsers = `-- name: ListVendorUsers :many
 SELECT id, vendor_id, email, full_name, role, is_active, created_at, updated_at
 FROM vendor_users
@@ -255,6 +380,20 @@ func (q *Queries) ListVendors(ctx context.Context, organizationID int64) ([]Vend
 		return nil, err
 	}
 	return items, nil
+}
+
+const setOrderItemVendor = `-- name: SetOrderItemVendor :exec
+UPDATE order_items SET vendor_id = $2 WHERE id = $1
+`
+
+type SetOrderItemVendorParams struct {
+	ID       int64  `json:"id"`
+	VendorID *int64 `json:"vendor_id"`
+}
+
+func (q *Queries) SetOrderItemVendor(ctx context.Context, arg SetOrderItemVendorParams) error {
+	_, err := q.db.Exec(ctx, setOrderItemVendor, arg.ID, arg.VendorID)
+	return err
 }
 
 const softDeleteVendor = `-- name: SoftDeleteVendor :exec

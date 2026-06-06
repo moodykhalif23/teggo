@@ -79,6 +79,22 @@ func RowTotal(quantity, unitPrice, discount string) (string, error) {
 	return Format(new(big.Rat).Sub(line, d)), nil
 }
 
+// Percent returns amount * (percent/100) as a 4-dp string, computed exactly on
+// rationals and rounded only at the final formatting step. Used for marketplace
+// commission (a vendor rate of "12.5" means 12.5%).
+func Percent(amount, percent string) (string, error) {
+	a, err := Parse(amount)
+	if err != nil {
+		return "", err
+	}
+	p, err := Parse(percent)
+	if err != nil {
+		return "", err
+	}
+	prod := new(big.Rat).Mul(a, p)
+	return Format(new(big.Rat).Quo(prod, big.NewRat(100, 1))), nil
+}
+
 // Sum adds 4-dp decimal strings exactly.
 func Sum(values ...string) (string, error) {
 	acc := new(big.Rat)

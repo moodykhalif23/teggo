@@ -160,6 +160,7 @@ type Querier interface {
 	// Marketplace: vendors, vendor portal logins, per-vendor order splitting,
 	// commission ledger and payouts. (migration 0041)
 	CreateVendor(ctx context.Context, arg CreateVendorParams) (Vendor, error)
+	CreateVendorOrder(ctx context.Context, arg CreateVendorOrderParams) (VendorOrder, error)
 	CreateVendorUser(ctx context.Context, arg CreateVendorUserParams) (CreateVendorUserRow, error)
 	// Inventory queries — Implementation Pack 1 §8 + §12.4 (ATP).
 	// ===== Warehouses ==========================================================
@@ -444,6 +445,11 @@ type Querier interface {
 	// stable rendering.
 	ListOptionsForProduct(ctx context.Context, productID int64) ([]ProductOption, error)
 	ListOrderItems(ctx context.Context, orderID int64) ([]OrderItem, error)
+	// ---- order splitting & commission ledger --------------------------------
+	// ListOrderItemsWithVendor returns each line of an order with the owning vendor
+	// of its product (NULL = operator-owned), for fanning an order into per-vendor
+	// sub-orders at placement time.
+	ListOrderItemsWithVendor(ctx context.Context, orderID int64) ([]ListOrderItemsWithVendorRow, error)
 	ListOrderStatusHistory(ctx context.Context, orderID int64) ([]ListOrderStatusHistoryRow, error)
 	ListOrdersAdmin(ctx context.Context, arg ListOrdersAdminParams) ([]Order, error)
 	ListOrdersForCustomer(ctx context.Context, customerID int64) ([]Order, error)
@@ -495,6 +501,7 @@ type Querier interface {
 	// ListTaxRatesByCountry feeds the local VAT provider for a destination.
 	ListTaxRatesByCountry(ctx context.Context, arg ListTaxRatesByCountryParams) ([]ListTaxRatesByCountryRow, error)
 	ListTradingPartners(ctx context.Context, organizationID int64) ([]TradingPartner, error)
+	ListVendorOrdersForOrder(ctx context.Context, orderID int64) ([]VendorOrder, error)
 	ListVendorUsers(ctx context.Context, vendorID int64) ([]ListVendorUsersRow, error)
 	ListVendors(ctx context.Context, organizationID int64) ([]Vendor, error)
 	ListWarehouses(ctx context.Context, organizationID int64) ([]Warehouse, error)
@@ -587,6 +594,7 @@ type Querier interface {
 	SetMediaStatus(ctx context.Context, arg SetMediaStatusParams) error
 	SetOpportunityStage(ctx context.Context, arg SetOpportunityStageParams) (Opportunity, error)
 	SetOrderCostCenter(ctx context.Context, arg SetOrderCostCenterParams) error
+	SetOrderItemVendor(ctx context.Context, arg SetOrderItemVendorParams) error
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
 	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
