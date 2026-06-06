@@ -84,6 +84,9 @@ A safe report builder (pick entities, dimensions, measures, filters), scheduled 
 ### 13. Multi‑vendor marketplace
 Run the platform as a **marketplace**, not just a single seller. Vendors are first‑class: each has a profile, a commission rate, payout terms, and **its own self‑service portal** (a third login audience alongside admin and buyer). Vendors **list their own products**, which the operator **moderates** before they go live — unapproved listings never appear in catalog, search, or cart. A single buyer order **splits automatically into per‑vendor sub‑orders**, each with a frozen **commission snapshot** (gross → operator commission → net payable); vendors advance their own fulfilment (accept → ship → deliver). The operator **batches delivered sub‑orders into payouts** and marks them paid; vendors track their dashboard (orders, gross, commission, net) and payout history. Buyers see **"Sold by ‹vendor›"** on the product page. Operator‑owned ("house") products coexist untouched, so it's a marketplace and a first‑party store at once.
 
+### 14. AI assistant (copilot)
+A **deterministic, tool‑calling assistant** built into both experiences — a buyer copilot in the storefront and an ops copilot in the admin. **Safety is structural**, not aspirational: the agent can only ever invoke a **fixed catalog of typed, permission‑gated tools** that wrap the existing services, each running under the *caller's own* org/audience/permission scope — it never writes free‑form to the database and can do nothing the caller couldn't already do. Buyers ask "where's my order?", "what do I owe?", "what should I reorder?", "how's my budget?"; staff ask "show the receivables aging", "which accounts are at risk?", "look up order …" (each gated by the matching permission). The decision engine is **pluggable**: a local **deterministic** engine (intent + slots, fully reproducible, zero external calls — the default) or the **Anthropic Claude** API behind the same interface and the same tool guards, switched on only when an API key is configured. Same architecture as every other external seam.
+
 ---
 
 ## Two experiences, one platform
@@ -106,7 +109,7 @@ Run the platform as a **marketplace**, not just a single seller. Vendors are fir
 
 ## Status & roadmap
 
-**Built and tested today:** everything above — the full buyer‑self‑service experience, the data‑model depth (catalog visibility, multi‑warehouse, rule‑based pricing, hierarchical config), the integration surfaces (EDI, punchout, ERP webhook, OIDC+SAML, DAM, field sync), the revenue‑ops layer (AR/dunning, replenishment, quote/cart recovery, returns, account health, budgets), and the **full multi‑vendor marketplace** (vendor portal, order splitting, commission ledger, payouts, catalog moderation).
+**Built and tested today:** everything above — the full buyer‑self‑service experience, the data‑model depth (catalog visibility, multi‑warehouse, rule‑based pricing, hierarchical config), the integration surfaces (EDI, punchout, ERP webhook, OIDC+SAML, DAM, field sync), the revenue‑ops layer (AR/dunning, replenishment, quote/cart recovery, returns, account health, budgets), the **full multi‑vendor marketplace** (vendor portal, order splitting, commission ledger, payouts, catalog moderation), and the **deterministic AI copilot** (buyer + staff, permission‑gated tool catalog, deterministic engine with an optional Claude adapter).
 
 **Adapter seams ready, real provider pending credentials:** external tax (Avalara/TaxJar), carriers (FedEx/UPS/DHL), and bespoke ERPs ship as tested sandbox/mock adapters behind stable interfaces — wire a live account and they slot in.
 
