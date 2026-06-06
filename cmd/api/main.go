@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"b2bcommerce/internal/ai"
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/blob"
 	"b2bcommerce/internal/config"
@@ -81,6 +82,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	// AI assistant decision engine. The deterministic local engine is the default;
+	// the Claude adapter is used only when explicitly selected AND an API key is
+	// present (otherwise we fall back to deterministic with a warning).
+	var aiProvider ai.Provider = ai.NewDeterministicProvider()
+	if cfg.AIProvider == "claude" {
+		if cfg.AnthropicAPIKey != "" {
+			aiProvider = ai.NewClaudeProvider(cfg.AnthropicAPIKey, cfg.AIModel)
+		} else {
+			logger.Warn("AI_PROVIDER=claude but ANTHROPIC_API_KEY is empty; using deterministic engine")
+		}
+	}
+
 	handler := server.New(st, issuer,
 		server.WithRecompute(enq),
 		server.WithInvoicePDF(enq),
@@ -90,6 +103,7 @@ func main() {
 		server.WithMedia(mediaStore, imageproc.GoProcessor{}),
 		server.WithRendition(enq),
 		server.WithIntegration(cfg.PunchoutStorefrontURL, cfg.EDISenderID, cfg.PunchoutTTL),
+		server.WithAIProvider(aiProvider),
 	)
 
 	srv := &http.Server{

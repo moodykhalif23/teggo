@@ -10,6 +10,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"b2bcommerce/internal/ai"
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/blob"
 	"b2bcommerce/internal/imageproc"
@@ -26,6 +27,7 @@ import (
 	erpmod "b2bcommerce/internal/modules/erp"
 	"b2bcommerce/internal/modules/field"
 	"b2bcommerce/internal/modules/health"
+	"b2bcommerce/internal/modules/assistant"
 	"b2bcommerce/internal/modules/integration"
 	"b2bcommerce/internal/modules/marketplace"
 	"b2bcommerce/internal/modules/otc"
@@ -64,6 +66,7 @@ type options struct {
 	ediSenderID  string
 	punchoutTTL  time.Duration
 	shipProvider shippingeng.Adapter
+	aiProvider   ai.Provider
 }
 
 // Option configures optional server dependencies.
@@ -125,6 +128,12 @@ func WithPaymentGateway(g gateway.Gateway) Option {
 	return func(o *options) { o.gateway = g }
 }
 
+// WithAIProvider selects the assistant's decision engine. Defaults to the
+// deterministic local engine when unset.
+func WithAIProvider(p ai.Provider) Option {
+	return func(o *options) { o.aiProvider = p }
+}
+
 // New builds the fully-wired HTTP handler.
 func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	var o options
@@ -133,6 +142,9 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	}
 	if o.gateway == nil {
 		o.gateway = gateway.Mock{} // deterministic card path by default
+	}
+	if o.aiProvider == nil {
+		o.aiProvider = ai.NewDeterministicProvider() // offline, reproducible default
 	}
 	if o.logger == nil {
 		o.logger = slog.Default()
@@ -164,6 +176,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	mp := marketplace.New(st.Pool())
 	mp.Routes(r, authMW)
 	mp.RoutesVendor(r, authMW)
+	assistant.New(st.Queries(), o.aiProvider).Routes(r, authMW)
 	settings.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
