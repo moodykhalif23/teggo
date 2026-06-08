@@ -567,6 +567,53 @@ func (q *Queries) ListCustomers(ctx context.Context, arg ListCustomersParams) ([
 	return items, nil
 }
 
+const listCustomersByGroup = `-- name: ListCustomersByGroup :many
+SELECT id, public_id, organization_id, parent_id, customer_group_id, name, tax_id, payment_terms_days, credit_limit, default_price_list_id, assigned_sales_rep_id, is_active, created_at, updated_at, deleted_at FROM customers
+WHERE organization_id = $1 AND customer_group_id = $2 AND deleted_at IS NULL
+ORDER BY name
+`
+
+type ListCustomersByGroupParams struct {
+	OrganizationID  int64  `json:"organization_id"`
+	CustomerGroupID *int64 `json:"customer_group_id"`
+}
+
+func (q *Queries) ListCustomersByGroup(ctx context.Context, arg ListCustomersByGroupParams) ([]Customer, error) {
+	rows, err := q.db.Query(ctx, listCustomersByGroup, arg.OrganizationID, arg.CustomerGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Customer
+	for rows.Next() {
+		var i Customer
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.ParentID,
+			&i.CustomerGroupID,
+			&i.Name,
+			&i.TaxID,
+			&i.PaymentTermsDays,
+			&i.CreditLimit,
+			&i.DefaultPriceListID,
+			&i.AssignedSalesRepID,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteCustomer = `-- name: SoftDeleteCustomer :execrows
 UPDATE customers
 SET deleted_at = now()

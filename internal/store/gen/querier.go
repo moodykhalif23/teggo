@@ -438,6 +438,7 @@ type Querier interface {
 	ListCustomerPriceTiersForSlug(ctx context.Context, arg ListCustomerPriceTiersForSlugParams) ([]ListCustomerPriceTiersForSlugRow, error)
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
+	ListCustomersByGroup(ctx context.Context, arg ListCustomersByGroupParams) ([]Customer, error)
 	// ListDueReportSchedules returns active schedules whose cadence interval has
 	// elapsed since last_run_at (or that have never run), joined to their definition
 	// so the job can compile + run without a second query.

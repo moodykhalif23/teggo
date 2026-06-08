@@ -41,6 +41,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 
 		ar.With(mw.RequirePermission("customer.view")).Get("/admin/customer-groups", h.listGroups)
 		ar.With(mw.RequirePermission("customer.manage")).Post("/admin/customer-groups", h.createGroup)
+		ar.With(mw.RequirePermission("customer.view")).Get("/admin/customer-groups/{id}/customers", h.listGroupCustomers)
 
 		ar.With(mw.RequirePermission("customer.view")).Get("/admin/customers/{id}/users", h.listUsers)
 		ar.With(mw.RequirePermission("customer.manage")).Post("/admin/customers/{id}/users", h.createUser)
@@ -363,6 +364,31 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusCreated, g)
+}
+
+// listGroupCustomers returns the customers assigned to one group (the members),
+// scoped to the tenant. Powers the drill-in from the customer-groups list.
+func (h *Handler) listGroupCustomers(w http.ResponseWriter, r *http.Request) {
+	org, ok := orgID(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no claims")
+		return
+	}
+	gid, err := pathID(r)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid group id")
+		return
+	}
+	rows, err := h.q.ListCustomersByGroup(r.Context(), gen.ListCustomersByGroupParams{OrganizationID: org, CustomerGroupID: &gid})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not list group customers")
+		return
+	}
+	items := make([]customerDTO, 0, len(rows))
+	for _, c := range rows {
+		items = append(items, toCustomerDTO(c))
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
 }
 
 // ---- Customer users ------------------------------------------------------

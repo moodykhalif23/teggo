@@ -37,6 +37,11 @@ LIMIT $2 OFFSET $3;
 SELECT count(*) FROM customers
 WHERE organization_id = $1 AND deleted_at IS NULL;
 
+-- name: ListCustomersByGroup :many
+SELECT * FROM customers
+WHERE organization_id = $1 AND customer_group_id = $2 AND deleted_at IS NULL
+ORDER BY name;
+
 -- name: UpdateCustomer :one
 UPDATE customers
 SET name               = $3,
