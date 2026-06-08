@@ -104,6 +104,10 @@ function invSev(s?: string) {
 function paySev(s: string) {
   return s === 'captured' ? 'success' : s === 'refunded' ? 'secondary' : s === 'failed' ? 'danger' : 'warn'
 }
+
+// Fetch the invoice + payments on mount; without this the page renders blank
+// (the v-if="invoice" block never gets data).
+onMounted(load)
 </script>
 
 <template>
