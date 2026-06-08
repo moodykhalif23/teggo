@@ -30,12 +30,12 @@ export default defineNuxtConfig({
     },
   },
 
-  // SSR is on (SEO). Cache catalog pages with stale-while-revalidate; keep
-  // cart/account/checkout dynamic and uncached.
-  routeRules: {
-    '/': { swr: 600 },
-    '/c/**': { swr: 600 },
-    '/p/**': { swr: 600 },
+  $production: {
+    routeRules: {
+      '/': { swr: 600 },
+      '/c/**': { swr: 600 },
+      '/p/**': { swr: 600 },
+    },
   },
 
   app: {
