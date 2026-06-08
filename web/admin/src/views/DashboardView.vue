@@ -60,7 +60,6 @@ onMounted(load)
   <div class="page dashboard">
     <header class="dash-head">
       <div>
-        <h1>Dashboard</h1>
         <p class="sub">Overview of your B2B operations</p>
       </div>
     </header>

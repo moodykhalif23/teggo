@@ -42,7 +42,6 @@ async function scroll() {
 
 <template>
   <div class="page">
-    <h1>Assistant</h1>
     <p class="muted">Ask about orders, receivables and accounts. The assistant only runs permission-gated tools on your behalf — it never invents data.</p>
 
     <div ref="scroller" class="thread">
