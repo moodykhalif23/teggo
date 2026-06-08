@@ -1,6 +1,7 @@
 package otc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -88,6 +89,116 @@ func (h *Handler) payInvoiceByCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderInvoice(w, r, updated)
+}
+
+// payMyOrder lets a buyer pay for their order directly. If no invoice exists yet
+// it issues one (same as the admin path), then charges the card and settles it.
+// This closes the storefront loop so a buyer never has to wait for an operator
+// to issue an invoice before they can pay. Idempotent: an already-paid order is
+// a 409, and a retried charge is absorbed by the payment unique constraint.
+func (h *Handler) payMyOrder(w http.ResponseWriter, r *http.Request) {
+	cid, ok := customerID(r)
+	if !ok {
+		unauthorized(w)
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "publicID"))
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return
+	}
+	order, err := h.q.GetOrderByPublicID(r.Context(), pid)
+	if err != nil || order.CustomerID != cid {
+		response.Fail(w, http.StatusNotFound, "not_found", "order not found")
+		return
+	}
+	switch order.Status {
+	case "cancelled":
+		response.Fail(w, http.StatusConflict, "invalid_state", "order is cancelled")
+		return
+	case "on_hold":
+		response.Fail(w, http.StatusConflict, "awaiting_approval", "order is awaiting approval and cannot be paid yet")
+		return
+	}
+
+	inv, err := h.invoiceForOrder(r.Context(), order)
+	if errors.Is(err, errOrderEmpty) {
+		response.Fail(w, http.StatusUnprocessableEntity, "empty_order", "order has no items to pay")
+		return
+	}
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not prepare invoice")
+		return
+	}
+	if inv.Status == "paid" {
+		response.Fail(w, http.StatusConflict, "already_paid", "this order has already been paid")
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	res, err := h.gateway.CreateCharge(r.Context(), gateway.ChargeRequest{
+		Amount: inv.GrandTotal, Currency: inv.Currency, Token: req.Token, Reference: inv.PublicID.String(),
+	})
+	if err != nil {
+		if errors.Is(err, gateway.ErrDeclined) {
+			response.Fail(w, http.StatusPaymentRequired, "declined", "the card was declined")
+			return
+		}
+		response.Fail(w, http.StatusBadGateway, "gateway_error", "payment could not be processed")
+		return
+	}
+
+	provider := h.gateway.Provider()
+	ref := res.GatewayReference
+	if _, err := h.q.CreatePayment(r.Context(), gen.CreatePaymentParams{
+		InvoiceID: &inv.ID, OrderID: &inv.OrderID, CustomerID: cid,
+		Method: "card", Gateway: &provider, GatewayReference: &ref,
+		Amount: inv.GrandTotal, Currency: inv.Currency, Status: "captured",
+		CapturedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not record payment")
+			return
+		}
+	}
+	if err := h.settleInvoiceIfCovered(r, inv.ID); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not settle invoice")
+		return
+	}
+	updated, err := h.q.GetInvoiceByPublicID(r.Context(), inv.PublicID)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load invoice")
+		return
+	}
+	h.renderInvoice(w, r, updated)
+}
+
+// invoiceForOrder returns the order's payable invoice: an existing paid one wins
+// (so we report already_paid), otherwise the first non-void invoice, otherwise a
+// freshly issued one.
+func (h *Handler) invoiceForOrder(ctx context.Context, order gen.Order) (gen.Invoice, error) {
+	invs, err := h.q.ListInvoicesForOrder(ctx, order.ID)
+	if err != nil {
+		return gen.Invoice{}, err
+	}
+	var open *gen.Invoice
+	for i := range invs {
+		if invs[i].Status == "paid" {
+			return invs[i], nil
+		}
+		if invs[i].Status != "void" && open == nil {
+			open = &invs[i]
+		}
+	}
+	if open != nil {
+		return *open, nil
+	}
+	return h.createInvoiceForOrder(ctx, order)
 }
 
 func (h *Handler) recordPayment(w http.ResponseWriter, r *http.Request) {

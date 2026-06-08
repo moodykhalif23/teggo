@@ -2,6 +2,7 @@ package otc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -16,26 +17,20 @@ import (
 	"b2bcommerce/internal/store/gen"
 )
 
-// issueInvoice creates an invoice from the order's lines, freezing amounts, and
-// enqueues async PDF generation. Due date follows the customer's payment terms.
-func (h *Handler) issueInvoice(w http.ResponseWriter, r *http.Request) {
-	a, ok := admin(r)
-	if !ok {
-		unauthorized(w)
-		return
-	}
-	order, ok := h.loadOrder(w, r, a)
-	if !ok {
-		return
-	}
-	items, err := h.q.ListOrderItems(r.Context(), order.ID)
+// errOrderEmpty is returned when an order has no lines to invoice.
+var errOrderEmpty = errors.New("order has no items to invoice")
+
+// createInvoiceForOrder freezes the order's lines into a new invoice (due date
+// from the customer's payment terms) and fires the PDF + email side-effects. It
+// is the shared core behind both admin issuance and storefront pay-now, so the
+// two paths produce identical invoices.
+func (h *Handler) createInvoiceForOrder(ctx context.Context, order gen.Order) (gen.Invoice, error) {
+	items, err := h.q.ListOrderItems(ctx, order.ID)
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not load order items")
-		return
+		return gen.Invoice{}, err
 	}
 	if len(items) == 0 {
-		response.Fail(w, http.StatusUnprocessableEntity, "empty_order", "order has no items to invoice")
-		return
+		return gen.Invoice{}, errOrderEmpty
 	}
 
 	var subtotals, taxes []string
@@ -49,14 +44,14 @@ func (h *Handler) issueInvoice(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	due := now
-	if bill, err := h.q.GetCustomerBilling(r.Context(), order.CustomerID); err == nil && bill.PaymentTermsDays > 0 {
+	if bill, err := h.q.GetCustomerBilling(ctx, order.CustomerID); err == nil && bill.PaymentTermsDays > 0 {
 		due = now.AddDate(0, 0, int(bill.PaymentTermsDays))
 	}
 
 	var invoice gen.Invoice
-	err = h.tx(r.Context(), func(q *gen.Queries) error {
+	err = h.tx(ctx, func(q *gen.Queries) error {
 		var e error
-		invoice, e = q.CreateInvoice(r.Context(), gen.CreateInvoiceParams{
+		invoice, e = q.CreateInvoice(ctx, gen.CreateInvoiceParams{
 			OrderID: order.ID, CustomerID: order.CustomerID, Currency: order.Currency,
 			Subtotal: subtotal, TaxTotal: taxTotal, GrandTotal: grand,
 			IssuedAt: tsNow(now), DueAt: tsNow(due),
@@ -65,7 +60,7 @@ func (h *Handler) issueInvoice(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 		for _, it := range items {
-			if _, e := q.AddInvoiceItem(r.Context(), gen.AddInvoiceItemParams{
+			if _, e := q.AddInvoiceItem(ctx, gen.AddInvoiceItemParams{
 				InvoiceID: invoice.ID, Description: it.Name, Quantity: it.Quantity,
 				UnitPrice: it.UnitPrice, TaxAmount: it.TaxAmount, RowTotal: it.RowTotal,
 			}); e != nil {
@@ -75,31 +70,54 @@ func (h *Handler) issueInvoice(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not issue invoice")
-		return
+		return gen.Invoice{}, err
 	}
 
 	if h.pdf != nil {
-		if err := h.pdf.EnqueueInvoicePDF(r.Context(), invoice.ID); err != nil {
-			slog.WarnContext(r.Context(), "enqueue invoice PDF failed", "invoice_id", invoice.ID, "err", err)
+		if err := h.pdf.EnqueueInvoicePDF(ctx, invoice.ID); err != nil {
+			slog.WarnContext(ctx, "enqueue invoice PDF failed", "invoice_id", invoice.ID, "err", err)
 		}
 	}
 	if h.notify != nil {
-		if to, name := h.primaryContact(r.Context(), invoice.CustomerID); to != "" {
-			due := ""
+		if to, name := h.primaryContact(ctx, invoice.CustomerID); to != "" {
+			dueStr := ""
 			if invoice.DueAt.Valid {
-				due = invoice.DueAt.Time.Format("2006-01-02")
+				dueStr = invoice.DueAt.Time.Format("2006-01-02")
 			}
-			if err := h.notify.EnqueueEmail(r.Context(), to, "invoice_issued", map[string]any{
+			if err := h.notify.EnqueueEmail(ctx, to, "invoice_issued", map[string]any{
 				"name":           name,
 				"invoice_number": "INV-" + shortID(invoice.PublicID.String()),
 				"total":          invoice.GrandTotal,
 				"currency":       invoice.Currency,
-				"due_at":         due,
+				"due_at":         dueStr,
 			}); err != nil {
-				slog.WarnContext(r.Context(), "enqueue email failed", "template", "invoice_issued", "invoice_id", invoice.ID, "err", err)
+				slog.WarnContext(ctx, "enqueue email failed", "template", "invoice_issued", "invoice_id", invoice.ID, "err", err)
 			}
 		}
+	}
+	return invoice, nil
+}
+
+// issueInvoice creates an invoice from the order's lines, freezing amounts, and
+// enqueues async PDF generation. Due date follows the customer's payment terms.
+func (h *Handler) issueInvoice(w http.ResponseWriter, r *http.Request) {
+	a, ok := admin(r)
+	if !ok {
+		unauthorized(w)
+		return
+	}
+	order, ok := h.loadOrder(w, r, a)
+	if !ok {
+		return
+	}
+	invoice, err := h.createInvoiceForOrder(r.Context(), order)
+	if errors.Is(err, errOrderEmpty) {
+		response.Fail(w, http.StatusUnprocessableEntity, "empty_order", "order has no items to invoice")
+		return
+	}
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not issue invoice")
+		return
 	}
 	h.renderInvoice(w, r, invoice)
 }

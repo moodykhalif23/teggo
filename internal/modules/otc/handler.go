@@ -103,6 +103,8 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Get("/storefront/invoices", h.listMyInvoices)
 		sr.Get("/storefront/invoices/{publicID}", h.getMyInvoice)
 		sr.Post("/storefront/invoices/{publicID}/pay", h.payInvoiceByCard)
+		// Pay an order directly (issues the invoice if none exists yet).
+		sr.Post("/storefront/orders/{publicID}/pay", h.payMyOrder)
 
 		sr.Get("/storefront/returns", h.listMyReturns)
 		sr.Post("/storefront/orders/{publicID}/returns", h.createMyReturn)

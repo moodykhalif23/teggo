@@ -659,17 +659,40 @@ func (h *Handler) renderOrder(w http.ResponseWriter, r *http.Request, order gen.
 	if items == nil {
 		items = []gen.OrderItem{}
 	}
+	// Surface payment state so the storefront can show "Pay now" vs "Paid".
+	// paid = any non-void invoice for this order is settled; invoice_public_id
+	// links to the relevant invoice (paid one wins, else the first open one).
+	paid := false
+	var invoicePublicID *string
+	if invs, e := h.q.ListInvoicesForOrder(r.Context(), order.ID); e == nil {
+		for i := range invs {
+			if invs[i].Status == "void" {
+				continue
+			}
+			pidStr := invs[i].PublicID.String()
+			if invs[i].Status == "paid" {
+				paid = true
+				invoicePublicID = &pidStr
+				break
+			}
+			if invoicePublicID == nil {
+				invoicePublicID = &pidStr
+			}
+		}
+	}
 	response.JSON(w, http.StatusOK, map[string]any{
-		"id":             order.ID,
-		"public_id":      order.PublicID.String(),
-		"status":         order.Status,
-		"currency":       order.Currency,
-		"subtotal":       order.Subtotal,
-		"tax_total":      order.TaxTotal,
-		"shipping_total": order.ShippingTotal,
-		"grand_total":    order.GrandTotal,
-		"quote_id":       order.QuoteID,
-		"items":          items,
+		"id":                order.ID,
+		"public_id":         order.PublicID.String(),
+		"status":            order.Status,
+		"currency":          order.Currency,
+		"subtotal":          order.Subtotal,
+		"tax_total":         order.TaxTotal,
+		"shipping_total":    order.ShippingTotal,
+		"grand_total":       order.GrandTotal,
+		"quote_id":          order.QuoteID,
+		"paid":              paid,
+		"invoice_public_id": invoicePublicID,
+		"items":             items,
 	})
 }
 

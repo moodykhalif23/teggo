@@ -1505,6 +1505,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/orders/{publicID}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pay an order by card (issues its invoice first if none exists yet) */
+        post: operations["storefrontPayOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/invoices": {
         parameters: {
             query?: never;
@@ -4244,6 +4263,9 @@ export interface components {
             grand_total: string;
             /** Format: int64 */
             quote_id?: number | null;
+            paid?: boolean;
+            /** Format: uuid */
+            invoice_public_id?: string | null;
             items: components["schemas"]["OrderItem"][];
         };
         OrderSummary: {
@@ -8552,6 +8574,38 @@ export interface operations {
         };
     };
     storefrontPayInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Gateway card token / nonce (no raw card data) */
+                    token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Paid */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            402: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontPayOrder: {
         parameters: {
             query?: never;
             header?: never;

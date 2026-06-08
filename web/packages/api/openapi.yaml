@@ -938,6 +938,8 @@ components:
         shipping_total: { type: string }
         grand_total: { type: string }
         quote_id: { type: integer, format: int64, nullable: true }
+        paid: { type: boolean }
+        invoice_public_id: { type: string, format: uuid, nullable: true }
         items: { type: array, items: { $ref: '#/components/schemas/OrderItem' } }
 
     OrderSummary:
@@ -3807,6 +3809,27 @@ paths:
       tags: [OrderToCash]
       operationId: storefrontPayInvoice
       summary: Pay an invoice by card via the configured gateway
+      security: [{ storefrontAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string, description: 'Gateway card token / nonce (no raw card data)' }
+      responses:
+        '200': { description: Paid, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceDetail' } } } }
+        '402': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/orders/{publicID}/pay:
+    parameters:
+      - { name: publicID, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [OrderToCash]
+      operationId: storefrontPayOrder
+      summary: Pay an order by card (issues its invoice first if none exists yet)
       security: [{ storefrontAuth: [] }]
       requestBody:
         content:

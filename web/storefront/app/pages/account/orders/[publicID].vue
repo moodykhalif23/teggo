@@ -29,6 +29,34 @@ useSeoMeta({ title: () => (order.value ? `Order ${order.value.public_id.slice(0,
 const reordering = ref(false)
 const reorderNotice = ref('')
 
+// ---- pay this order ----
+const paying = ref(false)
+const payNotice = ref('')
+// Show "Pay now" for live, unpaid orders (not cancelled, not awaiting approval).
+const canPay = computed(
+  () => !!order.value && !order.value.paid && !['cancelled', 'on_hold'].includes(order.value.status),
+)
+
+async function payNow() {
+  paying.value = true
+  payNotice.value = ''
+  // Demo token; the mock gateway accepts any token that doesn't contain "decline".
+  const { data, error: err, response } = await client.POST('/storefront/orders/{publicID}/pay', {
+    params: { path: { publicID } },
+    body: { token: 'tok_demo' },
+  })
+  paying.value = false
+  if (!err && data) {
+    // Land on the (now paid) invoice with its receipt + PDF.
+    router.push(`/account/invoices/${data.public_id}`)
+    return
+  }
+  if (response?.status === 402) payNotice.value = 'The card was declined. Please try another card.'
+  else if (response?.status === 409 && order.value?.invoice_public_id)
+    router.push(`/account/invoices/${order.value.invoice_public_id}`)
+  else payNotice.value = 'Payment could not be processed. Please try again.'
+}
+
 async function reorder() {
   reordering.value = true
   reorderNotice.value = ''
@@ -103,10 +131,17 @@ async function submitReturn() {
         <div class="actions">
           <Button label="Request return" icon="pi pi-undo" outlined severity="secondary" @click="openReturn" />
           <Button label="Reorder" icon="pi pi-replay" outlined :loading="reordering" @click="reorder" />
+          <Button v-if="canPay" label="Pay now" icon="pi pi-credit-card" :loading="paying" @click="payNow" />
+          <Tag v-else-if="order.paid" value="Paid" severity="success" icon="pi pi-check" />
           <div class="total">{{ order.grand_total }} {{ order.currency }}</div>
         </div>
       </div>
 
+      <Message v-if="payNotice" severity="error" :closable="true" class="mb">{{ payNotice }}</Message>
+      <Message v-if="order.paid" severity="success" :closable="false" class="mb">
+        This order has been paid.
+        <NuxtLink v-if="order.invoice_public_id" :to="`/account/invoices/${order.invoice_public_id}`">View invoice</NuxtLink>
+      </Message>
       <Message v-if="returnNotice" severity="info" :closable="true" class="mb">{{ returnNotice }}</Message>
 
       <DataTable :value="order.items" dataKey="id" stripedRows>
