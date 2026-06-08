@@ -42,6 +42,9 @@ function signOut() {
             @keyup.enter="search"
           />
         </span>
+        <ClientOnly>
+          <NotificationBell v-if="isAuthenticated" class="header-bell" />
+        </ClientOnly>
         <NuxtLink to="/cart" class="cart-link">
           <Button icon="pi pi-shopping-cart" label="Cart" severity="secondary" outlined />
         </NuxtLink>
