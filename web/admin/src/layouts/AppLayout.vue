@@ -195,8 +195,8 @@ function logout() {
     <div class="scrim" @click="mobileOpen = false" />
     <aside class="sidebar">
       <div class="brand">
-        <i class="pi pi-bolt" />
-        <span>Teggo Admin</span>
+        <span class="brand-badge"><i class="pi pi-bolt" /></span>
+        <span class="brand-name">Teggo<span class="brand-sub">Admin</span></span>
       </div>
       <div class="nav-scroll">
         <PanelMenu :model="navModel" v-model:expandedKeys="expandedKeys" class="nav" multiple />
@@ -263,17 +263,34 @@ function logout() {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: 0.02em;
+  gap: 0.6rem;
   height: 56px; /* match the topbar so the header line is flush, not bumpy */
-  padding: 0 1.25rem;
-  border-bottom: 1px solid var(--p-surface-200, #e2e8f0);
+  padding: 0 1.1rem;
   flex-shrink: 0;
 }
-.brand i {
-  color: var(--p-primary-color, #16a34a);
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--p-primary-color, #16a34a);
+  color: #fff;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+.brand-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  color: var(--p-text-color, #0f172a);
+}
+.brand-sub {
+  margin-left: 0.35rem;
+  font-weight: 500;
+  font-size: 0.82rem;
+  color: var(--p-text-muted-color, #94a3b8);
 }
 .nav-scroll {
   flex: 1;
@@ -282,80 +299,85 @@ function logout() {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--teggo-border, #cbd5e1) transparent;
-  padding: 0.4rem 0;
+  padding: 0.5rem 0 1rem;
 }
 .nav-scroll::-webkit-scrollbar {
   width: 8px;
 }
 .nav-scroll::-webkit-scrollbar-thumb {
   background: var(--teggo-border, #cbd5e1);
-  border-radius: 0;
+  border-radius: 8px;
 }
 
-/* --- PanelMenu: flat, borderless, collapsible sections (:deep for internals) --- */
+/* --- PanelMenu: quiet section labels + inset rounded item pills --- */
 .nav {
   width: 100%;
 }
 .nav :deep(.p-panelmenu-panel) {
   border: none;
   background: transparent;
-  margin: 0;
+  margin: 0.5rem 0 0;
 }
-/* Group headers — clickable, with the collapse chevron; subtle, not bold/dark. */
+.nav :deep(.p-panelmenu-panel:first-child) {
+  margin-top: 0;
+}
+/* Group headers read as quiet, uppercase section labels (no icon, no fill). */
 .nav :deep(.p-panelmenu-header-content) {
   border: none;
-  border-radius: 0;
   background: transparent;
 }
 .nav :deep(.p-panelmenu-header-link) {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 0.65rem;
-  padding: 0.55rem 1.1rem;
-  color: var(--p-text-muted-color, #64748b);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  padding: 0.4rem 1.25rem 0.3rem;
+  color: var(--p-text-muted-color, #94a3b8);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-/* Group icon on the left of the label (matches the submenu/leaf icons). */
 .nav :deep(.p-panelmenu-header-icon) {
-  font-size: 0.95rem;
-  color: var(--p-text-muted-color, #64748b);
+  display: none; /* drop the group icon — quieter, more premium */
 }
-/* Collapse chevron sits on the right of the group header. */
 .nav :deep(.p-panelmenu-header-link) .p-panelmenu-submenu-icon {
   order: 1;
   margin-left: auto;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.6;
 }
-.nav :deep(.p-panelmenu-header-content:hover) {
-  background: transparent;
+.nav :deep(.p-panelmenu-header-content:hover) .p-panelmenu-header-link {
+  color: var(--p-text-color, #475569);
 }
-/* Leaf items — flat, sharp, compact; no hover, active state instead. */
+
+/* Leaf items — inset rounded pills with a soft hover. */
 .nav :deep(.p-panelmenu-item-content) {
-  border-radius: 0;
-  transition: none;
+  margin: 1px 0.6rem;
+  border-radius: 8px;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 .nav :deep(.p-panelmenu-item-link) {
-  padding: 0.45rem 1.1rem 0.45rem 1.6rem;
-  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  gap: 0.7rem;
+  border-radius: 8px;
 }
 .nav :deep(.p-panelmenu-item-icon) {
-  font-size: 0.9rem;
-  color: var(--p-text-muted-color, #64748b);
+  font-size: 0.95rem;
+  width: 1.1rem;
+  text-align: center;
+  color: var(--p-text-muted-color, #94a3b8);
 }
 .nav :deep(.p-panelmenu-item-label) {
-  font-size: 0.87rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--p-text-color, #334155);
 }
 .nav :deep(.p-panelmenu-item-content:hover) {
-  background: transparent;
+  background: var(--p-surface-100, #f1f5f9);
 }
-/* Active route leaf: green left-accent + tint. */
+/* Active route leaf: filled primary-tint pill, primary text + icon. */
 .nav :deep(.p-panelmenu-item.nav-active > .p-panelmenu-item-content) {
   background: var(--p-primary-50, #f0fdf4);
-  box-shadow: inset 2px 0 0 0 var(--p-primary-color, #16a34a);
 }
 .nav :deep(.p-panelmenu-item.nav-active .p-panelmenu-item-label) {
   font-weight: 600;

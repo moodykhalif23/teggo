@@ -541,10 +541,11 @@ onMounted(load)
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 .panel {
   margin: 0;
+  height: 100%;
 }
 .span2 {
   grid-column: 1 / -1;
