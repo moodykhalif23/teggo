@@ -47,6 +47,35 @@ SET quantity_on_hand  = quantity_on_hand  + $3::numeric,
 WHERE product_id = $1 AND warehouse_id = $2
 RETURNING *;
 
+-- ListLowStock returns inventory lines at or below their reorder threshold,
+-- org-scoped, worst (largest shortfall) first. Lines with no threshold configured
+-- are excluded — there's no signal to compare available stock against.
+-- name: ListLowStock :many
+SELECT p.id AS product_id, p.sku, p.name,
+       w.id AS warehouse_id, w.name AS warehouse_name,
+       il.quantity_on_hand::numeric(15,4) AS on_hand,
+       il.quantity_reserved::numeric(15,4) AS reserved,
+       (il.quantity_on_hand - il.quantity_reserved)::numeric(15,4) AS available,
+       il.reorder_threshold::numeric(15,4) AS threshold
+FROM inventory_levels il
+JOIN products p ON p.id = il.product_id
+JOIN warehouses w ON w.id = il.warehouse_id
+WHERE p.organization_id = $1
+  AND p.deleted_at IS NULL
+  AND il.reorder_threshold IS NOT NULL
+  AND (il.quantity_on_hand - il.quantity_reserved) <= il.reorder_threshold
+ORDER BY (il.quantity_on_hand - il.quantity_reserved) - il.reorder_threshold ASC, p.name
+LIMIT $2;
+
+-- CountLowStock is the org-wide count of low-stock lines (dashboard badge).
+-- name: CountLowStock :one
+SELECT count(*) FROM inventory_levels il
+JOIN products p ON p.id = il.product_id
+WHERE p.organization_id = $1
+  AND p.deleted_at IS NULL
+  AND il.reorder_threshold IS NOT NULL
+  AND (il.quantity_on_hand - il.quantity_reserved) <= il.reorder_threshold;
+
 -- AvailableToPromise sums available across warehouses for a set of products (§12.4).
 -- name: AvailableToPromise :many
 SELECT product_id, SUM(quantity_on_hand - quantity_reserved)::numeric(15,4) AS available

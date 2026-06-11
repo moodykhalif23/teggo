@@ -32,6 +32,8 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 
 		ar.With(mw.RequirePermission("inventory.view")).Get("/admin/inventory/movements", h.listMovements)
 		ar.With(mw.RequirePermission("inventory.view")).Get("/admin/inventory/atp", h.atp)
+		// Static segment — matched before /admin/inventory/{productId}.
+		ar.With(mw.RequirePermission("inventory.view")).Get("/admin/inventory/low-stock", h.lowStock)
 		ar.With(mw.RequirePermission("inventory.view")).Get("/admin/inventory/{productId}", h.levelsForProduct)
 		ar.With(mw.RequirePermission("inventory.manage")).Put("/admin/inventory/{productId}", h.setLevelConfig)
 		ar.With(mw.RequirePermission("inventory.manage")).Post("/admin/inventory/adjustments", h.adjust)
@@ -234,6 +236,31 @@ func (h *Handler) listMovements(w http.ResponseWriter, r *http.Request) {
 	}
 	if rows == nil {
 		rows = []gen.InventoryMovement{}
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"items": rows})
+}
+
+// lowStock lists inventory lines at or below their reorder threshold across the
+// org, worst shortfall first. `limit` query param (default 50, max 500).
+func (h *Handler) lowStock(w http.ResponseWriter, r *http.Request) {
+	org, ok := orgID(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no claims")
+		return
+	}
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+	rows, err := h.q.ListLowStock(r.Context(), gen.ListLowStockParams{OrganizationID: org, Limit: int32(limit)})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load low stock")
+		return
+	}
+	if rows == nil {
+		rows = []gen.ListLowStockRow{}
 	}
 	response.JSON(w, http.StatusOK, map[string]any{"items": rows})
 }

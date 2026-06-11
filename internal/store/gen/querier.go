@@ -48,6 +48,8 @@ type Querier interface {
 	CountActiveProducts(ctx context.Context, organizationID int64) (int64, error)
 	CountAutomationExecutions(ctx context.Context, ruleID int64) (int64, error)
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
+	// CountLowStock is the org-wide count of low-stock lines (dashboard badge).
+	CountLowStock(ctx context.Context, organizationID int64) (int64, error)
 	CountPresets(ctx context.Context, organizationID int64) (int64, error)
 	CountProductImages(ctx context.Context, productID int64) (int64, error)
 	CountProductsAdmin(ctx context.Context, organizationID int64) (int64, error)
@@ -476,6 +478,10 @@ type Querier interface {
 	ListInvoicesForOrder(ctx context.Context, orderID int64) ([]Invoice, error)
 	ListInvoicesToSync(ctx context.Context, arg ListInvoicesToSyncParams) ([]Invoice, error)
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
+	// ListLowStock returns inventory lines at or below their reorder threshold,
+	// org-scoped, worst (largest shortfall) first. Lines with no threshold configured
+	// are excluded — there's no signal to compare available stock against.
+	ListLowStock(ctx context.Context, arg ListLowStockParams) ([]ListLowStockRow, error)
 	ListMedia(ctx context.Context, arg ListMediaParams) ([]MediaAsset, error)
 	ListMediaTags(ctx context.Context, mediaAssetID int64) ([]string, error)
 	ListMenuItems(ctx context.Context, menuID int64) ([]MenuItem, error)

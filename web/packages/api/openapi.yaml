@@ -1393,6 +1393,26 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Warehouse' } }
+    LowStockItem:
+      type: object
+      required: [product_id, sku, name, warehouse_id, warehouse_name, on_hand, reserved, available, threshold]
+      properties:
+        product_id: { type: integer, format: int64 }
+        sku: { type: string }
+        name: { type: string }
+        warehouse_id: { type: integer, format: int64 }
+        warehouse_name: { type: string }
+        on_hand: { type: string }
+        reserved: { type: string }
+        available: { type: string }
+        threshold: { type: string }
+
+    LowStockList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/LowStockItem' } }
+
     ListWrapperInventoryMovement:
       type: object
       properties:
@@ -4240,6 +4260,17 @@ paths:
         - { name: product_ids, in: query, required: true, schema: { type: string }, description: 'comma-separated product ids' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ATPResponse' } } } }
+
+  /admin/inventory/low-stock:
+    get:
+      tags: [Inventory]
+      operationId: adminLowStock
+      summary: Inventory lines at or below their reorder threshold (org-wide), worst first.
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 }, description: 'Max rows (1–500).' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LowStockList' } } } }
 
   /admin/inventory/{productId}:
     parameters:

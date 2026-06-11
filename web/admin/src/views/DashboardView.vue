@@ -22,6 +22,7 @@ type SalesSummary = components['schemas']['SalesSummary']
 type DailyPoint = components['schemas']['DailySalesPoint']
 type TopProduct = components['schemas']['TopProduct']
 type AccountHealth = components['schemas']['AccountHealth']
+type LowStockItem = components['schemas']['LowStockItem']
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -61,6 +62,7 @@ const statusLabels = ref<string[]>([])
 const statusValues = ref<number[]>([])
 const recentOrders = ref<OrderSummary[]>([])
 const atRisk = ref<AccountHealth[]>([])
+const lowStock = ref<LowStockItem[]>([])
 const pipelineValue = ref<number | null>(null)
 const pipelineCount = ref(0)
 const pipelineCurrency = ref('')
@@ -162,7 +164,7 @@ async function loadReports(days: number) {
 async function load() {
   const can = (p: string) => auth.can(p)
 
-  const [orders, aging, rfqs, quotes, returns, pendingProducts, customers, products, org, topProducts, health, opps] =
+  const [orders, aging, rfqs, quotes, returns, pendingProducts, customers, products, org, topProducts, health, opps, lowStockRes] =
     await Promise.all([
       can('order.view') ? api.GET('/admin/orders') : null,
       can('invoice.view') ? api.GET('/admin/invoices/aging') : null,
@@ -176,8 +178,11 @@ async function load() {
       can('report.view') ? api.GET('/admin/reports/top-products', { params: { query: { limit: 6 } } }) : null,
       can('crm.view') ? api.GET('/admin/accounts/health') : null,
       can('crm.view') ? api.GET('/admin/opportunities') : null,
+      can('inventory.view') ? api.GET('/admin/inventory/low-stock', { params: { query: { limit: 8 } } }) : null,
       loadReports(period.value),
     ])
+
+  lowStock.value = lowStockRes?.data?.items ?? []
 
   orgName.value = org?.data?.name ?? ''
   customersTotal.value = customers ? customers.data?.total ?? 0 : null
@@ -226,6 +231,7 @@ async function load() {
   const pending = pendingProducts?.data?.items?.length ?? 0
   if (pendingProducts && pending) t.push({ label: 'Products awaiting moderation', icon: 'pi pi-check-square', count: pending, route: 'moderation', severity: 'warn' })
   if (atRisk.value.length) t.push({ label: 'At-risk accounts', icon: 'pi pi-heart', count: atRisk.value.length, route: 'account-health', severity: 'danger' })
+  if (lowStock.value.length) t.push({ label: 'Low-stock items', icon: 'pi pi-exclamation-circle', count: lowStock.value.length, route: 'inventory', severity: 'warn' })
   tasks.value = t
 
   loading.value = false
@@ -395,6 +401,28 @@ onMounted(load)
                   <span v-if="a.reason" class="risk-reason">{{ a.reason }}</span>
                 </span>
                 <Tag :value="`${a.days_since}d`" severity="danger" />
+              </li>
+            </ul>
+          </template>
+        </Card>
+
+        <!-- Low stock -->
+        <Card v-if="lowStock.length" class="panel">
+          <template #title>Low stock</template>
+          <template #subtitle>At or below reorder threshold</template>
+          <template #content>
+            <ul class="risklist">
+              <li
+                v-for="s in lowStock"
+                :key="`${s.product_id}-${s.warehouse_id}`"
+                class="risk"
+                @click="router.push({ name: 'inventory' })"
+              >
+                <span class="risk-main">
+                  <span class="risk-name">{{ s.name }}</span>
+                  <span class="risk-reason">{{ s.sku }} · {{ s.warehouse_name }}</span>
+                </span>
+                <Tag :value="`${Number(s.available)} / ${Number(s.threshold)}`" severity="warn" />
               </li>
             </ul>
           </template>

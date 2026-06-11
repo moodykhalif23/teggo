@@ -1946,6 +1946,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/inventory/low-stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inventory lines at or below their reorder threshold (org-wide), worst first. */
+        get: operations["adminLowStock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/inventory/{productId}": {
         parameters: {
             query?: never;
@@ -4866,6 +4883,22 @@ export interface components {
         };
         ListWrapperWarehouse: {
             items?: components["schemas"]["Warehouse"][];
+        };
+        LowStockItem: {
+            /** Format: int64 */
+            product_id: number;
+            sku: string;
+            name: string;
+            /** Format: int64 */
+            warehouse_id: number;
+            warehouse_name: string;
+            on_hand: string;
+            reserved: string;
+            available: string;
+            threshold: string;
+        };
+        LowStockList: {
+            items: components["schemas"]["LowStockItem"][];
         };
         ListWrapperInventoryMovement: {
             items?: components["schemas"]["InventoryMovement"][];
@@ -9541,6 +9574,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ATPResponse"];
+                };
+            };
+        };
+    };
+    adminLowStock: {
+        parameters: {
+            query?: {
+                /** @description Max rows (1–500). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LowStockList"];
                 };
             };
         };

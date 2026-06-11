@@ -123,6 +123,23 @@ func (q *Queries) AvailableToPromise(ctx context.Context, dollar_1 []int64) ([]A
 	return items, nil
 }
 
+const countLowStock = `-- name: CountLowStock :one
+SELECT count(*) FROM inventory_levels il
+JOIN products p ON p.id = il.product_id
+WHERE p.organization_id = $1
+  AND p.deleted_at IS NULL
+  AND il.reorder_threshold IS NOT NULL
+  AND (il.quantity_on_hand - il.quantity_reserved) <= il.reorder_threshold
+`
+
+// CountLowStock is the org-wide count of low-stock lines (dashboard badge).
+func (q *Queries) CountLowStock(ctx context.Context, organizationID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countLowStock, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createWarehouse = `-- name: CreateWarehouse :one
 
 
@@ -310,6 +327,74 @@ func (q *Queries) ListInventoryMovements(ctx context.Context, arg ListInventoryM
 			&i.ReferenceID,
 			&i.CreatedBy,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLowStock = `-- name: ListLowStock :many
+SELECT p.id AS product_id, p.sku, p.name,
+       w.id AS warehouse_id, w.name AS warehouse_name,
+       il.quantity_on_hand::numeric(15,4) AS on_hand,
+       il.quantity_reserved::numeric(15,4) AS reserved,
+       (il.quantity_on_hand - il.quantity_reserved)::numeric(15,4) AS available,
+       il.reorder_threshold::numeric(15,4) AS threshold
+FROM inventory_levels il
+JOIN products p ON p.id = il.product_id
+JOIN warehouses w ON w.id = il.warehouse_id
+WHERE p.organization_id = $1
+  AND p.deleted_at IS NULL
+  AND il.reorder_threshold IS NOT NULL
+  AND (il.quantity_on_hand - il.quantity_reserved) <= il.reorder_threshold
+ORDER BY (il.quantity_on_hand - il.quantity_reserved) - il.reorder_threshold ASC, p.name
+LIMIT $2
+`
+
+type ListLowStockParams struct {
+	OrganizationID int64 `json:"organization_id"`
+	Limit          int32 `json:"limit"`
+}
+
+type ListLowStockRow struct {
+	ProductID     int64  `json:"product_id"`
+	Sku           string `json:"sku"`
+	Name          string `json:"name"`
+	WarehouseID   int64  `json:"warehouse_id"`
+	WarehouseName string `json:"warehouse_name"`
+	OnHand        string `json:"on_hand"`
+	Reserved      string `json:"reserved"`
+	Available     string `json:"available"`
+	Threshold     string `json:"threshold"`
+}
+
+// ListLowStock returns inventory lines at or below their reorder threshold,
+// org-scoped, worst (largest shortfall) first. Lines with no threshold configured
+// are excluded — there's no signal to compare available stock against.
+func (q *Queries) ListLowStock(ctx context.Context, arg ListLowStockParams) ([]ListLowStockRow, error) {
+	rows, err := q.db.Query(ctx, listLowStock, arg.OrganizationID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLowStockRow
+	for rows.Next() {
+		var i ListLowStockRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Sku,
+			&i.Name,
+			&i.WarehouseID,
+			&i.WarehouseName,
+			&i.OnHand,
+			&i.Reserved,
+			&i.Available,
+			&i.Threshold,
 		); err != nil {
 			return nil, err
 		}
