@@ -82,15 +82,15 @@ async function scroll() {
         </div>
       </div>
 
-      <!-- Conversation -->
+      <!-- Conversation — clean single-column flow -->
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
-        <span v-if="m.role === 'assistant'" class="avatar"><i class="pi pi-sparkles" /></span>
+        <span class="role">{{ m.role === 'user' ? 'You' : 'Assistant' }}</span>
         <div class="bubble">{{ m.text }}</div>
       </div>
 
       <!-- Typing indicator -->
       <div v-if="busy" class="msg assistant">
-        <span class="avatar"><i class="pi pi-sparkles" /></span>
+        <span class="role">Assistant</span>
         <div class="bubble typing">
           <span class="dots"><span></span><span></span><span></span></span>
         </div>
@@ -204,56 +204,41 @@ async function scroll() {
   font-size: 0.8rem;
 }
 
-/* Messages — each bubble hugs its own side (WhatsApp-style): the assistant on
-   the left, the user on the right. align-self lets the row shrink to content
-   instead of stretching across the full width. */
+/* Messages — clean single-column flow (document style). Your turns sit in a
+   subtle bordered card; the assistant's reply is plain flowing text. */
 .msg {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-end;
-  max-width: 82%;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
 }
-.msg.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-.msg.assistant {
-  align-self: flex-start;
-}
-.avatar {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--p-primary-color, #16a34a) 14%, transparent);
-  color: var(--p-primary-color, #16a34a);
-  font-size: 0.9rem;
+.role {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--p-text-muted-color, #94a3b8);
+  margin-bottom: 0.3rem;
 }
 .bubble {
-  max-width: 100%;
-  padding: 0.65rem 0.9rem;
-  border-radius: 14px;
   white-space: pre-wrap;
-  line-height: 1.45;
-  font-size: 0.9rem;
+  line-height: 1.6;
+  font-size: 0.92rem;
+  color: var(--p-text-color, #1e293b);
 }
 .msg.user .bubble {
-  background: var(--p-primary-color, #16a34a);
-  color: var(--p-primary-contrast-color, #fff);
-  border-bottom-right-radius: 4px;
+  background: var(--p-surface-50, #f8fafc);
+  border: 1px solid var(--teggo-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
 }
 .msg.assistant .bubble {
-  background: var(--p-surface-100, #f1f5f9);
-  color: var(--p-text-color, #1e293b);
-  border-bottom-left-radius: 4px;
+  padding: 0.1rem 0.1rem 0.4rem;
 }
 
 /* Typing dots */
 .typing {
-  padding: 0.7rem 0.95rem;
+  padding: 0.35rem 0.1rem;
 }
 .dots {
   display: inline-flex;
@@ -292,7 +277,9 @@ async function scroll() {
   border: 1px solid var(--teggo-border, #e2e8f0);
   border-radius: 14px;
   background: var(--teggo-surface, #fff);
-  margin-top: 0.5rem;
+  margin: 0.5rem auto 0;
+  width: 100%;
+  max-width: 46rem;
 }
 .composer :deep(textarea) {
   flex: 1;
