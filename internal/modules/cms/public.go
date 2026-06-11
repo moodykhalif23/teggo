@@ -49,6 +49,24 @@ func validateBlocks(rawBlocks []byte) error {
 
 // ---- storefront reads -----------------------------------------------------
 
+// resolveWebsite maps the request host to the website serving it (PRD §4
+// multi-website), falling back to the demo org's default website when no
+// configured domain matches.
+func (h *Handler) resolveWebsite(r *http.Request) (websiteID, orgID int64, err error) {
+	host := r.Host
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i] // strip port
+	}
+	if ws, derr := h.q.GetWebsiteByDomain(r.Context(), host); derr == nil {
+		return ws.ID, ws.OrganizationID, nil
+	}
+	ws, err := h.q.GetDefaultWebsite(r.Context(), storefrontOrg)
+	if err != nil {
+		return 0, 0, err
+	}
+	return ws.ID, storefrontOrg, nil
+}
+
 // getStorefrontPage serves a published page by slug. Targeted pages are filtered
 // by the requesting customer's group (read from an optional storefront token);
 // product-grid blocks have their category source resolved into product summaries.
@@ -58,12 +76,12 @@ func (h *Handler) getStorefrontPage(w http.ResponseWriter, r *http.Request) {
 	if locale == "" {
 		locale = "en"
 	}
-	ws, err := h.q.GetDefaultWebsite(r.Context(), storefrontOrg)
+	wsID, org, err := h.resolveWebsite(r)
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, "not_found", "no website")
 		return
 	}
-	p, err := h.q.GetPublishedPage(r.Context(), gen.GetPublishedPageParams{WebsiteID: ws.ID, Locale: locale, Slug: slug})
+	p, err := h.q.GetPublishedPage(r.Context(), gen.GetPublishedPageParams{WebsiteID: wsID, Locale: locale, Slug: slug})
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, "not_found", "page not found")
 		return
@@ -80,13 +98,13 @@ func (h *Handler) getStorefrontPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := pageJSON(p)
-	out["blocks"] = h.resolveBlocks(r, p.Blocks)
+	out["blocks"] = h.resolveBlocks(r, org, p.Blocks)
 	response.JSON(w, http.StatusOK, out)
 }
 
 // resolveBlocks expands product-grid blocks' category source into product
 // summaries (resolved at render time, §2.2). Other blocks pass through.
-func (h *Handler) resolveBlocks(r *http.Request, rawBlocks []byte) []map[string]any {
+func (h *Handler) resolveBlocks(r *http.Request, org int64, rawBlocks []byte) []map[string]any {
 	var blocks []map[string]any
 	if err := json.Unmarshal(rawBlocks, &blocks); err != nil {
 		return []map[string]any{}
@@ -112,7 +130,7 @@ func (h *Handler) resolveBlocks(r *http.Request, rawBlocks []byte) []map[string]
 			limit = int32(l)
 		}
 		rows, err := h.q.ListActiveProductsInCategory(r.Context(), gen.ListActiveProductsInCategoryParams{
-			OrganizationID: storefrontOrg, ID: catID, Limit: limit, Offset: 0,
+			OrganizationID: org, ID: catID, Limit: limit, Offset: 0,
 		})
 		if err != nil {
 			continue
@@ -132,12 +150,12 @@ func (h *Handler) resolveBlocks(r *http.Request, rawBlocks []byte) []map[string]
 
 func (h *Handler) getStorefrontMenu(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
-	ws, err := h.q.GetDefaultWebsite(r.Context(), storefrontOrg)
+	wsID, _, err := h.resolveWebsite(r)
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, "not_found", "no website")
 		return
 	}
-	m, err := h.q.GetMenuByCode(r.Context(), gen.GetMenuByCodeParams{WebsiteID: ws.ID, Code: code})
+	m, err := h.q.GetMenuByCode(r.Context(), gen.GetMenuByCodeParams{WebsiteID: wsID, Code: code})
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, "not_found", "menu not found")
 		return
@@ -159,12 +177,12 @@ func (h *Handler) resolveRedirect(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "path is required")
 		return
 	}
-	ws, err := h.q.GetDefaultWebsite(r.Context(), storefrontOrg)
+	wsID, _, err := h.resolveWebsite(r)
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, "not_found", "no website")
 		return
 	}
-	rd, err := h.q.GetRedirect(r.Context(), gen.GetRedirectParams{WebsiteID: ws.ID, FromPath: path})
+	rd, err := h.q.GetRedirect(r.Context(), gen.GetRedirectParams{WebsiteID: wsID, FromPath: path})
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, "not_found", "no redirect")
 		return

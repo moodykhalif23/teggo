@@ -254,6 +254,19 @@ type CustomerGroup struct {
 	Name           string `json:"name"`
 }
 
+type CustomerInvite struct {
+	ID            int64              `json:"id"`
+	Token         uuid.UUID          `json:"token"`
+	CustomerID    int64              `json:"customer_id"`
+	Role          string             `json:"role"`
+	SpendingLimit *string            `json:"spending_limit"`
+	ExpiresAt     time.Time          `json:"expires_at"`
+	UseCount      int32              `json:"use_count"`
+	RevokedAt     pgtype.Timestamptz `json:"revoked_at"`
+	CreatedBy     *int64             `json:"created_by"`
+	CreatedAt     time.Time          `json:"created_at"`
+}
+
 type CustomerUser struct {
 	ID            int64     `json:"id"`
 	CustomerID    int64     `json:"customer_id"`

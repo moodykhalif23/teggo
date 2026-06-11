@@ -290,6 +290,43 @@ components:
         spending_limit: { type: string, nullable: true }
         is_active: { type: boolean }
 
+    CustomerInvite:
+      type: object
+      required: [id, token, customer_id, role, expires_at, use_count, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        token: { type: string, format: uuid, description: 'Shareable signup token — the storefront join URL is /join/{token}.' }
+        customer_id: { type: integer, format: int64 }
+        role: { type: string, enum: [buyer, approver, admin] }
+        spending_limit: { type: string, nullable: true }
+        expires_at: { type: string, format: date-time }
+        use_count: { type: integer }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CustomerInviteInput:
+      type: object
+      properties:
+        role: { type: string, enum: [buyer, approver, admin], default: buyer }
+        spending_limit: { type: string, nullable: true }
+        expires_in_days: { type: integer, default: 14 }
+
+    InviteInfo:
+      type: object
+      required: [company_name, role, expires_at]
+      properties:
+        company_name: { type: string }
+        role: { type: string }
+        expires_at: { type: string, format: date-time }
+
+    InviteAcceptRequest:
+      type: object
+      required: [email, full_name, password]
+      properties:
+        email: { type: string, format: email }
+        full_name: { type: string }
+        password: { type: string, minLength: 8 }
+
     CompanyProfile:
       type: object
       required: [company, me]
@@ -2545,6 +2582,40 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/AuthToken' } } }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /storefront/invites/{token}:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Auth]
+      operationId: storefrontGetInvite
+      summary: Resolve an invite link so the join page can show the company being joined.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/InviteInfo' } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '410': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/invites/{token}/accept:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Auth]
+      operationId: storefrontAcceptInvite
+      summary: Self-register a buyer via an invite link and sign them in.
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/InviteAcceptRequest' } } }
+      responses:
+        '201':
+          description: Account created — returns a storefront token (same shape as login).
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthToken' } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '410': { $ref: '#/components/responses/ErrorResponse' }
+
   /storefront/products:
     get:
       tags: [Catalog]
@@ -2854,6 +2925,47 @@ paths:
         '201':
           description: Created
           content: { application/json: { schema: { $ref: '#/components/schemas/CustomerUser' } } }
+
+  /admin/customers/{id}/invites:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Customers]
+      operationId: adminListCustomerInvites
+      security: [{ adminAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/CustomerInvite' } }
+    post:
+      tags: [Customers]
+      operationId: adminCreateCustomerInvite
+      summary: Mint a shareable signup link for this company's buyers.
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CustomerInviteInput' } } }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/CustomerInvite' } } }
+
+  /admin/customers/{id}/invites/{inviteID}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      - { name: inviteID, in: path, required: true, schema: { type: integer, format: int64 } }
+    delete:
+      tags: [Customers]
+      operationId: adminRevokeCustomerInvite
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: Revoked }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /admin/customers/{id}/addresses:
     parameters:

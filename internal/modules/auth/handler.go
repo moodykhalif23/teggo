@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -23,11 +24,27 @@ func New(s *store.Store, issuer *auth.Issuer) *Handler {
 }
 
 // Routes mounts the login endpoints. The limiter middleware throttles
-// credential submission per client IP to blunt brute-force attempts.
+// credential submission per client IP to blunt brute-force attempts. Invite
+// endpoints are public (the token is the credential) and share the limiter.
 func (h *Handler) Routes(r chi.Router, limiter func(http.Handler) http.Handler) {
 	r.With(limiter).Post("/admin/auth/login", h.login)
 	r.With(limiter).Post("/storefront/auth/login", h.storefrontLogin)
 	r.With(limiter).Post("/vendor/auth/login", h.vendorLogin)
+	r.With(limiter).Get("/storefront/invites/{token}", h.getInvite)
+	r.With(limiter).Post("/storefront/invites/{token}/accept", h.acceptInvite)
+}
+
+// resolveOrgFromHost maps the request host to the org of the website serving it
+// (PRD §4 multi-website), falling back to the demo org when no domain matches.
+func (h *Handler) resolveOrgFromHost(r *http.Request) int64 {
+	host := r.Host
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	if ws, err := h.store.Queries().GetWebsiteByDomain(r.Context(), host); err == nil {
+		return ws.OrganizationID
+	}
+	return 1
 }
 
 type loginRequest struct {
@@ -79,7 +96,7 @@ func (h *Handler) storefrontLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.OrgID == 0 {
-		req.OrgID = 1 // demo convenience; resolve from website/host in production
+		req.OrgID = h.resolveOrgFromHost(r) // multi-website: org follows the serving domain
 	}
 
 	cu, err := h.store.Queries().GetCustomerUserForLogin(r.Context(), gen.GetCustomerUserForLoginParams{
@@ -108,7 +125,7 @@ func (h *Handler) vendorLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.OrgID == 0 {
-		req.OrgID = 1 // demo convenience; resolve from host in production
+		req.OrgID = h.resolveOrgFromHost(r) // multi-website: org follows the serving domain
 	}
 
 	vu, err := h.store.Queries().GetVendorUserForLogin(r.Context(), gen.GetVendorUserForLoginParams{

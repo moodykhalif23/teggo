@@ -22,8 +22,8 @@ import (
 	"b2bcommerce/internal/store/gen"
 )
 
-// storefrontOrg is the demo org/website resolution (mirrors the catalog
-// storefront, which also serves org 1; real multi-website resolves from host).
+// storefrontOrg is the fallback org when the request host matches no configured
+// website domain (see resolveWebsite in public.go — mirrors catalog.resolveOrg).
 const storefrontOrg int64 = 1
 
 type Handler struct {

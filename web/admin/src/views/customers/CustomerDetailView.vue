@@ -14,6 +14,7 @@ import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
 import Password from 'primevue/password'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
@@ -59,6 +60,7 @@ async function load() {
   addresses.value = a.data?.items ?? []
   const b = await api.GET('/admin/customers/{id}/budgets', { params: { path: { id } } })
   budgets.value = b.data?.items ?? []
+  loadInvites()
 }
 
 // --- budgets ---
@@ -118,6 +120,68 @@ async function saveUser() {
   userDialog.value = false
   toast.add({ severity: 'success', summary: 'User added', life: 2000 })
   load()
+}
+
+// --- invite links ---
+type Invite = components['schemas']['CustomerInvite']
+const invites = ref<Invite[]>([])
+const inviteDialog = ref(false)
+const savingInvite = ref(false)
+const inviteForm = reactive({ role: 'buyer' as 'buyer' | 'approver' | 'admin', expires_in_days: 14, spending_limit: '' })
+// The join link lives on the storefront domain (from the org's website record).
+const storefrontDomain = ref('')
+
+async function loadInvites() {
+  const [inv, ws] = await Promise.all([
+    api.GET('/admin/customers/{id}/invites', { params: { path: { id } } }),
+    storefrontDomain.value ? Promise.resolve(null) : api.GET('/admin/websites'),
+  ])
+  invites.value = inv.data?.items ?? []
+  if (ws?.data?.items?.length) storefrontDomain.value = ws.data.items[0].domain
+}
+
+function inviteLink(i: Invite) {
+  const domain = storefrontDomain.value || window.location.host
+  const proto = domain.includes('localhost') ? 'http' : 'https'
+  return `${proto}://${domain}/join/${i.token}`
+}
+function inviteStatus(i: Invite): { label: string; severity: string } {
+  if (i.revoked_at) return { label: 'revoked', severity: 'secondary' }
+  if (new Date(i.expires_at) < new Date()) return { label: 'expired', severity: 'warn' }
+  return { label: 'active', severity: 'success' }
+}
+async function copyInviteLink(i: Invite) {
+  await navigator.clipboard.writeText(inviteLink(i))
+  toast.add({ severity: 'success', summary: 'Link copied', detail: inviteLink(i), life: 3000 })
+}
+function openInvite() {
+  Object.assign(inviteForm, { role: 'buyer', expires_in_days: 14, spending_limit: '' })
+  inviteDialog.value = true
+}
+async function saveInvite() {
+  savingInvite.value = true
+  const { data, error: err } = await api.POST('/admin/customers/{id}/invites', {
+    params: { path: { id } },
+    body: { role: inviteForm.role, expires_in_days: inviteForm.expires_in_days, spending_limit: inviteForm.spending_limit || null },
+  })
+  savingInvite.value = false
+  if (err || !data) {
+    toast.add({ severity: 'error', summary: 'Failed', detail: errMessage(err), life: 4000 })
+    return
+  }
+  inviteDialog.value = false
+  await loadInvites()
+  await copyInviteLink(data)
+}
+async function revokeInvite(i: Invite) {
+  const { error: err } = await api.DELETE('/admin/customers/{id}/invites/{inviteID}', {
+    params: { path: { id, inviteID: i.id } },
+  })
+  if (err) {
+    toast.add({ severity: 'error', summary: 'Failed', detail: errMessage(err), life: 4000 })
+    return
+  }
+  loadInvites()
 }
 
 // --- add address ---
@@ -202,6 +266,7 @@ onMounted(load)
       <Tabs value="users" class="tabs">
         <TabList>
           <Tab value="users">Users ({{ users.length }})</Tab>
+          <Tab value="invites">Invite links ({{ invites.length }})</Tab>
           <Tab value="addresses">Addresses ({{ addresses.length }})</Tab>
           <Tab value="budgets">Budgets ({{ budgets.length }})</Tab>
         </TabList>
@@ -216,6 +281,34 @@ onMounted(load)
               <Column field="email" header="Email" />
               <Column field="role" header="Role" />
               <Column header="Spending limit"><template #body="{ data }">{{ data.spending_limit ?? '—' }}</template></Column>
+            </DataTable>
+          </TabPanel>
+          <TabPanel value="invites">
+            <div class="tabhead">
+              <Button icon="pi pi-link" label="New invite link" size="small" @click="openInvite" />
+            </div>
+            <p class="muted hint">Share a link so this company's buyers can register themselves on the storefront.</p>
+            <DataTable :value="invites" dataKey="id" stripedRows>
+              <template #empty>No invite links yet.</template>
+              <Column header="Link">
+                <template #body="{ data }"><code class="link-code">/join/{{ data.token.slice(0, 8) }}…</code></template>
+              </Column>
+              <Column field="role" header="Role" />
+              <Column header="Expires"><template #body="{ data }">{{ new Date(data.expires_at).toLocaleDateString() }}</template></Column>
+              <Column field="use_count" header="Signups" />
+              <Column header="Status">
+                <template #body="{ data }"><Tag :value="inviteStatus(data).label" :severity="inviteStatus(data).severity" /></template>
+              </Column>
+              <Column header="" style="width: 7rem">
+                <template #body="{ data }">
+                  <Button icon="pi pi-copy" text rounded size="small" title="Copy link" @click="copyInviteLink(data)" />
+                  <Button
+                    v-if="inviteStatus(data).label === 'active'"
+                    icon="pi pi-ban" text rounded severity="danger" size="small" title="Revoke"
+                    @click="revokeInvite(data)"
+                  />
+                </template>
+              </Column>
             </DataTable>
           </TabPanel>
           <TabPanel value="addresses">
@@ -276,6 +369,19 @@ onMounted(load)
       </template>
     </Dialog>
 
+    <!-- New invite link dialog -->
+    <Dialog v-model:visible="inviteDialog" header="New invite link" modal :style="{ width: '420px' }">
+      <form class="form" @submit.prevent="saveInvite">
+        <div class="field"><label>Role for everyone who joins</label><Select v-model="inviteForm.role" :options="['buyer', 'approver', 'admin']" fluid /></div>
+        <div class="field"><label>Expires in (days)</label><InputNumber v-model="inviteForm.expires_in_days" :min="1" :max="365" showButtons fluid /></div>
+        <div class="field"><label>Spending limit (optional)</label><InputText v-model="inviteForm.spending_limit" fluid placeholder="blank = unlimited" /></div>
+      </form>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="inviteDialog = false" />
+        <Button label="Create &amp; copy link" icon="pi pi-link" :loading="savingInvite" @click="saveInvite" />
+      </template>
+    </Dialog>
+
     <!-- Add address dialog -->
     <Dialog v-model:visible="addrDialog" header="Add address" modal :style="{ width: '480px' }">
       <form class="form" @submit.prevent="saveAddr">
@@ -317,4 +423,6 @@ onMounted(load)
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field label { font-size: 0.8rem; font-weight: 600; }
 .check { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.5rem; }
+.hint { margin: -0.25rem 0 0.75rem; font-size: 0.88rem; }
+.link-code { font-size: 0.82rem; }
 </style>

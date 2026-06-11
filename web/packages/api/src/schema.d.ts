@@ -36,6 +36,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/invites/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** Resolve an invite link so the join page can show the company being joined. */
+        get: operations["storefrontGetInvite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/invites/{token}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Self-register a buyer via an invite link and sign them in. */
+        post: operations["storefrontAcceptInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/products": {
         parameters: {
             query?: never;
@@ -271,6 +309,44 @@ export interface paths {
         put?: never;
         post: operations["adminCreateCustomerUser"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/customers/{id}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListCustomerInvites"];
+        put?: never;
+        /** Mint a shareable signup link for this company's buyers. */
+        post: operations["adminCreateCustomerInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/customers/{id}/invites/{inviteID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                inviteID: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminRevokeCustomerInvite"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3731,6 +3807,49 @@ export interface components {
             spending_limit?: string | null;
             is_active?: boolean;
         };
+        CustomerInvite: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: uuid
+             * @description Shareable signup token — the storefront join URL is /join/{token}.
+             */
+            token: string;
+            /** Format: int64 */
+            customer_id: number;
+            /** @enum {string} */
+            role: "buyer" | "approver" | "admin";
+            spending_limit?: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            use_count: number;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CustomerInviteInput: {
+            /**
+             * @default buyer
+             * @enum {string}
+             */
+            role: "buyer" | "approver" | "admin";
+            spending_limit?: string | null;
+            /** @default 14 */
+            expires_in_days: number;
+        };
+        InviteInfo: {
+            company_name: string;
+            role: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        InviteAcceptRequest: {
+            /** Format: email */
+            email: string;
+            full_name: string;
+            password: string;
+        };
         CompanyProfile: {
             company: {
                 /** Format: int64 */
@@ -5865,6 +5984,59 @@ export interface operations {
             401: components["responses"]["ErrorResponse"];
         };
     };
+    storefrontGetInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteInfo"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontAcceptInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created — returns a storefront token (same shape as login). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthToken"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+        };
+    };
     storefrontListProducts: {
         parameters: {
             query?: {
@@ -6478,6 +6650,78 @@ export interface operations {
                     "application/json": components["schemas"]["CustomerUser"];
                 };
             };
+        };
+    };
+    adminListCustomerInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: components["schemas"]["CustomerInvite"][];
+                    };
+                };
+            };
+        };
+    };
+    adminCreateCustomerInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerInviteInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInvite"];
+                };
+            };
+        };
+    };
+    adminRevokeCustomerInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                inviteID: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
         };
     };
     adminListCustomerAddresses: {

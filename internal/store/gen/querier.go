@@ -80,6 +80,10 @@ type Querier interface {
 	// Customers & accounts queries — Implementation Pack 1 §2 + §12.2.
 	// Every query is organization-scoped (tenant isolation enforced at the query layer).
 	CreateCustomerGroup(ctx context.Context, arg CreateCustomerGroupParams) (CustomerGroup, error)
+	// Customer invite links — shareable buyer-onboarding tokens (0044).
+	// Admin queries are organization-scoped via the customers join; the public
+	// token lookup carries the org back so the accept flow can mint a token.
+	CreateCustomerInvite(ctx context.Context, arg CreateCustomerInviteParams) (CustomerInvite, error)
 	CreateCustomerUser(ctx context.Context, arg CreateCustomerUserParams) (CreateCustomerUserRow, error)
 	// ===== EDI documents =======================================================
 	CreateEDIDocument(ctx context.Context, arg CreateEDIDocumentParams) (EdiDocument, error)
@@ -282,6 +286,9 @@ type Querier interface {
 	// webhook is connection-scoped; org comes from the row).
 	GetIntegrationConnectionByID(ctx context.Context, id int64) (IntegrationConnection, error)
 	GetInventoryLevel(ctx context.Context, arg GetInventoryLevelParams) (InventoryLevel, error)
+	// GetInviteByToken resolves a live invite plus the company it joins. Validity
+	// (expiry/revocation) is checked app-side so we can return precise errors.
+	GetInviteByToken(ctx context.Context, token uuid.UUID) (GetInviteByTokenRow, error)
 	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
 	GetInvoiceByIDInternal(ctx context.Context, id int64) (Invoice, error)
 	GetInvoiceByPublicID(ctx context.Context, publicID uuid.UUID) (Invoice, error)
@@ -390,6 +397,7 @@ type Querier interface {
 	// a product or to any category the product belongs to. With cust+grp both null
 	// (anonymous) it returns nothing — the default catalog is fully visible.
 	HiddenProductIDsForCustomer(ctx context.Context, arg HiddenProductIDsForCustomerParams) ([]int64, error)
+	IncrementInviteUse(ctx context.Context, id int64) error
 	// ListAbandonedCarts returns active carts with items that have gone idle past
 	// the cutoff and weren't reminded since their last change. $1 = idle cutoff.
 	ListAbandonedCarts(ctx context.Context, updatedAt time.Time) ([]ListAbandonedCartsRow, error)
@@ -453,6 +461,7 @@ type Querier interface {
 	ListIntegrationConnections(ctx context.Context, organizationID int64) ([]IntegrationConnection, error)
 	ListInventoryLevelsForProduct(ctx context.Context, productID int64) ([]ListInventoryLevelsForProductRow, error)
 	ListInventoryMovements(ctx context.Context, arg ListInventoryMovementsParams) ([]InventoryMovement, error)
+	ListInvitesForCustomer(ctx context.Context, arg ListInvitesForCustomerParams) ([]CustomerInvite, error)
 	ListInvoiceItems(ctx context.Context, invoiceID int64) ([]InvoiceItem, error)
 	ListInvoicesAdmin(ctx context.Context, arg ListInvoicesAdminParams) ([]Invoice, error)
 	ListInvoicesForCustomer(ctx context.Context, customerID int64) ([]Invoice, error)
@@ -606,6 +615,7 @@ type Querier interface {
 	// website (1). Account-hierarchy inheritance (PRD §5.1): a child with no list of
 	// its own falls back to the nearest ancestor's assignment.
 	ResolvePrice(ctx context.Context, arg ResolvePriceParams) (ResolvePriceRow, error)
+	RevokeCustomerInvite(ctx context.Context, arg RevokeCustomerInviteParams) (int64, error)
 	// SalesSummary is the headline KPI rollup since a date.
 	SalesSummary(ctx context.Context, arg SalesSummaryParams) (SalesSummaryRow, error)
 	// SearchActiveProducts: full-text product search (PRD §14, Postgres FTS).

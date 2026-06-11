@@ -20,9 +20,22 @@ export function useAuth() {
     token.value = data.token
   }
 
+  // Redeem a shareable invite link (/join/<token>): registers the buyer under
+  // the invite's company and signs them straight in.
+  async function acceptInvite(inviteToken: string, body: { email: string; full_name: string; password: string }) {
+    const { data, error } = await client.POST('/storefront/invites/{token}/accept', {
+      params: { path: { token: inviteToken } },
+      body,
+    })
+    if (error || !data) {
+      throw new Error((error as { message?: string } | undefined)?.message || 'Could not create your account')
+    }
+    token.value = data.token
+  }
+
   function logout() {
     token.value = null
   }
 
-  return { token, isAuthenticated, login, logout }
+  return { token, isAuthenticated, login, acceptInvite, logout }
 }
