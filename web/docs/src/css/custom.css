@@ -1,6 +1,6 @@
 /* Teggo docs theme — brand overrides on Docusaurus' Infima defaults.
    Emerald primary matches the product (admin/storefront use the Aura green hue);
-   Inter matches the admin font stack. */
+   Open Sans matches the universal product font stack (loaded via config head). */
 :root {
   --ifm-color-primary: #059669;
   --ifm-color-primary-dark: #047857;
@@ -10,7 +10,7 @@
   --ifm-color-primary-lighter: #34d399;
   --ifm-color-primary-lightest: #6ee7b7;
   --ifm-code-font-size: 92%;
-  --ifm-font-family-base: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --ifm-font-family-base: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
 }
 

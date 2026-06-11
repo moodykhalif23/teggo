@@ -84,6 +84,18 @@ const config: Config = {
 
   themes: ['docusaurus-theme-openapi-docs'],
 
+  // Universal product font — Open Sans, matching admin/storefront/vendor.
+  headTags: [
+    { tagName: 'link', attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
+    {
+      tagName: 'link',
+      attributes: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'true' },
+    },
+  ],
+  stylesheets: [
+    'https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap',
+  ],
+
   themeConfig: {
     navbar: {
       title: 'Teggo',

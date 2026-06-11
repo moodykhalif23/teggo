@@ -3,12 +3,10 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
-import PanelMenu from 'primevue/panelmenu'
 import Avatar from 'primevue/avatar'
 import Popover from 'primevue/popover'
 import Button from 'primevue/button'
 import NotificationBell from '@/components/NotificationBell.vue'
-import type { MenuItem } from 'primevue/menuitem'
 
 const auth = useAuthStore()
 const notifications = useNotificationsStore()
@@ -145,40 +143,23 @@ const groups: NavGroup[] = [
   },
 ]
 
-// Build the PanelMenu model: drop leaves the user lacks permission for, drop
-// emptied groups, key each node, and mark the active route leaf.
-const navModel = computed<MenuItem[]>(() => {
-  const model: MenuItem[] = []
-  for (const g of groups) {
-    const leaves = g.items.filter((i) => !i.permission || auth.can(i.permission))
-    if (!leaves.length) continue
-    const children: MenuItem[] = leaves.map((i) => ({
-      key: i.routeName,
-      label: i.label,
-      icon: i.icon,
-      class: route.name === i.routeName ? 'nav-active' : undefined,
-      command: () => router.push({ name: i.routeName }),
-    }))
-    if (g.label) model.push({ key: g.label, label: g.label, icon: g.icon, items: children })
-    else model.push(...children) // Dashboard — top-level leaf, no group
-  }
-  return model
-})
-
-// Keep the group that owns the current route expanded (without collapsing groups
-// the user opened themselves). PanelMenu also toggles this via v-model.
-const expandedKeys = ref<Record<string, boolean>>({})
-watch(
-  () => route.name,
-  () => {
-    for (const g of groups) {
-      if (g.label && g.items.some((i) => i.routeName === route.name)) {
-        expandedKeys.value = { ...expandedKeys.value, [g.label]: true }
-      }
-    }
-  },
-  { immediate: true },
+// Static menu (Verona-style): always-visible section labels + flat item links.
+// Drop leaves the user lacks permission for, then drop any emptied group.
+const visibleGroups = computed(() =>
+  groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.permission || auth.can(i.permission)) }))
+    .filter((g) => g.items.length),
 )
+
+// Highlight a nav item when its route is active. Exact match for the root
+// dashboard ('/'), otherwise prefix-match so detail/editor routes (e.g.
+// /customers/123) keep their parent list item highlighted.
+function isActive(routeName: string): boolean {
+  if (route.name === routeName) return true
+  const path = router.resolve({ name: routeName }).path
+  if (path === '/') return false
+  return route.path === path || route.path.startsWith(path + '/')
+}
 
 const account = ref()
 function toggleAccount(e: Event) {
@@ -198,9 +179,19 @@ function logout() {
         <span class="brand-badge"><i class="pi pi-bolt" /></span>
         <span class="brand-name">Teggo<span class="brand-sub">Admin</span></span>
       </div>
-      <div class="nav-scroll">
-        <PanelMenu :model="navModel" v-model:expandedKeys="expandedKeys" class="nav" multiple />
-      </div>
+      <nav class="nav-scroll">
+        <ul class="menu">
+          <template v-for="g in visibleGroups" :key="g.label || 'root'">
+            <li v-if="g.label" class="menu-section">{{ g.label }}</li>
+            <li v-for="item in g.items" :key="item.routeName" class="menu-item">
+              <RouterLink :to="{ name: item.routeName }" class="menu-link" :class="{ active: isActive(item.routeName) }">
+                <i :class="item.icon" class="menu-icon" />
+                <span class="menu-text">{{ item.label }}</span>
+              </RouterLink>
+            </li>
+          </template>
+        </ul>
+      </nav>
     </aside>
 
     <div class="main">
@@ -309,81 +300,57 @@ function logout() {
   border-radius: 8px;
 }
 
-/* --- PanelMenu: quiet section labels + inset rounded item pills --- */
-.nav {
-  width: 100%;
+/* --- Static menu (Verona-style): section labels + flat item links --- */
+.menu {
+  list-style: none;
+  margin: 0;
+  padding: 0 0.75rem;
 }
-.nav :deep(.p-panelmenu-panel) {
-  border: none;
-  background: transparent;
-  margin: 0.5rem 0 0;
-}
-.nav :deep(.p-panelmenu-panel:first-child) {
-  margin-top: 0;
-}
-/* Group headers read as quiet, uppercase section labels (no icon, no fill). */
-.nav :deep(.p-panelmenu-header-content) {
-  border: none;
-  background: transparent;
-}
-.nav :deep(.p-panelmenu-header-link) {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 0.4rem 1.25rem 0.3rem;
-  color: var(--p-text-color, #0f172a);
-  font-size: 0.68rem;
+/* Uppercase, muted, bold section labels — always visible. */
+.menu-section {
+  padding: 1rem 0.6rem 0.4rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-.nav :deep(.p-panelmenu-header-icon) {
-  display: none; /* drop the group icon — quieter, more premium */
-}
-.nav :deep(.p-panelmenu-header-link) .p-panelmenu-submenu-icon {
-  order: 1;
-  margin-left: auto;
-  font-size: 0.7rem;
-  opacity: 0.6;
-}
-.nav :deep(.p-panelmenu-header-content:hover) .p-panelmenu-header-link {
-  color: var(--p-text-color, #0f172a);
-}
-
-/* Leaf items — inset rounded pills with a soft hover. */
-.nav :deep(.p-panelmenu-item-content) {
-  margin: 1px 0.6rem;
-  border-radius: 8px;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-.nav :deep(.p-panelmenu-item-link) {
-  padding: 0.5rem 0.7rem;
-  gap: 0.7rem;
-  border-radius: 8px;
-}
-.nav :deep(.p-panelmenu-item-icon) {
-  font-size: 0.95rem;
-  width: 1.1rem;
-  text-align: center;
   color: var(--p-text-muted-color, #94a3b8);
 }
-.nav :deep(.p-panelmenu-item-label) {
+.menu-item {
+  margin-bottom: 1px;
+}
+.menu-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--p-text-color, #334155);
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--p-text-color, #334155);
+  line-height: 1.2;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
-.nav :deep(.p-panelmenu-item-content:hover) {
+.menu-icon {
+  font-size: 1rem;
+  width: 1.15rem;
+  text-align: center;
+  color: var(--p-text-muted-color, #94a3b8);
+  flex-shrink: 0;
+}
+.menu-text {
+  flex: 1;
+  min-width: 0;
+}
+.menu-link:hover {
   background: var(--p-surface-100, #f1f5f9);
 }
-/* Active route leaf: filled primary-tint pill, primary text + icon. */
-.nav :deep(.p-panelmenu-item.nav-active > .p-panelmenu-item-content) {
+/* Active route: subtle primary-tint fill + bold; icon picks up the brand color. */
+.menu-link.active {
   background: var(--p-primary-50, #f0fdf4);
+  font-weight: 700;
 }
-.nav :deep(.p-panelmenu-item.nav-active .p-panelmenu-item-label) {
-  font-weight: 600;
-  color: var(--p-primary-color, #16a34a);
-}
-.nav :deep(.p-panelmenu-item.nav-active .p-panelmenu-item-icon) {
+.menu-link.active .menu-icon {
   color: var(--p-primary-color, #16a34a);
 }
 

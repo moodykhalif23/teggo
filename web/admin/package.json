@@ -17,6 +17,7 @@
     "@vue-flow/controls": "^1.1.2",
     "@vue-flow/core": "^1.42.1",
     "echarts": "^6.1.0",
+    "lottie-web": "^5.13.0",
     "pinia": "^3.0.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",

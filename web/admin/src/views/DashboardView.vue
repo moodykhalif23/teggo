@@ -5,10 +5,12 @@ import Card from 'primevue/card'
 import Tag from 'primevue/tag'
 import Button from 'primevue/button'
 import SelectButton from 'primevue/selectbutton'
-import ProgressSpinner from 'primevue/progressspinner'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/lib/client'
 import type { components } from '@teggo/api/schema'
+import CountUp from '@/components/CountUp.vue'
+import LottiePlayer from '@/components/LottiePlayer.vue'
+import pulse from '@/assets/lottie/pulse.json'
 
 // ECharts lazy-loaded into their own chunk, off the dashboard's critical path.
 const LineChart = defineAsyncComponent(() => import('@/components/LineChart.vue'))
@@ -118,6 +120,9 @@ const greeting = computed(() => {
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 })
 const firstName = computed(() => (auth.email ?? '').split('@')[0] || 'there')
+const today = computed(() =>
+  new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
+)
 
 function statusSeverity(s: string) {
   if (['delivered', 'closed', 'paid', 'confirmed'].includes(s)) return 'success'
@@ -238,7 +243,8 @@ onMounted(load)
 <template>
   <div class="page dashboard">
     <header class="dash-head">
-      <div>
+      <div class="dash-greet">
+        <p class="dash-date">{{ today }}</p>
         <h1>{{ greeting }}, {{ firstName }}</h1>
         <p class="sub">
           Here's what's happening
@@ -270,21 +276,40 @@ onMounted(load)
       </div>
     </header>
 
-    <div v-if="loading" class="loading"><ProgressSpinner style="width: 2.5rem; height: 2.5rem" /></div>
+    <!-- Skeleton — content-shaped placeholders that melt into the real data,
+         so the page never jolts from a spinner to a full layout. -->
+    <div v-if="loading" class="dash-skeleton" aria-hidden="true">
+      <div class="sk-stats">
+        <div v-for="n in 4" :key="n" class="sk-stat">
+          <span class="sk-ic shimmer" />
+          <span class="sk-lines">
+            <span class="sk-line lg shimmer" />
+            <span class="sk-line sm shimmer" />
+          </span>
+        </div>
+      </div>
+      <div class="sk-grid">
+        <span class="sk-card span2 shimmer" />
+        <span class="sk-card shimmer" />
+        <span class="sk-card shimmer" />
+        <span class="sk-card shimmer" />
+      </div>
+    </div>
 
     <template v-else>
       <!-- Headline KPIs -->
       <section v-if="kpis.length" class="stats">
         <button
-          v-for="k in kpis"
+          v-for="(k, i) in kpis"
           :key="k.key"
           type="button"
           class="stat"
+          :style="{ '--i': i }"
           @click="router.push({ name: k.route })"
         >
           <span class="stat-ic"><i :class="k.icon" /></span>
           <span class="stat-main">
-            <span class="stat-val">{{ k.value }}</span>
+            <span class="stat-val"><CountUp :value="k.value" /></span>
             <span class="stat-lbl">
               {{ k.label }}
               <span
@@ -325,8 +350,12 @@ onMounted(load)
               </li>
             </ul>
             <div v-else class="caught-up">
-              <i class="pi pi-check-circle" />
-              <span>You're all caught up — nothing needs attention.</span>
+              <span class="caught-badge">
+                <LottiePlayer :animation-data="pulse" class="caught-pulse" />
+                <i class="pi pi-check" />
+              </span>
+              <span class="caught-title">You're all caught up</span>
+              <span class="caught-sub">Nothing needs your attention right now.</span>
             </div>
           </template>
         </Card>
@@ -337,7 +366,7 @@ onMounted(load)
           <template #subtitle>Open opportunities</template>
           <template #content>
             <button type="button" class="pipeline" @click="router.push({ name: 'pipeline' })">
-              <span class="pipe-val">{{ pipelineValue.toLocaleString() }} {{ pipelineCurrency }}</span>
+              <span class="pipe-val"><CountUp :value="`${pipelineValue.toLocaleString()} ${pipelineCurrency}`" /></span>
               <span class="pipe-lbl">{{ pipelineCount }} open {{ pipelineCount === 1 ? 'opportunity' : 'opportunities' }}</span>
             </button>
           </template>
@@ -445,6 +474,14 @@ onMounted(load)
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+.dash-date {
+  margin: 0 0 0.15rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--p-primary-color, #16a34a);
+}
 .sub {
   margin: 0.3rem 0 0;
   color: var(--p-text-muted-color, #64748b);
@@ -456,13 +493,85 @@ onMounted(load)
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-.loading {
-  display: flex;
-  justify-content: center;
-  padding: 4rem 0;
-}
 .muted { color: var(--p-text-muted-color, #64748b); }
 .empty-line { padding: 1rem 0; }
+
+/* ---- Skeleton loading ---------------------------------------------------- */
+.sk-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.sk-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.05rem 1.15rem;
+  border: 1px solid var(--teggo-border, #e2e8f0);
+  border-radius: var(--teggo-radius, 6px);
+  background: var(--teggo-surface, #fff);
+}
+.sk-ic {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--teggo-radius, 6px);
+}
+.sk-lines { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; }
+.sk-line { height: 0.85rem; border-radius: 5px; }
+.sk-line.lg { width: 60%; height: 1.2rem; }
+.sk-line.sm { width: 40%; }
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.sk-card { height: 220px; border-radius: var(--teggo-radius, 6px); }
+.sk-card.span2 { grid-column: 1 / -1; height: 240px; }
+.shimmer {
+  background: linear-gradient(
+    100deg,
+    var(--p-surface-100, #f1f5f9) 30%,
+    var(--p-surface-200, #e2e8f0) 50%,
+    var(--p-surface-100, #f1f5f9) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (max-width: 900px) {
+  .sk-grid { grid-template-columns: 1fr; }
+  .sk-card.span2 { grid-column: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer { animation: none; }
+}
+
+/* ---- Calm assembly — content rises in a gentle stagger ------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .stat {
+    animation: rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 55ms);
+  }
+  .grid > .panel {
+    animation: rise 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  }
+  .grid > .panel:nth-child(1) { animation-delay: 0.12s; }
+  .grid > .panel:nth-child(2) { animation-delay: 0.18s; }
+  .grid > .panel:nth-child(3) { animation-delay: 0.24s; }
+  .grid > .panel:nth-child(4) { animation-delay: 0.30s; }
+  .grid > .panel:nth-child(5) { animation-delay: 0.36s; }
+  .grid > .panel:nth-child(6) { animation-delay: 0.42s; }
+  .grid > .panel:nth-child(n + 7) { animation-delay: 0.48s; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
 
 /* Stat tiles */
 .stats {
@@ -609,15 +718,46 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  padding: 1.75rem 1rem;
+  gap: 0.15rem;
+  padding: 1.5rem 1rem 1.75rem;
   text-align: center;
-  color: var(--p-text-muted-color, #64748b);
-  font-size: 0.88rem;
 }
-.caught-up .pi {
-  font-size: 1.5rem;
-  color: var(--p-green-500, #22c55e);
+.caught-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 0.6rem;
+}
+.caught-pulse {
+  position: absolute;
+  inset: 0;
+  width: 84px;
+  height: 84px;
+}
+.caught-badge .pi {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--p-primary-color, #16a34a) 14%, transparent);
+  color: var(--p-primary-color, #16a34a);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.caught-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--p-text-color, #0f172a);
+}
+.caught-sub {
+  font-size: 0.82rem;
+  color: var(--p-text-muted-color, #64748b);
 }
 
 /* Sales pipeline */
