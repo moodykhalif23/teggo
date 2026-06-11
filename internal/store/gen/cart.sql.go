@@ -15,7 +15,7 @@ import (
 const createCart = `-- name: CreateCart :one
 INSERT INTO carts (customer_id, customer_user_id, website_id, currency, status)
 VALUES ($1, $2, $3, $4, 'active')
-RETURNING id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at
+RETURNING id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at, coupon_code
 `
 
 type CreateCartParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) CreateCart(ctx context.Context, arg CreateCartParams) (Cart, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RemindedAt,
+		&i.CouponCode,
 	)
 	return i, err
 }
@@ -137,7 +138,7 @@ func (q *Queries) DeleteShoppingListItem(ctx context.Context, arg DeleteShopping
 const getActiveCart = `-- name: GetActiveCart :one
 
 
-SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at FROM carts
+SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at, coupon_code FROM carts
 WHERE customer_id = $1 AND website_id = $2 AND status = 'active'
 `
 
@@ -162,12 +163,13 @@ func (q *Queries) GetActiveCart(ctx context.Context, arg GetActiveCartParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RemindedAt,
+		&i.CouponCode,
 	)
 	return i, err
 }
 
 const getCartByID = `-- name: GetCartByID :one
-SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at FROM carts WHERE id = $1
+SELECT id, public_id, customer_id, customer_user_id, website_id, currency, status, created_at, updated_at, reminded_at, coupon_code FROM carts WHERE id = $1
 `
 
 func (q *Queries) GetCartByID(ctx context.Context, id int64) (Cart, error) {
@@ -184,6 +186,7 @@ func (q *Queries) GetCartByID(ctx context.Context, id int64) (Cart, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RemindedAt,
+		&i.CouponCode,
 	)
 	return i, err
 }

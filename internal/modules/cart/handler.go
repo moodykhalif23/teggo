@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,10 +20,34 @@ import (
 
 	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/pricing"
+	"b2bcommerce/internal/promotions"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
 )
+
+// cartPromoCandidates maps active promotion rows into the pure engine's input.
+func cartPromoCandidates(rows []gen.Promotion) []promotions.Candidate {
+	out := make([]promotions.Candidate, len(rows))
+	for i, p := range rows {
+		var starts, ends *time.Time
+		if p.StartsAt.Valid {
+			t := p.StartsAt.Time
+			starts = &t
+		}
+		if p.EndsAt.Valid {
+			t := p.EndsAt.Time
+			ends = &t
+		}
+		out[i] = promotions.Candidate{
+			ID: p.ID, Name: p.Name, Code: p.Code, DiscountType: p.DiscountType,
+			DiscountValue: p.DiscountValue, MinSubtotal: p.MinSubtotal,
+			StartsAt: starts, EndsAt: ends,
+			MaxRedemptions: p.MaxRedemptions, TimesRedeemed: p.TimesRedeemed, Priority: p.Priority,
+		}
+	}
+	return out
+}
 
 type Handler struct {
 	q *gen.Queries
@@ -42,6 +67,8 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Post("/storefront/cart/revalidate", h.revalidate)
 		sr.Post("/storefront/cart/reorder", h.reorder)
 		sr.Post("/storefront/cart/bulk", h.addBulk)
+		sr.Post("/storefront/cart/coupon", h.applyCoupon)
+		sr.Delete("/storefront/cart/coupon", h.removeCoupon)
 		sr.Get("/storefront/products/{slug}/pricing", h.productPricing)
 
 		sr.Get("/storefront/shopping-lists", h.listLists)
@@ -161,7 +188,7 @@ type cartItemDTO struct {
 	RowTotal  string `json:"row_total"`
 }
 
-func (h *Handler) renderCart(w http.ResponseWriter, r *http.Request, c gen.Cart) {
+func (h *Handler) renderCart(w http.ResponseWriter, r *http.Request, p principal, c gen.Cart) {
 	rows, err := h.q.ListCartItems(r.Context(), c.ID)
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not load cart")
@@ -182,12 +209,113 @@ func (h *Handler) renderCart(w http.ResponseWriter, r *http.Request, c gen.Cart)
 		})
 	}
 	subtotal, _ := money.Sum(totals...)
-	response.JSON(w, http.StatusOK, map[string]any{
-		"public_id": c.PublicID.String(),
-		"currency":  c.Currency,
-		"items":     items,
-		"subtotal":  subtotal,
-	})
+
+	// Promotions: preview the best applicable discount (automatic, or the coupon
+	// on the cart). The discount is re-evaluated and locked at checkout.
+	discount := "0"
+	discountLabel := ""
+	code := ""
+	if c.CouponCode != nil {
+		code = *c.CouponCode
+	}
+	if cands, e := h.q.ListActivePromotions(r.Context(), p.orgID); e == nil && len(cands) > 0 {
+		if res := promotions.Evaluate(subtotal, code, time.Now(), cartPromoCandidates(cands)); res.Promotion != nil {
+			discount = res.Discount
+			discountLabel = res.Label
+		}
+	}
+	grand, _ := money.Sub(subtotal, discount)
+
+	resp := map[string]any{
+		"public_id":       c.PublicID.String(),
+		"currency":        c.Currency,
+		"items":           items,
+		"subtotal":        subtotal,
+		"discount_amount": discount,
+		"grand_total":     grand,
+	}
+	if c.CouponCode != nil {
+		resp["coupon_code"] = *c.CouponCode
+	}
+	if discountLabel != "" {
+		resp["discount_label"] = discountLabel
+	}
+	response.JSON(w, http.StatusOK, resp)
+}
+
+// applyCoupon attaches a coupon code to the cart after validating it names an
+// active, in-window, under-cap promotion. The discount is previewed by renderCart
+// and locked at checkout. A code below its minimum subtotal is still accepted —
+// it simply yields no discount until the cart qualifies.
+func (h *Handler) applyCoupon(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Code) == "" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "coupon code is required")
+		return
+	}
+	c, err := h.activeCart(r, p)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load cart")
+		return
+	}
+	cands, _ := h.q.ListActivePromotions(r.Context(), p.orgID)
+	now := time.Now()
+	want := strings.ToLower(strings.TrimSpace(req.Code))
+	valid := false
+	for _, pr := range cands {
+		if pr.Code == nil || strings.ToLower(strings.TrimSpace(*pr.Code)) != want {
+			continue
+		}
+		if pr.StartsAt.Valid && now.Before(pr.StartsAt.Time) {
+			continue
+		}
+		if pr.EndsAt.Valid && now.After(pr.EndsAt.Time) {
+			continue
+		}
+		if pr.MaxRedemptions != nil && pr.TimesRedeemed >= *pr.MaxRedemptions {
+			continue
+		}
+		valid = true
+		break
+	}
+	if !valid {
+		response.Fail(w, http.StatusUnprocessableEntity, "invalid_coupon", "that coupon code isn't valid")
+		return
+	}
+	trimmed := strings.TrimSpace(req.Code)
+	if err := h.q.SetCartCoupon(r.Context(), gen.SetCartCouponParams{ID: c.ID, CouponCode: &trimmed}); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not apply coupon")
+		return
+	}
+	c.CouponCode = &trimmed
+	h.renderCart(w, r, p, c)
+}
+
+// removeCoupon clears any coupon code from the cart.
+func (h *Handler) removeCoupon(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	c, err := h.activeCart(r, p)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not load cart")
+		return
+	}
+	if err := h.q.SetCartCoupon(r.Context(), gen.SetCartCouponParams{ID: c.ID, CouponCode: nil}); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not remove coupon")
+		return
+	}
+	c.CouponCode = nil
+	h.renderCart(w, r, p, c)
 }
 
 func (h *Handler) getCart(w http.ResponseWriter, r *http.Request) {
@@ -201,7 +329,7 @@ func (h *Handler) getCart(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not load cart")
 		return
 	}
-	h.renderCart(w, r, c)
+	h.renderCart(w, r, p, c)
 }
 
 func (h *Handler) addItem(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +386,7 @@ func (h *Handler) addItem(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not add item")
 		return
 	}
-	h.renderCart(w, r, c)
+	h.renderCart(w, r, p, c)
 }
 
 func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
@@ -292,7 +420,7 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not update item")
 		return
 	}
-	h.renderCart(w, r, c)
+	h.renderCart(w, r, p, c)
 }
 
 func (h *Handler) removeItem(w http.ResponseWriter, r *http.Request) {
@@ -320,7 +448,7 @@ func (h *Handler) removeItem(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusNotFound, "not_found", "cart item not found")
 		return
 	}
-	h.renderCart(w, r, c)
+	h.renderCart(w, r, p, c)
 }
 
 // revalidate re-resolves each line's price against the current combined_prices

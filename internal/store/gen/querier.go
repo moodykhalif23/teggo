@@ -137,6 +137,10 @@ type Querier interface {
 	// ===== Products (admin) ====================================================
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateProductImage(ctx context.Context, arg CreateProductImageParams) (CreateProductImageRow, error)
+	// Promotions & coupons (Roadmap Tier 1 #1). CRUD for the admin surface plus the
+	// active-list read the cart/checkout evaluate against, and redemption tracking.
+	CreatePromotion(ctx context.Context, arg CreatePromotionParams) (Promotion, error)
+	CreatePromotionRedemption(ctx context.Context, arg CreatePromotionRedemptionParams) (PromotionRedemption, error)
 	// ===== Punchout sessions ===================================================
 	CreatePunchoutSession(ctx context.Context, arg CreatePunchoutSessionParams) (PunchoutSession, error)
 	CreatePushLog(ctx context.Context, arg CreatePushLogParams) (SyncPushLog, error)
@@ -210,6 +214,7 @@ type Querier interface {
 	DeleteMediaTags(ctx context.Context, mediaAssetID int64) error
 	DeletePriceAdjustmentRule(ctx context.Context, arg DeletePriceAdjustmentRuleParams) (int64, error)
 	DeleteProductImage(ctx context.Context, arg DeleteProductImageParams) (int64, error)
+	DeletePromotion(ctx context.Context, arg DeletePromotionParams) (int64, error)
 	DeleteQuoteItems(ctx context.Context, quoteID int64) error
 	DeleteReportDefinition(ctx context.Context, arg DeleteReportDefinitionParams) error
 	DeleteReportSchedule(ctx context.Context, arg DeleteReportScheduleParams) error
@@ -343,6 +348,7 @@ type Querier interface {
 	// GetProductVendorBySlug returns the marketplace vendor name for a product, when
 	// it is vendor-owned (no row for operator/house products). Storefront "sold by".
 	GetProductVendorBySlug(ctx context.Context, arg GetProductVendorBySlugParams) (string, error)
+	GetPromotion(ctx context.Context, arg GetPromotionParams) (Promotion, error)
 	// GetPublishedPage resolves a published page by website + locale + slug (the
 	// storefront read path).
 	GetPublishedPage(ctx context.Context, arg GetPublishedPageParams) (ContentPage, error)
@@ -408,6 +414,7 @@ type Querier interface {
 	// (anonymous) it returns nothing — the default catalog is fully visible.
 	HiddenProductIDsForCustomer(ctx context.Context, arg HiddenProductIDsForCustomerParams) ([]int64, error)
 	IncrementInviteUse(ctx context.Context, id int64) error
+	IncrementPromotionRedeemed(ctx context.Context, id int64) error
 	// ListAbandonedCarts returns active carts with items that have gone idle past
 	// the cutoff and weren't reminded since their last change. $1 = idle cutoff.
 	ListAbandonedCarts(ctx context.Context, updatedAt time.Time) ([]ListAbandonedCartsRow, error)
@@ -424,6 +431,9 @@ type Querier interface {
 	// ListActiveProductsInCategory returns active products in a category's whole
 	// subtree (storefront browse, §12.3). $1 org, $2 root category, $3 limit, $4 offset.
 	ListActiveProductsInCategory(ctx context.Context, arg ListActiveProductsInCategoryParams) ([]ListActiveProductsInCategoryRow, error)
+	// ListActivePromotions feeds the engine; schedule/code/cap filtering is applied
+	// in Go (internal/promotions). Ordered by priority so ties resolve deterministically.
+	ListActivePromotions(ctx context.Context, organizationID int64) ([]Promotion, error)
 	ListActiveVendorUserIDs(ctx context.Context, vendorID int64) ([]int64, error)
 	// Approval routing rules (migration 0033).
 	ListApprovalRoutingRules(ctx context.Context, organizationID int64) ([]ApprovalRoutingRule, error)
@@ -525,6 +535,7 @@ type Querier interface {
 	ListProductsAdmin(ctx context.Context, arg ListProductsAdminParams) ([]Product, error)
 	// ---- vendor portal (audience 'vendor') ----------------------------------
 	ListProductsByVendor(ctx context.Context, vendorID *int64) ([]ListProductsByVendorRow, error)
+	ListPromotions(ctx context.Context, organizationID int64) ([]Promotion, error)
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]ListQuoteItemsRow, error)
 	ListQuoteRevisions(ctx context.Context, quoteID int64) ([]ListQuoteRevisionsRow, error)
 	ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams) ([]Quote, error)
@@ -653,6 +664,7 @@ type Querier interface {
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
+	SetCartCoupon(ctx context.Context, arg SetCartCouponParams) error
 	SetDeviceCursor(ctx context.Context, arg SetDeviceCursorParams) error
 	SetEDIResult(ctx context.Context, arg SetEDIResultParams) (EdiDocument, error)
 	SetInventoryLevelConfig(ctx context.Context, arg SetInventoryLevelConfigParams) (InventoryLevel, error)
@@ -716,6 +728,7 @@ type Querier interface {
 	UpdatePage(ctx context.Context, arg UpdatePageParams) (ContentPage, error)
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+	UpdatePromotion(ctx context.Context, arg UpdatePromotionParams) (Promotion, error)
 	UpdateReportDefinition(ctx context.Context, arg UpdateReportDefinitionParams) (ReportDefinition, error)
 	UpdateShoppingListItem(ctx context.Context, arg UpdateShoppingListItemParams) (ShoppingListItem, error)
 	UpdateTradingPartner(ctx context.Context, arg UpdateTradingPartnerParams) (TradingPartner, error)

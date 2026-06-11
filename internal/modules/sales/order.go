@@ -15,12 +15,36 @@ import (
 	"b2bcommerce/internal/inventory"
 	"b2bcommerce/internal/modules/marketplace"
 	"b2bcommerce/internal/money"
+	"b2bcommerce/internal/promotions"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
 	"b2bcommerce/internal/tax"
 	"b2bcommerce/internal/workflow"
 )
+
+// tsToPtr converts a nullable timestamptz to *time.Time for the promotions engine.
+func tsToPtr(ts pgtype.Timestamptz) *time.Time {
+	if !ts.Valid {
+		return nil
+	}
+	t := ts.Time
+	return &t
+}
+
+// promoCandidates maps active promotion rows into the pure engine's input.
+func promoCandidates(rows []gen.Promotion) []promotions.Candidate {
+	out := make([]promotions.Candidate, len(rows))
+	for i, p := range rows {
+		out[i] = promotions.Candidate{
+			ID: p.ID, Name: p.Name, Code: p.Code, DiscountType: p.DiscountType,
+			DiscountValue: p.DiscountValue, MinSubtotal: p.MinSubtotal,
+			StartsAt: tsToPtr(p.StartsAt), EndsAt: tsToPtr(p.EndsAt),
+			MaxRedemptions: p.MaxRedemptions, TimesRedeemed: p.TimesRedeemed, Priority: p.Priority,
+		}
+	}
+	return out
+}
 
 // countryOf extracts the "country" field from an address JSON snapshot, for tax
 // region resolution. Empty when absent (→ untaxed).
@@ -89,7 +113,7 @@ func (h *Handler) acceptQuote(w http.ResponseWriter, r *http.Request) {
 			OrganizationID: quote.OrganizationID, WebsiteID: quote.WebsiteID, CustomerID: quote.CustomerID,
 			CustomerUserID: cc.customerUserID, QuoteID: &quote.ID, Currency: quote.Currency,
 			BillingAddress: billing, ShippingAddress: shipping,
-			Subtotal: subtotal, TaxTotal: taxTotal, ShippingTotal: "0", GrandTotal: grand,
+			Subtotal: subtotal, TaxTotal: taxTotal, ShippingTotal: "0", GrandTotal: grand, DiscountTotal: "0",
 		})
 		if e != nil {
 			return e
@@ -201,6 +225,24 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 		}
 		subtotal, _ := money.Sum(totals...)
 
+		// Promotions: apply the single best-value active promotion (automatic, or
+		// the coupon entered on the cart) to the subtotal. v1 is post-tax — the
+		// discount reduces the order total; tax is still computed on goods value.
+		discount := "0"
+		var promoID *int64
+		var promoCode *string
+		if cands, e := q.ListActivePromotions(r.Context(), cc.orgID); e == nil && len(cands) > 0 {
+			code := ""
+			if cart.CouponCode != nil {
+				code = *cart.CouponCode
+			}
+			if res := promotions.Evaluate(subtotal, code, time.Now(), promoCandidates(cands)); res.Promotion != nil {
+				discount = res.Discount
+				pid := res.Promotion.ID
+				promoID, promoCode = &pid, cart.CouponCode
+			}
+		}
+
 		billing := addrSnapshot(r.Context(), q, cc.customerID, "billing", req.BillingAddress)
 		shipping := addrSnapshot(r.Context(), q, cc.customerID, "shipping", req.ShippingAddress)
 
@@ -220,7 +262,8 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 				shippingTotal = *req.ShippingAmount
 			}
 		}
-		grand, _ := money.Sum(subtotal, taxTotal, shippingTotal)
+		discountedSub, _ := money.Sub(subtotal, discount)
+		grand, _ := money.Sum(discountedSub, taxTotal, shippingTotal)
 
 		// Procurement budget gate: if an active budget governs this customer +
 		// cost center, block the order when it would exceed the remaining budget
@@ -246,9 +289,20 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 			PoNumber: req.PoNumber, RequestedDeliveryDate: datePtr(req.RequestedDeliveryDate),
 			BillingAddress: billing, ShippingAddress: shipping,
 			Subtotal: subtotal, TaxTotal: taxTotal, ShippingTotal: shippingTotal, GrandTotal: grand,
+			DiscountTotal: discount, PromotionID: promoID, PromotionCode: promoCode,
 		})
 		if e != nil {
 			return e
+		}
+		if promoID != nil {
+			if _, e := q.CreatePromotionRedemption(r.Context(), gen.CreatePromotionRedemptionParams{
+				PromotionID: *promoID, OrderID: &order.ID, CustomerID: &cc.customerID, Amount: discount,
+			}); e != nil {
+				return e
+			}
+			if e := q.IncrementPromotionRedeemed(r.Context(), *promoID); e != nil {
+				return e
+			}
 		}
 		if costCenter != "" {
 			if e := q.SetOrderCostCenter(r.Context(), gen.SetOrderCostCenterParams{ID: order.ID, CostCenter: &costCenter}); e != nil {

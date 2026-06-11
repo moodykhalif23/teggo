@@ -97,8 +97,9 @@ WHERE quote_id = $1 ORDER BY version;
 INSERT INTO orders (
   organization_id, website_id, customer_id, customer_user_id, quote_id,
   placed_by_sales_rep_id, currency, po_number, requested_delivery_date,
-  billing_address, shipping_address, subtotal, tax_total, shipping_total, grand_total
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+  billing_address, shipping_address, subtotal, tax_total, shipping_total, grand_total,
+  discount_total, promotion_id, promotion_code
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 RETURNING *;
 
 -- name: AddOrderItem :one

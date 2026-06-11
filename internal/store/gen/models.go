@@ -94,6 +94,7 @@ type Cart struct {
 	CreatedAt      time.Time          `json:"created_at"`
 	UpdatedAt      time.Time          `json:"updated_at"`
 	RemindedAt     pgtype.Timestamptz `json:"reminded_at"`
+	CouponCode     *string            `json:"coupon_code"`
 }
 
 type CartItem struct {
@@ -558,6 +559,9 @@ type Order struct {
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
 	CostCenter            *string     `json:"cost_center"`
+	DiscountTotal         string      `json:"discount_total"`
+	PromotionID           *int64      `json:"promotion_id"`
+	PromotionCode         *string     `json:"promotion_code"`
 }
 
 type OrderItem struct {
@@ -747,6 +751,35 @@ type ProductTranslation struct {
 	Locale      string  `json:"locale"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
+}
+
+type Promotion struct {
+	ID             int64              `json:"id"`
+	PublicID       uuid.UUID          `json:"public_id"`
+	OrganizationID int64              `json:"organization_id"`
+	Name           string             `json:"name"`
+	Description    *string            `json:"description"`
+	Code           *string            `json:"code"`
+	DiscountType   string             `json:"discount_type"`
+	DiscountValue  string             `json:"discount_value"`
+	MinSubtotal    *string            `json:"min_subtotal"`
+	StartsAt       pgtype.Timestamptz `json:"starts_at"`
+	EndsAt         pgtype.Timestamptz `json:"ends_at"`
+	MaxRedemptions *int32             `json:"max_redemptions"`
+	TimesRedeemed  int32              `json:"times_redeemed"`
+	Priority       int32              `json:"priority"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type PromotionRedemption struct {
+	ID          int64     `json:"id"`
+	PromotionID int64     `json:"promotion_id"`
+	OrderID     *int64    `json:"order_id"`
+	CustomerID  *int64    `json:"customer_id"`
+	Amount      string    `json:"amount"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type PunchoutSession struct {

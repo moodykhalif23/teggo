@@ -218,7 +218,7 @@ func (h *Handler) applyOrder(ctx context.Context, org, rep int64, ch pushChange)
 		o, err := q.CreateOrder(ctx, gen.CreateOrderParams{
 			OrganizationID: org, WebsiteID: 1, CustomerID: p.CustomerID, PlacedBySalesRepID: &rep,
 			Currency: p.Currency, PoNumber: &po, BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"),
-			Subtotal: subtotal, TaxTotal: "0", ShippingTotal: "0", GrandTotal: subtotal,
+			Subtotal: subtotal, TaxTotal: "0", ShippingTotal: "0", GrandTotal: subtotal, DiscountTotal: "0",
 		})
 		if err != nil {
 			return err
