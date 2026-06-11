@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
+import SelectButton from 'primevue/selectbutton'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/lib/client'
@@ -13,6 +14,9 @@ const LineChart = defineAsyncComponent(() => import('@/components/LineChart.vue'
 const BarChart = defineAsyncComponent(() => import('@/components/BarChart.vue'))
 
 type OrderSummary = components['schemas']['OrderSummary']
+type SalesSummary = components['schemas']['SalesSummary']
+type DailyPoint = components['schemas']['DailySalesPoint']
+type TopProduct = components['schemas']['TopProduct']
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -20,7 +24,29 @@ const router = useRouter()
 const loading = ref(true)
 const orgName = ref<string>('')
 
-// Headline KPIs — only those the user can see are pushed.
+// Period selector — drives the summary KPIs and the revenue trend.
+const period = ref(30)
+const periodOptions = [
+  { label: '7d', value: 7 },
+  { label: '30d', value: 30 },
+  { label: '90d', value: 90 },
+]
+const canReport = computed(() => auth.can('report.view'))
+
+// Period-dependent (refetched on toggle).
+const summary = ref<SalesSummary | null>(null)
+const salesItems = ref<DailyPoint[]>([])
+
+// Loaded once.
+const arOpen = ref<string | null>(null)
+const agingBuckets = ref<{ label: string; amount: string }[]>([])
+const customersTotal = ref<number | null>(null)
+const productsTotal = ref<number | null>(null)
+const top = ref<TopProduct[]>([])
+const statusLabels = ref<string[]>([])
+const statusValues = ref<number[]>([])
+const recentOrders = ref<OrderSummary[]>([])
+
 interface Kpi {
   key: string
   label: string
@@ -29,24 +55,24 @@ interface Kpi {
   value: number | string
   route: string
 }
-const kpis = ref<Kpi[]>([])
+const kpis = computed<Kpi[]>(() => {
+  const k: Kpi[] = []
+  if (summary.value) {
+    k.push({ key: 'rev', label: 'Revenue', sub: `last ${period.value} days`, icon: 'pi pi-chart-line', value: summary.value.revenue, route: 'analytics' })
+    k.push({ key: 'ord', label: 'Orders', sub: `last ${period.value} days`, icon: 'pi pi-shopping-cart', value: summary.value.order_count, route: 'orders' })
+    k.push({ key: 'aov', label: 'Avg order value', sub: `last ${period.value} days`, icon: 'pi pi-receipt', value: summary.value.avg_order_value, route: 'analytics' })
+  }
+  if (arOpen.value !== null) k.push({ key: 'ar', label: 'Open AR', sub: 'outstanding', icon: 'pi pi-wallet', value: arOpen.value, route: 'ar-aging' })
+  if (customersTotal.value !== null) k.push({ key: 'cust', label: 'Customers', icon: 'pi pi-building', value: customersTotal.value, route: 'customers' })
+  if (productsTotal.value !== null) k.push({ key: 'prod', label: 'Products', icon: 'pi pi-box', value: productsTotal.value, route: 'products' })
+  return k
+})
 
-// Revenue trend (daily, last 30d).
-const salesLabels = ref<string[]>([])
-const salesValues = ref<number[]>([])
+const salesLabels = computed(() => salesItems.value.map((d) => d.day.slice(5)))
+const salesValues = computed(() => salesItems.value.map((d) => Number(d.revenue)))
+const topLabels = computed(() => top.value.map((t) => t.name))
+const topValues = computed(() => top.value.map((t) => Number(t.revenue)))
 
-// Order status mix.
-const statusLabels = ref<string[]>([])
-const statusValues = ref<number[]>([])
-
-// Recent orders (most recent five).
-const recentOrders = ref<OrderSummary[]>([])
-
-// AR aging buckets.
-const agingBuckets = ref<{ label: string; amount: string }[]>([])
-const arOpen = ref<string | null>(null)
-
-// "Needs attention" — actionable queues with a count + destination.
 interface Task {
   label: string
   icon: string
@@ -69,16 +95,28 @@ function statusSeverity(s: string) {
   return 'info'
 }
 
+const ymd = (d: Date) => d.toISOString().slice(0, 10)
+
+// Period-dependent reports — refetched whenever the toggle changes.
+async function loadReports(days: number) {
+  if (!canReport.value) return
+  const to = new Date()
+  const from = new Date()
+  from.setDate(from.getDate() - days)
+  const [s, sales] = await Promise.all([
+    api.GET('/admin/reports/summary', { params: { query: { days } } }),
+    api.GET('/admin/reports/sales', { params: { query: { from: ymd(from), to: ymd(to) } } }),
+  ])
+  summary.value = s.data ?? null
+  salesItems.value = sales.data?.items ?? []
+}
+
 async function load() {
   loading.value = true
   const can = (p: string) => auth.can(p)
 
-  // Fire every permitted request together; each is independent and tolerant.
-  const [org, summary, sales, orders, aging, rfqs, quotes, returns, pendingProducts, customers, products] =
+  const [orders, aging, rfqs, quotes, returns, pendingProducts, customers, products, org, topProducts] =
     await Promise.all([
-      can('tenant.view') ? api.GET('/admin/organization') : null,
-      can('report.view') ? api.GET('/admin/reports/summary', { params: { query: { days: 30 } } }) : null,
-      can('report.view') ? api.GET('/admin/reports/sales') : null,
       can('order.view') ? api.GET('/admin/orders') : null,
       can('invoice.view') ? api.GET('/admin/invoices/aging') : null,
       can('rfq.view') ? api.GET('/admin/rfqs') : null,
@@ -87,36 +125,24 @@ async function load() {
       can('product.view') ? api.GET('/admin/products/pending') : null,
       can('customer.view') ? api.GET('/admin/customers', { params: { query: { page: 1, page_size: 1 } } }) : null,
       can('product.view') ? api.GET('/admin/products', { params: { query: { page: 1, page_size: 1 } } }) : null,
+      can('tenant.view') ? api.GET('/admin/organization') : null,
+      can('report.view') ? api.GET('/admin/reports/top-products', { params: { query: { limit: 6 } } }) : null,
+      loadReports(period.value),
     ])
 
   orgName.value = org?.data?.name ?? ''
+  customersTotal.value = customers ? customers.data?.total ?? 0 : null
+  productsTotal.value = products ? products.data?.total ?? 0 : null
+  top.value = topProducts?.data?.items ?? []
 
-  // ---- KPIs ----
-  const k: Kpi[] = []
-  if (summary?.data) {
-    k.push({ key: 'rev', label: 'Revenue', sub: 'last 30 days', icon: 'pi pi-chart-line', value: summary.data.revenue, route: 'analytics' })
-    k.push({ key: 'ord', label: 'Orders', sub: 'last 30 days', icon: 'pi pi-shopping-cart', value: summary.data.order_count, route: 'orders' })
-    k.push({ key: 'aov', label: 'Avg order value', sub: 'last 30 days', icon: 'pi pi-receipt', value: summary.data.avg_order_value, route: 'analytics' })
-  }
   if (aging?.data) {
     arOpen.value = aging.data.open_total
-    k.push({ key: 'ar', label: 'Open AR', sub: 'outstanding', icon: 'pi pi-wallet', value: aging.data.open_total, route: 'ar-aging' })
     agingBuckets.value = ['current', '1-30', '31-60', '61-90', '90+'].map((b) => ({
       label: b,
       amount: aging.data!.buckets?.[b] ?? '0',
     }))
   }
-  if (customers?.data) k.push({ key: 'cust', label: 'Customers', icon: 'pi pi-building', value: customers.data.total ?? 0, route: 'customers' })
-  if (products?.data) k.push({ key: 'prod', label: 'Products', icon: 'pi pi-box', value: products.data.total ?? 0, route: 'products' })
-  kpis.value = k
 
-  // ---- Revenue trend ----
-  if (sales?.data?.items?.length) {
-    salesLabels.value = sales.data.items.map((d) => d.day.slice(5))
-    salesValues.value = sales.data.items.map((d) => Number(d.revenue))
-  }
-
-  // ---- Orders: status mix + recent ----
   if (orders?.data?.items?.length) {
     const items = orders.data.items
     const counts = new Map<string, number>()
@@ -128,26 +154,24 @@ async function load() {
       .slice(0, 5)
   }
 
-  // ---- Needs attention ----
   const t: Task[] = []
   const newRfqs = rfqs?.data?.items?.filter((r) => r.status === 'submitted').length ?? 0
   if (rfqs && newRfqs) t.push({ label: 'RFQs to quote', icon: 'pi pi-inbox', count: newRfqs, route: 'rfqs', severity: 'info' })
-
   const openQuotes = quotes?.data?.items?.filter((q) => q.status === 'draft' || q.status === 'sent').length ?? 0
   if (quotes && openQuotes) t.push({ label: 'Quotes in progress', icon: 'pi pi-file-edit', count: openQuotes, route: 'quotes', severity: 'info' })
-
   const overdue = aging?.data?.items?.filter((i) => i.days_overdue > 0).length ?? 0
   if (aging && overdue) t.push({ label: 'Overdue invoices', icon: 'pi pi-exclamation-triangle', count: overdue, route: 'ar-aging', severity: 'danger' })
-
   const toProcess = returns?.data?.items?.filter((r) => r.status === 'requested').length ?? 0
   if (returns && toProcess) t.push({ label: 'Returns to review', icon: 'pi pi-replay', count: toProcess, route: 'returns', severity: 'warn' })
-
   const pending = pendingProducts?.data?.items?.length ?? 0
   if (pendingProducts && pending) t.push({ label: 'Products awaiting moderation', icon: 'pi pi-check-square', count: pending, route: 'moderation', severity: 'warn' })
-
   tasks.value = t
+
   loading.value = false
 }
+
+// Re-pull the period-dependent reports when the toggle changes (no full reload).
+watch(period, (d) => loadReports(d))
 
 onMounted(load)
 </script>
@@ -163,6 +187,15 @@ onMounted(load)
           today.
         </p>
       </div>
+      <SelectButton
+        v-if="canReport"
+        v-model="period"
+        :options="periodOptions"
+        optionLabel="label"
+        optionValue="value"
+        :allowEmpty="false"
+        aria-label="Reporting period"
+      />
     </header>
 
     <div v-if="loading" class="loading"><ProgressSpinner style="width: 2.5rem; height: 2.5rem" /></div>
@@ -188,11 +221,12 @@ onMounted(load)
 
       <div class="grid">
         <!-- Revenue trend -->
-        <Card v-if="salesValues.length" class="panel span2">
+        <Card v-if="canReport" class="panel span2">
           <template #title>Revenue trend</template>
-          <template #subtitle>Daily revenue · last 30 days</template>
+          <template #subtitle>Daily revenue · last {{ period }} days</template>
           <template #content>
-            <LineChart :labels="salesLabels" :values="salesValues" name="Revenue" />
+            <LineChart v-if="salesValues.length" :labels="salesLabels" :values="salesValues" name="Revenue" />
+            <p v-else class="muted empty-line">No sales in this window yet.</p>
           </template>
         </Card>
 
@@ -213,6 +247,24 @@ onMounted(load)
               <i class="pi pi-check-circle" />
               <span>You're all caught up — nothing needs attention.</span>
             </div>
+          </template>
+        </Card>
+
+        <!-- Top products -->
+        <Card v-if="top.length" class="panel">
+          <template #title>Top products</template>
+          <template #subtitle>By revenue this month</template>
+          <template #content>
+            <ol class="toplist">
+              <li v-for="(p, i) in top" :key="p.product_id" class="topitem">
+                <span class="rank">{{ i + 1 }}</span>
+                <span class="topname">
+                  {{ p.name }}
+                  <span class="topsku">{{ p.sku }}</span>
+                </span>
+                <span class="toprev">{{ p.revenue }}</span>
+              </li>
+            </ol>
           </template>
         </Card>
 
@@ -265,6 +317,10 @@ onMounted(load)
 
 <style scoped>
 .dash-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 .dash-head h1 {
@@ -283,6 +339,8 @@ onMounted(load)
   justify-content: center;
   padding: 4rem 0;
 }
+.muted { color: var(--p-text-muted-color, #64748b); }
+.empty-line { padding: 1rem 0; }
 
 /* Stat tiles */
 .stats {
@@ -365,10 +423,11 @@ onMounted(load)
   }
 }
 
-/* Needs attention */
+/* Lists */
 .tasklist,
 .orderlist,
-.aging {
+.aging,
+.toplist {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -422,6 +481,47 @@ onMounted(load)
 .caught-up .pi {
   font-size: 1.5rem;
   color: var(--p-green-500, #22c55e);
+}
+
+/* Top products */
+.topitem {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.25rem;
+  border-bottom: 1px solid var(--teggo-border, #f1f5f9);
+}
+.topitem:last-child {
+  border-bottom: none;
+}
+.rank {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--teggo-surface-muted, #f1f5f9);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--p-text-muted-color, #64748b);
+}
+.topname {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+}
+.topsku {
+  font-size: 0.72rem;
+  color: var(--p-text-muted-color, #94a3b8);
+  font-family: ui-monospace, monospace;
+}
+.toprev {
+  font-weight: 600;
+  font-size: 0.88rem;
 }
 
 /* Recent orders */
