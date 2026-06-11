@@ -24,6 +24,7 @@ func All() []ai.Tool {
 		orderStatusTool{}, listOrdersTool{}, outstandingInvoicesTool{}, reorderDueTool{}, budgetStatusTool{},
 		// Seller (admin)
 		arAgingTool{}, atRiskAccountsTool{}, orderLookupTool{},
+		productSearchTool{}, customerLookupTool{}, inventoryStatusTool{},
 	}
 }
 
@@ -365,6 +366,153 @@ func (orderLookupTool) Run(ctx context.Context, tc ai.ToolContext, args map[stri
 	return ai.ToolResult{Summary: "No order matched that id."}, nil
 }
 
+type productSearchTool struct{}
+
+func (productSearchTool) Name() string { return "product_search" }
+func (productSearchTool) Description() string {
+	return "Search the product catalog by name or SKU."
+}
+func (productSearchTool) Audience() string   { return "admin" }
+func (productSearchTool) Permission() string { return "product.view" }
+func (productSearchTool) Params() []ai.ParamSpec {
+	return []ai.ParamSpec{{Name: "query", Type: "string", Description: "Product name or SKU to search for (optional)", Required: false}}
+}
+func (productSearchTool) Match(msg string) (map[string]any, bool) {
+	if containsAny(msg, "product", "sku", "catalog", "catalogue") {
+		return map[string]any{"query": searchTerm(msg, "product", "products", "sku", "skus", "catalog", "catalogue")}, true
+	}
+	return nil, false
+}
+func (productSearchTool) Run(ctx context.Context, tc ai.ToolContext, args map[string]any) (ai.ToolResult, error) {
+	q := strings.TrimSpace(asString(args["query"]))
+	var rows []gen.Product
+	var err error
+	if q != "" {
+		rows, err = tc.Q.SearchProductsAdmin(ctx, gen.SearchProductsAdminParams{OrganizationID: tc.OrgID, WebsearchToTsquery: q, Limit: 8, Offset: 0})
+	} else {
+		rows, err = tc.Q.ListProductsAdmin(ctx, gen.ListProductsAdminParams{OrganizationID: tc.OrgID, Limit: 8, Offset: 0})
+	}
+	if err != nil {
+		return ai.ToolResult{}, err
+	}
+	if len(rows) == 0 {
+		return ai.ToolResult{Summary: fmt.Sprintf("No products matched %q.", q)}, nil
+	}
+	var b strings.Builder
+	if q != "" {
+		fmt.Fprintf(&b, "Products matching %q:", q)
+	} else {
+		b.WriteString("Products in the catalog:")
+	}
+	items := make([]map[string]any, 0, len(rows))
+	for _, p := range rows {
+		fmt.Fprintf(&b, "\n• %s — %s (%s)", p.Sku, p.Name, p.Status)
+		items = append(items, map[string]any{"sku": p.Sku, "name": p.Name, "status": p.Status, "slug": p.Slug})
+	}
+	return ai.ToolResult{Summary: b.String(), Data: map[string]any{"products": items, "count": len(rows)}}, nil
+}
+
+type customerLookupTool struct{}
+
+func (customerLookupTool) Name() string { return "customer_lookup" }
+func (customerLookupTool) Description() string {
+	return "Find customer accounts by name (payment terms, credit limit, status)."
+}
+func (customerLookupTool) Audience() string   { return "admin" }
+func (customerLookupTool) Permission() string { return "customer.view" }
+func (customerLookupTool) Params() []ai.ParamSpec {
+	return []ai.ParamSpec{{Name: "name", Type: "string", Description: "Account name to search for (optional)", Required: false}}
+}
+func (customerLookupTool) Match(msg string) (map[string]any, bool) {
+	if containsAny(msg, "customer", "account", "buyer", "client") {
+		return map[string]any{"name": searchTerm(msg, "customer", "customers", "account", "accounts", "buyer", "buyers", "client", "clients")}, true
+	}
+	return nil, false
+}
+func (customerLookupTool) Run(ctx context.Context, tc ai.ToolContext, args map[string]any) (ai.ToolResult, error) {
+	want := strings.ToLower(strings.TrimSpace(asString(args["name"])))
+	rows, err := tc.Q.ListCustomers(ctx, gen.ListCustomersParams{OrganizationID: tc.OrgID, Limit: 500, Offset: 0})
+	if err != nil {
+		return ai.ToolResult{}, err
+	}
+	matches := make([]gen.Customer, 0)
+	for _, c := range rows {
+		if want == "" || strings.Contains(strings.ToLower(c.Name), want) {
+			matches = append(matches, c)
+		}
+	}
+	if len(matches) == 0 {
+		return ai.ToolResult{Summary: fmt.Sprintf("No accounts matched %q.", want)}, nil
+	}
+	if len(matches) > 8 {
+		matches = matches[:8]
+	}
+	var b strings.Builder
+	if want != "" {
+		fmt.Fprintf(&b, "Accounts matching %q:", want)
+	} else {
+		b.WriteString("Accounts:")
+	}
+	items := make([]map[string]any, 0, len(matches))
+	for _, c := range matches {
+		status := "active"
+		if !c.IsActive {
+			status = "inactive"
+		}
+		fmt.Fprintf(&b, "\n• %s — net %d days, credit limit %s (%s)", c.Name, c.PaymentTermsDays, c.CreditLimit, status)
+		items = append(items, map[string]any{"name": c.Name, "payment_terms_days": c.PaymentTermsDays, "credit_limit": c.CreditLimit, "is_active": c.IsActive})
+	}
+	return ai.ToolResult{Summary: b.String(), Data: map[string]any{"accounts": items, "count": len(items)}}, nil
+}
+
+type inventoryStatusTool struct{}
+
+func (inventoryStatusTool) Name() string { return "inventory_status" }
+func (inventoryStatusTool) Description() string {
+	return "Check stock on hand and available for a product."
+}
+func (inventoryStatusTool) Audience() string   { return "admin" }
+func (inventoryStatusTool) Permission() string { return "inventory.view" }
+func (inventoryStatusTool) Params() []ai.ParamSpec {
+	return []ai.ParamSpec{{Name: "product", Type: "string", Description: "Product name or SKU", Required: true}}
+}
+func (inventoryStatusTool) Match(msg string) (map[string]any, bool) {
+	if containsAny(msg, "stock", "inventory", "on hand", "on-hand", "in stock", "how much stock") {
+		return map[string]any{"product": searchTerm(msg, "stock", "inventory", "on", "hand", "in")}, true
+	}
+	return nil, false
+}
+func (inventoryStatusTool) Run(ctx context.Context, tc ai.ToolContext, args map[string]any) (ai.ToolResult, error) {
+	q := strings.TrimSpace(asString(args["product"]))
+	if q == "" {
+		return ai.ToolResult{Summary: "Which product? Give me a name or SKU to check stock for."}, nil
+	}
+	prods, err := tc.Q.SearchProductsAdmin(ctx, gen.SearchProductsAdminParams{OrganizationID: tc.OrgID, WebsearchToTsquery: q, Limit: 1, Offset: 0})
+	if err != nil {
+		return ai.ToolResult{}, err
+	}
+	if len(prods) == 0 {
+		return ai.ToolResult{Summary: fmt.Sprintf("No product matched %q.", q)}, nil
+	}
+	p := prods[0]
+	levels, err := tc.Q.ListInventoryLevelsForProduct(ctx, p.ID)
+	if err != nil {
+		return ai.ToolResult{}, err
+	}
+	if len(levels) == 0 {
+		return ai.ToolResult{Summary: fmt.Sprintf("%s (%s) has no stock records yet.", p.Name, p.Sku)}, nil
+	}
+	onHand, available := "0", "0"
+	for _, l := range levels {
+		onHand, _ = money.Sum(onHand, l.QuantityOnHand)
+		available, _ = money.Sum(available, l.Available)
+	}
+	return ai.ToolResult{
+		Summary: fmt.Sprintf("%s (%s): %s available, %s on hand across %d location(s).", p.Name, p.Sku, available, onHand, len(levels)),
+		Data:    map[string]any{"sku": p.Sku, "name": p.Name, "available": available, "on_hand": onHand, "locations": len(levels)},
+	}, nil
+}
+
 // ===== helpers =============================================================
 
 func containsAny(msg string, terms ...string) bool {
@@ -406,6 +554,30 @@ func asString(v any) string {
 		return s
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// searchTerm strips common command/stop words (plus tool-specific ones) from the
+// message and returns the remaining text as a search query.
+func searchTerm(msg string, extra ...string) string {
+	skip := map[string]bool{
+		"find": true, "search": true, "show": true, "me": true, "the": true, "a": true, "an": true,
+		"for": true, "of": true, "any": true, "all": true, "list": true, "lookup": true, "look": true,
+		"up": true, "what": true, "whats": true, "what's": true, "is": true, "are": true, "do": true,
+		"we": true, "i": true, "have": true, "has": true, "named": true, "called": true, "named?": true,
+		"named:": true, "much": true, "many": true, "how": true,
+	}
+	for _, s := range extra {
+		skip[s] = true
+	}
+	var out []string
+	for _, w := range strings.Fields(strings.ToLower(msg)) {
+		w = strings.Trim(w, ".,?!\"'")
+		if w == "" || skip[w] {
+			continue
+		}
+		out = append(out, w)
+	}
+	return strings.Join(out, " ")
 }
 
 func human(status string) string { return strings.ReplaceAll(status, "_", " ") }

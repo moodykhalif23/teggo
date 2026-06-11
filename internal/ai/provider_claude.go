@@ -31,7 +31,8 @@ func NewClaudeProvider(apiKey, model string) *ClaudeProvider {
 func (ClaudeProvider) Name() string { return "claude" }
 
 const claudeSystem = "You are the Teggo B2B commerce assistant. You help the signed-in user with " +
-	"their orders, invoices, quotes, accounts and (for staff) revenue operations. " +
+	"their orders, invoices, quotes and accounts, and for staff also across the organization: " +
+	"the product catalog, customer accounts, inventory/stock, receivables and account health. " +
 	"Only act through the provided tools — never invent data. Be concise and factual."
 
 func (c *ClaudeProvider) Decide(ctx context.Context, msg string, history []Turn, tools []Tool) (Decision, error) {
