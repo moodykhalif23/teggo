@@ -271,6 +271,29 @@ func (q *Queries) SetCartCoupon(ctx context.Context, arg SetCartCouponParams) er
 	return err
 }
 
+const setOrderPromotion = `-- name: SetOrderPromotion :exec
+UPDATE orders SET discount_total = $2, promotion_id = $3, promotion_code = $4 WHERE id = $1
+`
+
+type SetOrderPromotionParams struct {
+	ID            int64   `json:"id"`
+	DiscountTotal string  `json:"discount_total"`
+	PromotionID   *int64  `json:"promotion_id"`
+	PromotionCode *string `json:"promotion_code"`
+}
+
+// SetOrderPromotion records the applied promotion on an order. grand_total is
+// already set (to the discounted value) at order creation, so it's untouched here.
+func (q *Queries) SetOrderPromotion(ctx context.Context, arg SetOrderPromotionParams) error {
+	_, err := q.db.Exec(ctx, setOrderPromotion,
+		arg.ID,
+		arg.DiscountTotal,
+		arg.PromotionID,
+		arg.PromotionCode,
+	)
+	return err
+}
+
 const updatePromotion = `-- name: UpdatePromotion :one
 UPDATE promotions
 SET name            = $3,

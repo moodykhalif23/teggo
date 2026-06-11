@@ -33,6 +33,7 @@ import (
 	"b2bcommerce/internal/modules/notifications"
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
+	"b2bcommerce/internal/modules/promo"
 	"b2bcommerce/internal/modules/reporting"
 	"b2bcommerce/internal/modules/sales"
 	"b2bcommerce/internal/modules/settings"
@@ -211,6 +212,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	assistant.New(st.Queries(), o.aiProvider).Routes(r, authMW)
 	settings.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
+	promo.New(st.Queries()).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)
 	otc.New(st.Pool(), o.pdf, o.notifier, o.gateway, issuer).Routes(r, authMW)

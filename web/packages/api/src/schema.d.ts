@@ -927,6 +927,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storefront/cart/coupon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a coupon code to the active cart. */
+        post: operations["storefrontApplyCoupon"];
+        /** Remove any coupon from the active cart. */
+        delete: operations["storefrontRemoveCoupon"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/promotions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListPromotions"];
+        put?: never;
+        post: operations["adminCreatePromotion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/promotions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetPromotion"];
+        put: operations["adminUpdatePromotion"];
+        post?: never;
+        delete: operations["adminDeletePromotion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/account/reorder-suggestions": {
         parameters: {
             query?: never;
@@ -4296,6 +4348,17 @@ export interface components {
             currency: string;
             items: components["schemas"]["CartItem"][];
             subtotal: string;
+            /** @description Promotion discount previewed on the cart. */
+            discount_amount?: string;
+            /** @description subtotal − discount (pre tax/shipping). */
+            grand_total?: string;
+            /** @description Applied coupon code, if any. */
+            coupon_code?: string;
+            /** @description Name of the applied promotion. */
+            discount_label?: string;
+        };
+        CartCouponInput: {
+            code: string;
         };
         AddCartItem: {
             /** Format: uuid */
@@ -4305,6 +4368,47 @@ export interface components {
         };
         UpdateCartItem: {
             quantity: string;
+        };
+        Promotion: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            name: string;
+            description?: string | null;
+            /** @description Coupon code; null = automatic. */
+            code?: string | null;
+            /** @enum {string} */
+            discount_type: "percent" | "amount";
+            discount_value: string;
+            min_subtotal?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            max_redemptions?: number | null;
+            times_redeemed: number;
+            priority: number;
+            is_active: boolean;
+        };
+        PromotionInput: {
+            name: string;
+            description?: string | null;
+            code?: string | null;
+            /** @enum {string} */
+            discount_type: "percent" | "amount";
+            discount_value: string;
+            min_subtotal?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            max_redemptions?: number | null;
+            priority?: number;
+            is_active?: boolean;
+        };
+        PromotionList: {
+            items: components["schemas"]["Promotion"][];
         };
         RevalidateResult: {
             changed?: {
@@ -4545,6 +4649,13 @@ export interface components {
             currency: string;
             subtotal?: string;
             grand_total: string;
+            discount_total?: string;
+            promotion_code?: string | null;
+            /**
+             * Format: int64
+             * @description Set when a sales rep placed the order on the customer’s behalf.
+             */
+            placed_by_sales_rep_id?: number | null;
             /** Format: int64 */
             quote_id?: number | null;
             /** Format: date-time */
@@ -7878,6 +7989,170 @@ export interface operations {
                     "application/json": components["schemas"]["BulkAddResult"];
                 };
             };
+        };
+    };
+    storefrontApplyCoupon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CartCouponInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cart"];
+                };
+            };
+            422: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontRemoveCoupon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cart"];
+                };
+            };
+        };
+    };
+    adminListPromotions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromotionList"];
+                };
+            };
+        };
+    };
+    adminCreatePromotion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromotionInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Promotion"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminGetPromotion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Promotion"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpdatePromotion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromotionInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Promotion"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeletePromotion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
         };
     };
     storefrontReorderSuggestions: {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import type { components } from '@teggo/api/schema'
 
@@ -40,6 +41,32 @@ async function removeItem(itemId: number) {
   const { data, error: err } = await client.DELETE('/storefront/cart/items/{id}', {
     params: { path: { id: itemId } },
   })
+  busy.value = false
+  if (!err && data) cart.value = data
+}
+
+const couponInput = ref('')
+const couponError = ref('')
+
+async function applyCoupon() {
+  couponError.value = ''
+  if (!couponInput.value.trim()) return
+  busy.value = true
+  const { data, error: err } = await client.POST('/storefront/cart/coupon', {
+    body: { code: couponInput.value.trim() },
+  })
+  busy.value = false
+  if (err || !data) {
+    couponError.value = "That coupon code isn't valid."
+    return
+  }
+  cart.value = data
+  couponInput.value = ''
+}
+
+async function removeCoupon() {
+  busy.value = true
+  const { data, error: err } = await client.DELETE('/storefront/cart/coupon')
   busy.value = false
   if (!err && data) cart.value = data
 }
@@ -91,13 +118,36 @@ await load()
 
         <div class="summary">
           <Button label="Re-check prices" icon="pi pi-refresh" severity="secondary" outlined :loading="busy" @click="revalidate" />
-          <div class="subtotal">
-            <span>Subtotal</span>
-            <strong>{{ cart.subtotal }} {{ cart.currency }}</strong>
+
+          <div class="totals">
+            <!-- Coupon -->
+            <div v-if="cart.coupon_code" class="coupon-applied">
+              <span><i class="pi pi-tag" /> {{ cart.coupon_code }}<template v-if="cart.discount_label"> — {{ cart.discount_label }}</template></span>
+              <Button icon="pi pi-times" text rounded size="small" :disabled="busy" aria-label="Remove coupon" @click="removeCoupon" />
+            </div>
+            <div v-else class="coupon-entry">
+              <InputText v-model="couponInput" placeholder="Coupon code" :disabled="busy" @keyup.enter="applyCoupon" />
+              <Button label="Apply" severity="secondary" outlined :disabled="busy || !couponInput.trim()" @click="applyCoupon" />
+            </div>
+            <small v-if="couponError" class="coupon-error">{{ couponError }}</small>
+
+            <div class="row">
+              <span>Subtotal</span>
+              <span>{{ cart.subtotal }} {{ cart.currency }}</span>
+            </div>
+            <div v-if="cart.discount_amount && Number(cart.discount_amount) > 0" class="row discount">
+              <span>Discount</span>
+              <span>−{{ cart.discount_amount }} {{ cart.currency }}</span>
+            </div>
+            <div class="row grand">
+              <span>Total</span>
+              <strong>{{ cart.grand_total ?? cart.subtotal }} {{ cart.currency }}</strong>
+            </div>
+
+            <NuxtLink to="/checkout" class="checkout-link">
+              <Button label="Checkout" icon="pi pi-arrow-right" iconPos="right" />
+            </NuxtLink>
           </div>
-          <NuxtLink to="/checkout">
-            <Button label="Checkout" icon="pi pi-arrow-right" iconPos="right" />
-          </NuxtLink>
         </div>
       </div>
 
@@ -134,13 +184,40 @@ await load()
 }
 .summary {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 1.5rem;
   margin-top: 1rem;
   padding: 1rem;
+  flex-wrap: wrap;
 }
-.subtotal { display: flex; gap: 0.6rem; align-items: baseline; font-size: 1.1rem; }
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 18rem;
+  margin-left: auto;
+}
+.coupon-entry { display: flex; gap: 0.5rem; }
+.coupon-entry :deep(input) { flex: 1; }
+.coupon-applied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.2rem 0.4rem 0.6rem;
+  border: 1px dashed var(--p-primary-color, #16a34a);
+  border-radius: 8px;
+  color: var(--p-primary-color, #16a34a);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.coupon-error { color: var(--p-red-500, #ef4444); font-size: 0.8rem; }
+.totals .row { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.totals .discount { color: var(--p-primary-color, #16a34a); }
+.totals .grand { font-size: 1.15rem; padding-top: 0.4rem; border-top: 1px solid var(--p-surface-200, #e2e8f0); }
+.checkout-link { margin-top: 0.5rem; display: block; }
+.checkout-link :deep(button) { width: 100%; }
 .empty { text-align: center; padding: 3rem 0; }
 .muted { color: var(--p-text-muted-color, #64748b); margin-bottom: 1rem; }
 </style>

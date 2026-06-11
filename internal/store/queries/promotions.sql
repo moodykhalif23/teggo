@@ -52,3 +52,8 @@ RETURNING *;
 
 -- name: SetCartCoupon :exec
 UPDATE carts SET coupon_code = $2, updated_at = now() WHERE id = $1;
+
+-- SetOrderPromotion records the applied promotion on an order. grand_total is
+-- already set (to the discounted value) at order creation, so it's untouched here.
+-- name: SetOrderPromotion :exec
+UPDATE orders SET discount_total = $2, promotion_id = $3, promotion_code = $4 WHERE id = $1;

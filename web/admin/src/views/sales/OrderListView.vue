@@ -28,7 +28,30 @@ const error = ref('')
 
 const dialogOpen = ref(false)
 const saving = ref(false)
-const form = reactive({ customer_id: null as number | null, product_id: null as number | null, quantity: '1', unit_price: '' })
+
+interface OrderLine {
+  product_id: number | null
+  quantity: string
+  unit_price: string
+}
+const blankLine = (): OrderLine => ({ product_id: null, quantity: '1', unit_price: '' })
+const form = reactive<{ customer_id: number | null; lines: OrderLine[] }>({
+  customer_id: null,
+  lines: [blankLine()],
+})
+function addLine() {
+  form.lines.push(blankLine())
+}
+function removeLine(i: number) {
+  form.lines.splice(i, 1)
+  if (form.lines.length === 0) form.lines.push(blankLine())
+}
+function lineTotal(l: OrderLine): string {
+  const q = Number(l.quantity)
+  const p = Number(l.unit_price)
+  if (!isFinite(q) || !isFinite(p)) return '—'
+  return (q * p).toFixed(2)
+}
 
 const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
 const { productOptions, productsLoaded, loadProducts } = useProductOptions()
@@ -48,15 +71,18 @@ async function load() {
 }
 
 function openCreate() {
-  Object.assign(form, { customer_id: null, product_id: null, quantity: '1', unit_price: '' })
+  Object.assign(form, { customer_id: null, lines: [blankLine()] })
   dialogOpen.value = true
   loadCustomers()
   loadProducts()
 }
 
 async function create() {
-  if (!form.customer_id || !form.product_id || !form.unit_price) {
-    toast.add({ severity: 'warn', summary: 'customer, product, and unit price required', life: 3000 })
+  const items = form.lines
+    .filter((l) => l.product_id && l.unit_price !== '')
+    .map((l) => ({ product_id: l.product_id as number, quantity: l.quantity || '1', unit_price: l.unit_price }))
+  if (!form.customer_id || items.length === 0) {
+    toast.add({ severity: 'warn', summary: 'A customer and at least one complete line are required', life: 3500 })
     return
   }
   saving.value = true
@@ -64,7 +90,7 @@ async function create() {
     body: {
       // Currency intentionally omitted — the server applies the org default.
       customer_id: form.customer_id,
-      items: [{ product_id: form.product_id, quantity: form.quantity, unit_price: form.unit_price }],
+      items,
     },
   })
   saving.value = false
@@ -112,13 +138,18 @@ onMounted(() => { if (route.query.new) openCreate() })
         </EmptyState>
       </template>
       <Column field="id" header="ID" style="width: 5rem" />
-      <Column header="Reference"><template #body="{ data }">{{ data.public_id.slice(0, 8) }}…</template></Column>
+      <Column header="Reference">
+        <template #body="{ data }">
+          {{ data.public_id.slice(0, 8) }}…
+          <Tag v-if="data.placed_by_sales_rep_id" value="rep-placed" severity="info" class="rep-tag" />
+        </template>
+      </Column>
       <Column header="Status"><template #body="{ data }"><Tag :value="data.status" :severity="sev(data.status)" /></template></Column>
       <Column field="currency" header="Ccy" />
       <Column field="grand_total" header="Total" />
     </DataTable>
 
-    <Dialog v-model:visible="dialogOpen" header="New order (on behalf of customer)" modal :style="{ width: '460px' }">
+    <Dialog v-model:visible="dialogOpen" header="New order (on behalf of customer)" modal :style="{ width: '640px' }">
       <form class="form" @submit.prevent="create">
         <div class="field">
           <label>Customer</label>
@@ -135,28 +166,38 @@ onMounted(() => { if (route.query.new) openCreate() })
             fluid
           />
         </div>
-        <div class="grid3">
-          <div class="field span2">
-            <label>Product</label>
-            <Select
-              v-model="form.product_id"
-              :options="productOptions"
-              optionLabel="label"
-              optionValue="id"
-              filter
-              filterPlaceholder="Search products…"
-              placeholder="Select a product"
-              :emptyMessage="productsLoaded ? 'No products' : 'Loading…'"
-              showClear
-              fluid
-            />
-          </div>
-          <div class="field"><label>Qty</label><InputText v-model="form.quantity" fluid /></div>
+
+        <div class="lines-head">
+          <label>Line items <span v-if="currency" class="ccy">(prices in {{ currency }})</span></label>
+          <Button label="Add line" icon="pi pi-plus" size="small" text @click="addLine" />
         </div>
-        <div class="field">
-          <label>Unit price <span v-if="currency" class="ccy">({{ currency }})</span></label>
-          <InputText v-model="form.unit_price" fluid />
-        </div>
+        <table class="lines">
+          <thead>
+            <tr><th>Product</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(l, i) in form.lines" :key="i">
+              <td>
+                <Select
+                  v-model="l.product_id"
+                  :options="productOptions"
+                  optionLabel="label"
+                  optionValue="id"
+                  filter
+                  filterPlaceholder="Search…"
+                  placeholder="Select a product"
+                  :emptyMessage="productsLoaded ? 'No products' : 'Loading…'"
+                  showClear
+                  fluid
+                />
+              </td>
+              <td class="num"><InputText v-model="l.quantity" class="sm" /></td>
+              <td class="num"><InputText v-model="l.unit_price" class="sm" /></td>
+              <td class="num total">{{ lineTotal(l) }}</td>
+              <td><Button icon="pi pi-times" text rounded severity="danger" :disabled="form.lines.length === 1" @click="removeLine(i)" /></td>
+            </tr>
+          </tbody>
+        </table>
       </form>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="dialogOpen = false" />
@@ -170,10 +211,15 @@ onMounted(() => { if (route.query.new) openCreate() })
 .mb { margin-bottom: 1rem; }
 .clickable :deep(tbody tr) { cursor: pointer; }
 .form { display: flex; flex-direction: column; gap: 0.9rem; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.9rem; }
-.span2 { grid-column: span 2; }
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field label { font-size: 0.8rem; font-weight: 600; }
 .ccy { font-weight: 400; color: var(--p-text-muted-color, #64748b); }
+.lines-head { display: flex; align-items: center; justify-content: space-between; }
+.lines-head label { font-size: 0.8rem; font-weight: 600; }
+.lines { width: 100%; border-collapse: collapse; }
+.lines th { text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--p-text-muted-color, #64748b); padding: 0.25rem 0.4rem; }
+.lines th.num, .lines td.num { text-align: right; }
+.lines td { padding: 0.25rem 0.4rem; vertical-align: middle; }
+.lines :deep(.sm) { width: 6rem; text-align: right; }
+.lines .total { font-variant-numeric: tabular-nums; white-space: nowrap; }
 </style>

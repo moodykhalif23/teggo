@@ -126,7 +126,7 @@ func (h *Handler) ediInbound(w http.ResponseWriter, r *http.Request) {
 			OrganizationID: partner.OrganizationID, WebsiteID: defaultWebsite, CustomerID: *partner.CustomerID,
 			Currency: po.Currency, PoNumber: ptr(po.PONumber),
 			BillingAddress: []byte("{}"), ShippingAddress: []byte("{}"),
-			Subtotal: subtotal, TaxTotal: "0", ShippingTotal: "0", GrandTotal: subtotal, DiscountTotal: "0",
+			Subtotal: subtotal, TaxTotal: "0", ShippingTotal: "0", GrandTotal: subtotal,
 		})
 		if err != nil {
 			return err

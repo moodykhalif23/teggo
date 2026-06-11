@@ -168,9 +168,8 @@ const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (
   organization_id, website_id, customer_id, customer_user_id, quote_id,
   placed_by_sales_rep_id, currency, po_number, requested_delivery_date,
-  billing_address, shipping_address, subtotal, tax_total, shipping_total, grand_total,
-  discount_total, promotion_id, promotion_code
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+  billing_address, shipping_address, subtotal, tax_total, shipping_total, grand_total
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING id, public_id, organization_id, website_id, customer_id, customer_user_id, quote_id, placed_by_sales_rep_id, status, currency, po_number, requested_delivery_date, billing_address, shipping_address, subtotal, tax_total, shipping_total, grand_total, created_at, updated_at, cost_center, discount_total, promotion_id, promotion_code
 `
 
@@ -190,9 +189,6 @@ type CreateOrderParams struct {
 	TaxTotal              string      `json:"tax_total"`
 	ShippingTotal         string      `json:"shipping_total"`
 	GrandTotal            string      `json:"grand_total"`
-	DiscountTotal         string      `json:"discount_total"`
-	PromotionID           *int64      `json:"promotion_id"`
-	PromotionCode         *string     `json:"promotion_code"`
 }
 
 // ===== Order ===============================================================
@@ -213,9 +209,6 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		arg.TaxTotal,
 		arg.ShippingTotal,
 		arg.GrandTotal,
-		arg.DiscountTotal,
-		arg.PromotionID,
-		arg.PromotionCode,
 	)
 	var i Order
 	err := row.Scan(

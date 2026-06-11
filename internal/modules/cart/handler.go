@@ -268,7 +268,7 @@ func (h *Handler) applyCoupon(w http.ResponseWriter, r *http.Request) {
 	cands, _ := h.q.ListActivePromotions(r.Context(), p.orgID)
 	now := time.Now()
 	want := strings.ToLower(strings.TrimSpace(req.Code))
-	valid := false
+	canonical := ""
 	for _, pr := range cands {
 		if pr.Code == nil || strings.ToLower(strings.TrimSpace(*pr.Code)) != want {
 			continue
@@ -282,19 +282,18 @@ func (h *Handler) applyCoupon(w http.ResponseWriter, r *http.Request) {
 		if pr.MaxRedemptions != nil && pr.TimesRedeemed >= *pr.MaxRedemptions {
 			continue
 		}
-		valid = true
+		canonical = strings.TrimSpace(*pr.Code) // store the promotion's own casing
 		break
 	}
-	if !valid {
+	if canonical == "" {
 		response.Fail(w, http.StatusUnprocessableEntity, "invalid_coupon", "that coupon code isn't valid")
 		return
 	}
-	trimmed := strings.TrimSpace(req.Code)
-	if err := h.q.SetCartCoupon(r.Context(), gen.SetCartCouponParams{ID: c.ID, CouponCode: &trimmed}); err != nil {
+	if err := h.q.SetCartCoupon(r.Context(), gen.SetCartCouponParams{ID: c.ID, CouponCode: &canonical}); err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not apply coupon")
 		return
 	}
-	c.CouponCode = &trimmed
+	c.CouponCode = &canonical
 	h.renderCart(w, r, p, c)
 }
 

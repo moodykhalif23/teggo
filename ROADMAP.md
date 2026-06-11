@@ -13,9 +13,20 @@ Legend — **Impact**: how much day-to-day B2B value. **Effort**: rough build si
 
 ---
 
-## Tier 1 — highest impact, build first
+## Tier 1 — ✅ DONE
 
-### 1. Promotions / discounts / coupons  ·  Impact: High · Effort: M–L
+> All three Tier 1 items shipped. Coverage: engine unit tests + integration tests
+> (cart coupon, checkout persistence, admin CRUD), OpenAPI + typed client, admin
+> screens, storefront coupon field. Migration `0046_promotions` applied.
+>
+> **Promotions v1 scope shipped:** percent / fixed-amount cart discounts, optional
+> coupon code, minimum-subtotal threshold, schedule window, global redemption cap,
+> single best-value promotion applied at checkout, redemption tracking.
+> **Deferred (future):** stacking with priority/exclusivity, buy-X-get-Y, free
+> shipping, per-customer redemption caps, discount reducing the taxable base
+> (v1 applies discount post-tax).
+
+### 1. Promotions / discounts / coupons  ·  ✅ Done · Impact: High · Effort: M–L
 The single biggest missing pillar. Today pricing is static (price lists + adjustment
 rules); there's no cart-level promotion or coupon concept.
 - **Data**: `promotions` (type, scope, conditions JSONB, action, schedule, usage limits),
@@ -28,7 +39,7 @@ rules); there's no cart-level promotion or coupon concept.
   cart, quote, and order.
 - **Touches**: cart calc, quote totals, order-to-cash, invoices.
 
-### 2. Sales rep "order / quote on behalf of"  ·  Impact: High · Effort: S–M
+### 2. Sales rep "order / quote on behalf of"  ·  ✅ Done · Impact: High · Effort: S–M
 Partial today (admin can create an order on behalf). Make it first-class for assisted selling.
 - **Data**: record `placed_by_user` / acting-rep on orders & quotes (some fields exist).
 - **Behavior**: rep impersonation/“act as customer” session scoped to a customer, with an
@@ -36,7 +47,7 @@ Partial today (admin can create an order on behalf). Make it first-class for ass
 - **Surfaces**: a customer-context switcher in admin; “Create order/quote for {customer}”
   flows; clearly badge rep-placed orders.
 
-### 3. KPI / inventory insight endpoint  ·  Impact: Med-High · Effort: S
+### 3. KPI / inventory insight endpoint  ·  ✅ Done · Impact: Med-High · Effort: S
 The dashboard wants an **org-wide low-stock list** but inventory is per-product
 (`/admin/inventory/{productId}`) — there's no “levels at/under reorder threshold” query.
 - Add `GET /admin/inventory/low-stock` (join stock levels → products, org-scoped,

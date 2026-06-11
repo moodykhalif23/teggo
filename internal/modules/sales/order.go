@@ -113,7 +113,7 @@ func (h *Handler) acceptQuote(w http.ResponseWriter, r *http.Request) {
 			OrganizationID: quote.OrganizationID, WebsiteID: quote.WebsiteID, CustomerID: quote.CustomerID,
 			CustomerUserID: cc.customerUserID, QuoteID: &quote.ID, Currency: quote.Currency,
 			BillingAddress: billing, ShippingAddress: shipping,
-			Subtotal: subtotal, TaxTotal: taxTotal, ShippingTotal: "0", GrandTotal: grand, DiscountTotal: "0",
+			Subtotal: subtotal, TaxTotal: taxTotal, ShippingTotal: "0", GrandTotal: grand,
 		})
 		if e != nil {
 			return e
@@ -289,12 +289,18 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 			PoNumber: req.PoNumber, RequestedDeliveryDate: datePtr(req.RequestedDeliveryDate),
 			BillingAddress: billing, ShippingAddress: shipping,
 			Subtotal: subtotal, TaxTotal: taxTotal, ShippingTotal: shippingTotal, GrandTotal: grand,
-			DiscountTotal: discount, PromotionID: promoID, PromotionCode: promoCode,
 		})
 		if e != nil {
 			return e
 		}
+		// Persist the applied promotion + record its redemption (grand_total above
+		// already reflects the discount).
 		if promoID != nil {
+			if e := q.SetOrderPromotion(r.Context(), gen.SetOrderPromotionParams{
+				ID: order.ID, DiscountTotal: discount, PromotionID: promoID, PromotionCode: promoCode,
+			}); e != nil {
+				return e
+			}
 			if _, e := q.CreatePromotionRedemption(r.Context(), gen.CreatePromotionRedemptionParams{
 				PromotionID: *promoID, OrderID: &order.ID, CustomerID: &cc.customerID, Amount: discount,
 			}); e != nil {

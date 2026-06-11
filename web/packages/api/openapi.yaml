@@ -720,6 +720,16 @@ components:
         currency: { type: string }
         items: { type: array, items: { $ref: '#/components/schemas/CartItem' } }
         subtotal: { type: string }
+        discount_amount: { type: string, description: 'Promotion discount previewed on the cart.' }
+        grand_total: { type: string, description: 'subtotal − discount (pre tax/shipping).' }
+        coupon_code: { type: string, description: 'Applied coupon code, if any.' }
+        discount_label: { type: string, description: 'Name of the applied promotion.' }
+
+    CartCouponInput:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string }
 
     AddCartItem:
       type: object
@@ -734,6 +744,47 @@ components:
       required: [quantity]
       properties:
         quantity: { type: string }
+
+    Promotion:
+      type: object
+      required: [id, public_id, name, discount_type, discount_value, times_redeemed, priority, is_active]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        code: { type: string, nullable: true, description: 'Coupon code; null = automatic.' }
+        discount_type: { type: string, enum: [percent, amount] }
+        discount_value: { type: string }
+        min_subtotal: { type: string, nullable: true }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+        max_redemptions: { type: integer, nullable: true }
+        times_redeemed: { type: integer }
+        priority: { type: integer }
+        is_active: { type: boolean }
+
+    PromotionInput:
+      type: object
+      required: [name, discount_type, discount_value]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        code: { type: string, nullable: true }
+        discount_type: { type: string, enum: [percent, amount] }
+        discount_value: { type: string }
+        min_subtotal: { type: string, nullable: true }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+        max_redemptions: { type: integer, nullable: true }
+        priority: { type: integer }
+        is_active: { type: boolean }
+
+    PromotionList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Promotion' } }
 
     RevalidateResult:
       type: object
@@ -1033,6 +1084,9 @@ components:
         currency: { type: string }
         subtotal: { type: string }
         grand_total: { type: string }
+        discount_total: { type: string }
+        promotion_code: { type: string, nullable: true }
+        placed_by_sales_rep_id: { type: integer, format: int64, nullable: true, description: 'Set when a sales rep placed the order on the customer’s behalf.' }
         quote_id: { type: integer, format: int64, nullable: true }
         created_at: { type: string, format: date-time }
 
@@ -3533,6 +3587,71 @@ paths:
         '200':
           description: OK
           content: { application/json: { schema: { $ref: '#/components/schemas/BulkAddResult' } } }
+
+  /storefront/cart/coupon:
+    post:
+      tags: [Cart]
+      operationId: storefrontApplyCoupon
+      summary: Apply a coupon code to the active cart.
+      security: [{ storefrontAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CartCouponInput' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Cart]
+      operationId: storefrontRemoveCoupon
+      summary: Remove any coupon from the active cart.
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+
+  /admin/promotions:
+    get:
+      tags: [Promotions]
+      operationId: adminListPromotions
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PromotionList' } } } }
+    post:
+      tags: [Promotions]
+      operationId: adminCreatePromotion
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PromotionInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/promotions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Promotions]
+      operationId: adminGetPromotion
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Promotions]
+      operationId: adminUpdatePromotion
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PromotionInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Promotions]
+      operationId: adminDeletePromotion
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /storefront/account/reorder-suggestions:
     get:

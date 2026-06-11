@@ -678,6 +678,9 @@ type Querier interface {
 	SetOpportunityStage(ctx context.Context, arg SetOpportunityStageParams) (Opportunity, error)
 	SetOrderCostCenter(ctx context.Context, arg SetOrderCostCenterParams) error
 	SetOrderItemVendor(ctx context.Context, arg SetOrderItemVendorParams) error
+	// SetOrderPromotion records the applied promotion on an order. grand_total is
+	// already set (to the discounted value) at order creation, so it's untouched here.
+	SetOrderPromotion(ctx context.Context, arg SetOrderPromotionParams) error
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
 	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
