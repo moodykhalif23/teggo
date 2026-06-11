@@ -49,21 +49,25 @@ body {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.005em;
-  color: var(--p-primary-color, #16a34a);
+  color: #fff;
 }
 .p-card .p-card-subtitle {
   font-size: 0.8rem;
   font-weight: 400;
-  color: var(--p-text-muted-color, #64748b);
-  margin-top: 0;
+  color: rgba(255, 255, 255, 0.82);
+  margin-top: 0.1rem;
 }
 .p-card .p-card-content {
   padding-top: 0.4rem;
 }
 .p-card .p-card-caption {
-  border-bottom: 1px solid var(--teggo-border);
-  padding-bottom: 0.6rem;
-  margin-bottom: 0.4rem;
+  /* Filled brand-green header section, full-bleed to the card edges (cancels the
+     body padding) with the top corners rounded to match the card. */
+  background: var(--p-primary-color, #16a34a);
+  margin: -1.15rem -1.35rem 0.9rem;
+  padding: 0.8rem 1.35rem;
+  border-top-left-radius: var(--teggo-radius, 6px);
+  border-top-right-radius: var(--teggo-radius, 6px);
 }
 
 /* Sharp edges across the common controls. */
@@ -119,6 +123,26 @@ body {
 .p-dialog {
   border: 1px solid var(--p-surface-200, #e2e8f0);
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+}
+/* Filled brand-green dialog header section, white title + close button. */
+.p-dialog .p-dialog-header {
+  background: var(--p-primary-color, #16a34a);
+  border-top-left-radius: var(--teggo-radius, 6px);
+  border-top-right-radius: var(--teggo-radius, 6px);
+}
+.p-dialog .p-dialog-title {
+  color: #fff;
+}
+.p-dialog .p-dialog-header .p-dialog-close-button {
+  color: #fff;
+}
+.p-dialog .p-dialog-header .p-dialog-close-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+/* Center the footer actions (Cancel / Save / Create …). */
+.p-dialog .p-dialog-footer {
+  justify-content: center;
 }
 
 /* Page scaffold shared by the views (each view wraps content in .page). */
