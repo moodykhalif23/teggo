@@ -11,6 +11,7 @@ allowBuilds:
   core-js: false
   core-js-pure: false
   postman-code-generators: false
+  vue-demi: true
 # Pin the Docusaurus stack so the OpenAPI theme's Tabs internals match core, and
 # hold webpack at a release whose ProgressPlugin schema accepts webpackbar's options.
 overrides:
