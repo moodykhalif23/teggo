@@ -11,6 +11,7 @@ import Select from 'primevue/select'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
 import { useCustomerOptions } from '@/composables/useRecordOptions'
+import { useCurrency } from '@/composables/useCurrency'
 import type { components } from '@teggo/api/schema'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -26,14 +27,16 @@ const dialogOpen = ref(false)
 const saving = ref(false)
 const toast = useToast()
 
-const form = reactive<{ customer_id: number | null; name: string; amount: number; currency: string }>({
+const form = reactive<{ customer_id: number | null; name: string; amount: number }>({
   customer_id: null,
   name: '',
   amount: 0,
-  currency: 'USD',
 })
 
 const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
+// Currency follows the org's configured default (Settings) — the server stamps
+// it on create, and we show it here so the amount reads in the right units.
+const { currency, money } = useCurrency()
 
 async function loadStages() {
   const { data } = await api.GET('/admin/pipelines')
@@ -58,7 +61,7 @@ function stageLabel(id: number) {
 }
 
 function openCreate() {
-  Object.assign(form, { customer_id: null, name: '', amount: 0, currency: 'USD' })
+  Object.assign(form, { customer_id: null, name: '', amount: 0 })
   dialogOpen.value = true
   loadCustomers()
 }
@@ -70,7 +73,8 @@ async function save() {
   }
   saving.value = true
   const { error: err } = await api.POST('/admin/opportunities', {
-    body: { customer_id: form.customer_id, name: form.name, amount: form.amount.toFixed(4), currency: form.currency },
+    // Currency intentionally omitted — the server applies the org default.
+    body: { customer_id: form.customer_id, name: form.name, amount: form.amount.toFixed(4) },
   })
   saving.value = false
   if (err) {
@@ -118,7 +122,7 @@ onMounted(load)
       <Column field="name" header="Name" />
       <Column field="customer_id" header="Customer" />
       <Column header="Amount">
-        <template #body="{ data }">{{ data.amount }} {{ data.currency }}</template>
+        <template #body="{ data }">{{ money(data.amount, data.currency) }}</template>
       </Column>
       <Column header="Stage" style="width: 14rem">
         <template #body="{ data }">
@@ -156,8 +160,10 @@ onMounted(load)
         />
       </div>
       <div class="field"><label>Name</label><InputText v-model="form.name" /></div>
-      <div class="field"><label>Amount</label><InputNumber v-model="form.amount" :minFractionDigits="2" :maxFractionDigits="4" /></div>
-      <div class="field"><label>Currency</label><InputText v-model="form.currency" maxlength="3" /></div>
+      <div class="field">
+        <label>Amount <span v-if="currency" class="ccy">({{ currency }})</span></label>
+        <InputNumber v-model="form.amount" :minFractionDigits="2" :maxFractionDigits="4" />
+      </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="dialogOpen = false" />
         <Button label="Create" :loading="saving" @click="save" />
@@ -170,4 +176,5 @@ onMounted(load)
 .mb { margin-bottom: 1rem; }
 .field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.9rem; }
 .field label { font-size: 0.85rem; font-weight: 600; }
+.ccy { font-weight: 400; color: var(--p-text-muted-color, #64748b); }
 </style>

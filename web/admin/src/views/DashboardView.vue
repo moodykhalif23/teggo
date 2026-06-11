@@ -10,6 +10,7 @@ import { api } from '@/lib/client'
 import type { components } from '@teggo/api/schema'
 import CountUp from '@/components/CountUp.vue'
 import LottiePlayer from '@/components/LottiePlayer.vue'
+import { useCurrency } from '@/composables/useCurrency'
 import pulse from '@/assets/lottie/pulse.json'
 
 // ECharts lazy-loaded into their own chunk, off the dashboard's critical path.
@@ -24,6 +25,9 @@ type AccountHealth = components['schemas']['AccountHealth']
 
 const auth = useAuthStore()
 const router = useRouter()
+// Org currency from Settings — used to label aggregate figures (e.g. pipeline)
+// so they read in the configured currency rather than a single record's code.
+const { currency, money } = useCurrency()
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -69,6 +73,8 @@ interface Kpi {
   value: number | string
   route: string
   delta?: number | null
+  /** Monetary figure — rendered through the org currency formatter. */
+  money?: boolean
 }
 
 const pct = (curr: number, prev: number | null) =>
@@ -80,11 +86,11 @@ const kpis = computed<Kpi[]>(() => {
     const curRev = Number(summary.value.revenue)
     const curAov = Number(summary.value.avg_order_value)
     const prevAov = prevOrders.value && prevOrders.value > 0 ? (prevRevenue.value ?? 0) / prevOrders.value : null
-    k.push({ key: 'rev', label: 'Revenue', sub: `last ${period.value} days`, icon: 'pi pi-chart-line', value: summary.value.revenue, route: 'analytics', delta: pct(curRev, prevRevenue.value) })
+    k.push({ key: 'rev', label: 'Revenue', sub: `last ${period.value} days`, icon: 'pi pi-chart-line', value: summary.value.revenue, route: 'analytics', delta: pct(curRev, prevRevenue.value), money: true })
     k.push({ key: 'ord', label: 'Orders', sub: `last ${period.value} days`, icon: 'pi pi-shopping-cart', value: summary.value.order_count, route: 'orders', delta: pct(summary.value.order_count, prevOrders.value) })
-    k.push({ key: 'aov', label: 'Avg order value', sub: `last ${period.value} days`, icon: 'pi pi-receipt', value: summary.value.avg_order_value, route: 'analytics', delta: pct(curAov, prevAov) })
+    k.push({ key: 'aov', label: 'Avg order value', sub: `last ${period.value} days`, icon: 'pi pi-receipt', value: summary.value.avg_order_value, route: 'analytics', delta: pct(curAov, prevAov), money: true })
   }
-  if (arOpen.value !== null) k.push({ key: 'ar', label: 'Open AR', sub: 'outstanding', icon: 'pi pi-wallet', value: arOpen.value, route: 'ar-aging' })
+  if (arOpen.value !== null) k.push({ key: 'ar', label: 'Open AR', sub: 'outstanding', icon: 'pi pi-wallet', value: arOpen.value, route: 'ar-aging', money: true })
   if (customersTotal.value !== null) k.push({ key: 'cust', label: 'Customers', icon: 'pi pi-building', value: customersTotal.value, route: 'customers' })
   if (productsTotal.value !== null) k.push({ key: 'prod', label: 'Products', icon: 'pi pi-box', value: productsTotal.value, route: 'products' })
   return k
@@ -309,7 +315,7 @@ onMounted(load)
         >
           <span class="stat-ic"><i :class="k.icon" /></span>
           <span class="stat-main">
-            <span class="stat-val"><CountUp :value="k.value" /></span>
+            <span class="stat-val"><CountUp :value="k.money ? money(k.value) : String(k.value)" /></span>
             <span class="stat-lbl">
               {{ k.label }}
               <span
@@ -366,7 +372,7 @@ onMounted(load)
           <template #subtitle>Open opportunities</template>
           <template #content>
             <button type="button" class="pipeline" @click="router.push({ name: 'pipeline' })">
-              <span class="pipe-val"><CountUp :value="`${pipelineValue.toLocaleString()} ${pipelineCurrency}`" /></span>
+              <span class="pipe-val"><CountUp :value="money(pipelineValue, currency || pipelineCurrency)" /></span>
               <span class="pipe-lbl">{{ pipelineCount }} open {{ pipelineCount === 1 ? 'opportunity' : 'opportunities' }}</span>
             </button>
           </template>
@@ -406,7 +412,7 @@ onMounted(load)
                   {{ p.name }}
                   <span class="topsku">{{ p.sku }}</span>
                 </span>
-                <span class="toprev">{{ p.revenue }}</span>
+                <span class="toprev">{{ money(p.revenue) }}</span>
               </li>
             </ol>
           </template>
@@ -435,7 +441,7 @@ onMounted(load)
               >
                 <span class="order-ref">{{ o.public_id.slice(0, 8) }}…</span>
                 <Tag :value="o.status" :severity="statusSeverity(o.status)" />
-                <span class="order-total">{{ o.grand_total }} {{ o.currency }}</span>
+                <span class="order-total">{{ money(o.grand_total, o.currency) }}</span>
               </li>
             </ul>
           </template>
@@ -444,12 +450,12 @@ onMounted(load)
         <!-- AR aging -->
         <Card v-if="arOpen !== null" class="panel">
           <template #title>Accounts receivable</template>
-          <template #subtitle>Open balance: {{ arOpen }}</template>
+          <template #subtitle>Open balance: {{ money(arOpen ?? 0) }}</template>
           <template #content>
             <ul class="aging">
               <li v-for="b in agingBuckets" :key="b.label" class="aging-row">
                 <span class="aging-bucket" :class="{ overdue: b.label !== 'current' }">{{ b.label }}</span>
-                <span class="aging-amt">{{ b.amount }}</span>
+                <span class="aging-amt">{{ money(b.amount) }}</span>
               </li>
             </ul>
           </template>

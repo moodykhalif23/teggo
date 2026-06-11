@@ -12,6 +12,7 @@ import Select from 'primevue/select'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
 import { useCustomerOptions, useProductOptions } from '@/composables/useRecordOptions'
+import { useCurrency } from '@/composables/useCurrency'
 import type { components } from '@teggo/api/schema'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -27,7 +28,9 @@ const error = ref('')
 
 const dialogOpen = ref(false)
 const saving = ref(false)
-const form = reactive({ customer_id: null as number | null, currency: 'USD', product_id: null as number | null, quantity: '1', unit_price: '' })
+const form = reactive({ customer_id: null as number | null, product_id: null as number | null, quantity: '1', unit_price: '' })
+// Currency follows the org default set in Settings; the server stamps it on create.
+const { currency } = useCurrency()
 
 // Searchable pickers: load customers + products by name so the user never types raw IDs.
 const { customers, customersLoaded, loadCustomers } = useCustomerOptions()
@@ -51,7 +54,7 @@ async function load() {
 }
 
 function openCreate() {
-  Object.assign(form, { customer_id: null, currency: 'USD', product_id: null, quantity: '1', unit_price: '' })
+  Object.assign(form, { customer_id: null, product_id: null, quantity: '1', unit_price: '' })
   dialogOpen.value = true
   loadOptions()
 }
@@ -64,8 +67,8 @@ async function create() {
   saving.value = true
   const { data, error: err } = await api.POST('/admin/quotes', {
     body: {
+      // Currency intentionally omitted — the server applies the org default.
       customer_id: form.customer_id,
-      currency: form.currency,
       items: [{ product_id: form.product_id, quantity: form.quantity, unit_price: form.unit_price }],
     },
   })
@@ -119,23 +122,20 @@ onMounted(() => { if (route.query.new) openCreate() })
 
     <Dialog v-model:visible="dialogOpen" header="New quote" modal :style="{ width: '460px' }">
       <form class="form" @submit.prevent="create">
-        <div class="grid2">
-          <div class="field">
-            <label>Customer</label>
-            <Select
-              v-model="form.customer_id"
-              :options="customers"
-              optionLabel="name"
-              optionValue="id"
-              filter
-              filterPlaceholder="Search customers…"
-              placeholder="Select a customer"
-              :emptyMessage="optsLoaded ? 'No customers' : 'Loading…'"
-              showClear
-              fluid
-            />
-          </div>
-          <div class="field"><label>Currency</label><InputText v-model="form.currency" maxlength="3" fluid /></div>
+        <div class="field">
+          <label>Customer</label>
+          <Select
+            v-model="form.customer_id"
+            :options="customers"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            filterPlaceholder="Search customers…"
+            placeholder="Select a customer"
+            :emptyMessage="optsLoaded ? 'No customers' : 'Loading…'"
+            showClear
+            fluid
+          />
         </div>
         <p class="hint">First line (add more in the editor):</p>
         <div class="grid3">
@@ -156,7 +156,10 @@ onMounted(() => { if (route.query.new) openCreate() })
           </div>
           <div class="field"><label>Qty</label><InputText v-model="form.quantity" fluid /></div>
         </div>
-        <div class="field"><label>Unit price</label><InputText v-model="form.unit_price" fluid /></div>
+        <div class="field">
+          <label>Unit price <span v-if="currency" class="ccy">({{ currency }})</span></label>
+          <InputText v-model="form.unit_price" fluid />
+        </div>
       </form>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="dialogOpen = false" />
@@ -176,4 +179,5 @@ onMounted(() => { if (route.query.new) openCreate() })
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field label { font-size: 0.8rem; font-weight: 600; }
 .hint { margin: 0; font-size: 0.85rem; color: var(--p-text-muted-color, #64748b); }
+.ccy { font-weight: 400; color: var(--p-text-muted-color, #64748b); }
 </style>

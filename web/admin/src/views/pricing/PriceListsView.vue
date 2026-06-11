@@ -11,6 +11,7 @@ import InputText from 'primevue/inputtext'
 import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
+import { useCurrency } from '@/composables/useCurrency'
 import type { components } from '@teggo/api/schema'
 import PricingTools from './PricingTools.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -28,6 +29,8 @@ const saving = ref(false)
 const editing = ref<PriceList | null>(null)
 
 const form = reactive({ name: '', currency: 'USD', is_default: false, is_active: true })
+// New price lists default to the org's configured currency (Settings).
+const { currency } = useCurrency()
 
 async function load() {
   loading.value = true
@@ -43,7 +46,7 @@ async function load() {
 
 function openCreate() {
   editing.value = null
-  Object.assign(form, { name: '', currency: 'USD', is_default: false, is_active: true })
+  Object.assign(form, { name: '', currency: currency.value || 'USD', is_default: false, is_active: true })
   dialogOpen.value = true
 }
 function openEdit(pl: PriceList) {
