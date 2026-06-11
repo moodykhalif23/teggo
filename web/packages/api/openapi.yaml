@@ -1633,6 +1633,17 @@ components:
         blocks: { type: array, items: { type: object, additionalProperties: true } }
         seo: { type: object, additionalProperties: true }
         target_customer_group_id: { type: integer, format: int64, nullable: true }
+    PageGenerateRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt: { type: string, description: 'Natural-language brief for the page, e.g. "a landing page for industrial tools with a hero, a promo banner, and a grid of safety equipment".' }
+    PageGenerateReply:
+      type: object
+      required: [blocks]
+      properties:
+        blocks: { type: array, items: { type: object, additionalProperties: true }, description: 'Generated block tree, ready to load into the page builder.' }
+        notes: { type: string, description: 'How the page was generated (e.g. Claude vs offline template) and any caveats.' }
     ListWrapperPage:
       type: object
       properties:
@@ -4274,6 +4285,22 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ContentPage' } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/pages/ai-generate:
+    post:
+      tags: [CMS]
+      operationId: adminGeneratePage
+      summary: Generate a storefront page block tree from a natural-language brief.
+      description: >
+        Returns a block array (same shape the builder edits and the storefront
+        renders) for the caller to load into the page builder, review, and save.
+        Uses Claude when configured, otherwise an offline template engine.
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PageGenerateRequest' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageGenerateReply' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
   /admin/pages/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }

@@ -69,6 +69,7 @@ type options struct {
 	punchoutTTL    time.Duration
 	shipProvider   shippingeng.Adapter
 	aiProvider     ai.Provider
+	pageDesigner   ai.PageDesigner
 	allowedOrigins []string
 	rtAuthorizer   notify.Authorizer
 	rtKey          string
@@ -140,6 +141,12 @@ func WithAIProvider(p ai.Provider) Option {
 	return func(o *options) { o.aiProvider = p }
 }
 
+// WithPageDesigner wires the storefront page generator. Defaults to the offline
+// deterministic template designer when unset.
+func WithPageDesigner(d ai.PageDesigner) Option {
+	return func(o *options) { o.pageDesigner = d }
+}
+
 // WithAllowedOrigins sets the browser origins permitted to make cross-origin
 // requests (CORS). Needed for the SSR storefront's client-side calls. Empty
 // disables CORS (the admin/vendor SPAs use a same-origin dev proxy instead).
@@ -165,6 +172,9 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	}
 	if o.aiProvider == nil {
 		o.aiProvider = ai.NewDeterministicProvider() // offline, reproducible default
+	}
+	if o.pageDesigner == nil {
+		o.pageDesigner = ai.NewDeterministicPageDesigner() // offline, reproducible default
 	}
 	if o.logger == nil {
 		o.logger = slog.Default()
@@ -207,7 +217,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	inventory.New(st.Pool()).Routes(r, authMW)
 	crm.New(st.Pool()).Routes(r, authMW)
 	wfadmin.New(st.Pool()).Routes(r, authMW)
-	cms.New(st.Pool(), issuer).Routes(r, authMW)
+	cms.New(st.Pool(), issuer, o.pageDesigner).Routes(r, authMW)
 	reporting.New(st.Pool()).Routes(r, authMW)
 	tenancy.New(st.Pool()).Routes(r, authMW)
 	if o.blobStore != nil {

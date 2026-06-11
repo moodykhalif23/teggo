@@ -101,15 +101,21 @@ type claudeBlock struct {
 }
 
 func (c *ClaudeProvider) post(ctx context.Context, body map[string]any) (claudeResponse, error) {
+	return anthropicMessages(ctx, c.client, c.apiKey, body)
+}
+
+// anthropicMessages POSTs a Messages-API request and decodes the response. Shared
+// by the chat provider and the page designer so the wire details live in one place.
+func anthropicMessages(ctx context.Context, client *http.Client, apiKey string, body map[string]any) (claudeResponse, error) {
 	buf, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(buf))
 	if err != nil {
 		return claudeResponse{}, err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
-	res, err := c.client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return claudeResponse{}, err
 	}

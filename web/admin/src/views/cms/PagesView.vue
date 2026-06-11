@@ -9,6 +9,7 @@ import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
 import Fieldset from 'primevue/fieldset'
+import Dialog from 'primevue/dialog'
 import { api, errMessage } from '@/lib/client'
 import type { components } from '@teggo/api/schema'
 import type { Block } from '@teggo/blocks'
@@ -38,6 +39,11 @@ const selectedId = ref<string | null>(null)
 const categories = ref<components['schemas']['Category'][]>([])
 
 const advancedJson = ref('')
+
+// AI page generation.
+const aiOpen = ref(false)
+const aiPrompt = ref('')
+const aiBusy = ref(false)
 
 const selectedBlock = computed(() => blocks.value.find((b) => b.id === selectedId.value) ?? null)
 
@@ -125,6 +131,33 @@ function applyAdvancedToBuilder() {
   }
 }
 
+async function generateWithAI() {
+  if (!aiPrompt.value.trim() || aiBusy.value) return
+  aiBusy.value = true
+  const { data, error: err } = await api.POST('/admin/pages/ai-generate', {
+    body: { prompt: aiPrompt.value.trim() },
+  })
+  aiBusy.value = false
+  if (err || !data) {
+    toast.add({ severity: 'error', summary: 'Generation failed', detail: errMessage(err), life: 4000 })
+    return
+  }
+  // The generated blocks share the builder's shape — load them into the canvas.
+  blocks.value = ((data.blocks as Block[] | undefined) ?? []).map((b: any) => ({
+    type: b.type,
+    id: b.id || newBlockId(),
+    props: b.props ?? {},
+  }))
+  selectedId.value = blocks.value[0]?.id ?? null
+  aiOpen.value = false
+  toast.add({
+    severity: 'success',
+    summary: 'Page generated',
+    detail: data.notes || 'Review and tweak the blocks, then save.',
+    life: 5000,
+  })
+}
+
 async function save() {
   if (!title.value || !slug.value) {
     formError.value = 'Title and slug are required.'
@@ -209,6 +242,7 @@ onMounted(load)
           <h1>{{ editingId ? 'Edit page' : 'New page' }}</h1>
         </div>
         <div class="actions">
+          <Button label="Generate with AI" icon="pi pi-sparkles" severity="help" outlined @click="aiOpen = true" />
           <Button label="Cancel" severity="secondary" text @click="backToList" />
           <Button label="Save" icon="pi pi-check" :loading="saving" @click="save" />
         </div>
@@ -254,6 +288,25 @@ onMounted(load)
           <Button label="Apply to builder" size="small" outlined @click="applyAdvancedToBuilder" />
         </div>
       </Fieldset>
+
+      <Dialog v-model:visible="aiOpen" modal header="Generate page with AI" :style="{ width: '34rem' }">
+        <p class="muted mb">
+          Describe the page you want. The AI builds blocks you can then tweak and save.
+          <strong>This replaces the current blocks.</strong>
+        </p>
+        <Textarea
+          v-model="aiPrompt"
+          rows="4"
+          autoResize
+          class="ai-prompt"
+          placeholder="e.g. A landing page for industrial tools — a hero, a promo banner for a clearance sale, and a grid of safety equipment."
+          @keydown.enter.meta="generateWithAI"
+        />
+        <template #footer>
+          <Button label="Cancel" severity="secondary" text @click="aiOpen = false" />
+          <Button label="Generate" icon="pi pi-sparkles" :loading="aiBusy" :disabled="!aiPrompt.trim()" @click="generateWithAI" />
+        </template>
+      </Dialog>
     </template>
   </div>
 </template>
@@ -283,4 +336,5 @@ onMounted(load)
 
 .mono :deep(textarea) { font-family: ui-monospace, monospace; font-size: 0.8rem; }
 .adv-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+.ai-prompt { width: 100%; }
 </style>

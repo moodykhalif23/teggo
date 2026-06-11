@@ -10,10 +10,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"b2bcommerce/internal/ai"
 	"b2bcommerce/internal/auth"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
@@ -25,12 +27,13 @@ import (
 const storefrontOrg int64 = 1
 
 type Handler struct {
-	q      *gen.Queries
-	issuer *auth.Issuer
+	q        *gen.Queries
+	issuer   *auth.Issuer
+	designer ai.PageDesigner
 }
 
-func New(pool *pgxpool.Pool, issuer *auth.Issuer) *Handler {
-	return &Handler{q: gen.New(pool), issuer: issuer}
+func New(pool *pgxpool.Pool, issuer *auth.Issuer, designer ai.PageDesigner) *Handler {
+	return &Handler{q: gen.New(pool), issuer: issuer, designer: designer}
 }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
@@ -41,6 +44,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 
 		ar.With(mw.RequirePermission("cms.view")).Get("/admin/pages", h.listPages)
 		ar.With(mw.RequirePermission("cms.manage")).Post("/admin/pages", h.createPage)
+		ar.With(mw.RequirePermission("cms.manage")).Post("/admin/pages/ai-generate", h.generatePage)
 		ar.With(mw.RequirePermission("cms.view")).Get("/admin/pages/{id}", h.getPage)
 		ar.With(mw.RequirePermission("cms.manage")).Put("/admin/pages/{id}", h.updatePage)
 		ar.With(mw.RequirePermission("cms.manage")).Post("/admin/pages/{id}/publish", h.publishPage)
@@ -163,6 +167,108 @@ func (h *Handler) createPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusCreated, pageJSON(p))
+}
+
+// ---- admin: AI page generation -------------------------------------------
+
+type generateInput struct {
+	Prompt string `json:"prompt"`
+}
+
+// generatePage turns a natural-language brief into a block tree (the same shape
+// the builder edits and the storefront renders). The designer may be the
+// offline template engine or Claude; either way the output is sanitized and
+// re-validated here before it is returned — the model is never trusted.
+func (h *Handler) generatePage(w http.ResponseWriter, r *http.Request) {
+	org, ok := orgID(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no claims")
+		return
+	}
+	var in generateInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid body")
+		return
+	}
+	if strings.TrimSpace(in.Prompt) == "" {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "prompt is required")
+		return
+	}
+
+	// Org-scoped categories let product-grid blocks reference real categories and
+	// give us the set to clamp the generator's output against.
+	cats, _ := h.q.ListCategories(r.Context(), org)
+	dcats := make([]ai.DesignCategory, 0, len(cats))
+	valid := make(map[int64]bool, len(cats))
+	var firstCat int64
+	for i, c := range cats {
+		dcats = append(dcats, ai.DesignCategory{ID: c.ID, Name: c.Name})
+		valid[c.ID] = true
+		if i == 0 {
+			firstCat = c.ID
+		}
+	}
+
+	blocks, notes, err := h.designer.Design(r.Context(), ai.DesignRequest{Prompt: in.Prompt, Categories: dcats})
+	if err != nil {
+		response.Fail(w, http.StatusBadGateway, "ai_unavailable", "could not generate a page right now")
+		return
+	}
+	sanitizeGeneratedBlocks(blocks, valid, firstCat)
+
+	rawBlocks, err := json.Marshal(blocks)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not encode blocks")
+		return
+	}
+	if err := validateBlocks(rawBlocks); err != nil {
+		response.Fail(w, http.StatusUnprocessableEntity, "bad_generation", "the generator produced invalid blocks: "+err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"blocks": json.RawMessage(rawBlocks), "notes": notes})
+}
+
+// sanitizeGeneratedBlocks repairs generator output before it is trusted: it
+// guarantees each block has an id and clamps every product-grid source to a real
+// category (dropping the source if no category exists).
+func sanitizeGeneratedBlocks(blocks []ai.Block, valid map[int64]bool, fallback int64) {
+	for i, b := range blocks {
+		if id, _ := b["id"].(string); strings.TrimSpace(id) == "" {
+			b["id"] = "g" + strconv.Itoa(i+1)
+		}
+		if b["type"] != "product-grid" {
+			continue
+		}
+		props, _ := b["props"].(map[string]any)
+		if props == nil {
+			continue
+		}
+		src, _ := props["source"].(map[string]any)
+		if src == nil {
+			continue
+		}
+		src["kind"] = "category"
+		id, ok := asCatID(src["category_id"])
+		if !ok || !valid[id] {
+			if fallback != 0 {
+				src["category_id"] = fallback
+			} else {
+				delete(props, "source") // no categories exist — leave an empty grid
+			}
+		}
+	}
+}
+
+func asCatID(v any) (int64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int64(n), true
+	case int64:
+		return n, true
+	case int:
+		return int64(n), true
+	}
+	return 0, false
 }
 
 func (h *Handler) getPage(w http.ResponseWriter, r *http.Request) {

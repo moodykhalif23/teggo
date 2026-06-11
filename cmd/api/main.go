@@ -87,9 +87,13 @@ func main() {
 	// the Claude adapter is used only when explicitly selected AND an API key is
 	// present (otherwise we fall back to deterministic with a warning).
 	var aiProvider ai.Provider = ai.NewDeterministicProvider()
+	// The storefront page designer follows the same split: deterministic template
+	// engine by default, Claude when explicitly selected with a key present.
+	var pageDesigner ai.PageDesigner = ai.NewDeterministicPageDesigner()
 	if cfg.AIProvider == "claude" {
 		if cfg.AnthropicAPIKey != "" {
 			aiProvider = ai.NewClaudeProvider(cfg.AnthropicAPIKey, cfg.AIModel)
+			pageDesigner = ai.NewClaudePageDesigner(cfg.AnthropicAPIKey, cfg.AIModel)
 		} else {
 			logger.Warn("AI_PROVIDER=claude but ANTHROPIC_API_KEY is empty; using deterministic engine")
 		}
@@ -117,6 +121,7 @@ func main() {
 		server.WithRendition(enq),
 		server.WithIntegration(cfg.PunchoutStorefrontURL, cfg.EDISenderID, cfg.PunchoutTTL),
 		server.WithAIProvider(aiProvider),
+		server.WithPageDesigner(pageDesigner),
 		server.WithAllowedOrigins(cfg.CORSAllowedOrigins),
 		server.WithRealtime(rtAuthorizer, rtKey, rtCluster),
 	)

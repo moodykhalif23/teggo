@@ -2176,6 +2176,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/pages/ai-generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a storefront page block tree from a natural-language brief.
+         * @description Returns a block array (same shape the builder edits and the storefront renders) for the caller to load into the page builder, review, and save. Uses Claude when configured, otherwise an offline template engine.
+         */
+        post: operations["adminGeneratePage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/pages/{id}": {
         parameters: {
             query?: never;
@@ -4967,6 +4987,18 @@ export interface components {
             };
             /** Format: int64 */
             target_customer_group_id?: number | null;
+        };
+        PageGenerateRequest: {
+            /** @description Natural-language brief for the page, e.g. "a landing page for industrial tools with a hero, a promo banner, and a grid of safety equipment". */
+            prompt: string;
+        };
+        PageGenerateReply: {
+            /** @description Generated block tree, ready to load into the page builder. */
+            blocks: {
+                [key: string]: unknown;
+            }[];
+            /** @description How the page was generated (e.g. Claude vs offline template) and any caveats. */
+            notes?: string;
         };
         ListWrapperPage: {
             items?: components["schemas"]["ContentPage"][];
@@ -9710,6 +9742,33 @@ export interface operations {
             };
             400: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminGeneratePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageGenerateReply"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            422: components["responses"]["ErrorResponse"];
+            502: components["responses"]["ErrorResponse"];
         };
     };
     adminGetPage: {
