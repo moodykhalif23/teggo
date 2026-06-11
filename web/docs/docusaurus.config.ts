@@ -5,6 +5,11 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs'
 // Teggo developer documentation. Docs-only site (served at /); the API reference
 // is generated from the OpenAPI 3.1 contract in @teggo/api so it never drifts
 // from the generated TypeScript client.
+
+// Where "Get started" sends people: the admin dashboard of the deployment this
+// site fronts. Override per environment (e.g. https://admin.teggo.example).
+const ADMIN_URL = process.env.TEGGO_ADMIN_URL ?? 'http://localhost:5173'
+
 const config: Config = {
   title: 'Teggo Developer Docs',
   tagline: 'Self-hosted, API-first B2B commerce platform',
@@ -17,6 +22,8 @@ const config: Config = {
   onBrokenMarkdownLinks: 'warn',
 
   i18n: { defaultLocale: 'en', locales: ['en'] },
+
+  customFields: { adminUrl: ADMIN_URL },
 
   presets: [
     [
@@ -84,32 +91,18 @@ const config: Config = {
       items: [
         { type: 'docSidebar', sidebarId: 'guides', position: 'left', label: 'Guides' },
         { type: 'docSidebar', sidebarId: 'api', position: 'left', label: 'API reference' },
-        { to: '/getting-started', label: 'Get started', position: 'right', className: 'navbar-cta' },
+        { href: ADMIN_URL, label: 'Get started', position: 'right', className: 'navbar-cta' },
       ],
     },
+    // Light, minimal footer — a single row of links, no developer-guide columns.
     footer: {
-      style: 'dark',
+      style: 'light',
       links: [
-        {
-          title: 'Docs',
-          items: [
-            { label: 'Introduction', to: '/intro' },
-            { label: 'Getting started', to: '/getting-started' },
-            { label: 'Architecture', to: '/architecture' },
-            { label: 'API reference', to: '/api' },
-          ],
-        },
-        {
-          title: 'Build',
-          items: [
-            { label: 'Adding a module', to: '/module-pattern' },
-            { label: 'Conventions', to: '/conventions' },
-            { label: 'Auth & RBAC', to: '/auth-rbac' },
-            { label: 'Configuration', to: '/configuration' },
-          ],
-        },
+        { label: 'Admin dashboard', href: ADMIN_URL },
+        { label: 'Documentation', to: '/intro' },
+        { label: 'API reference', to: '/api' },
       ],
-      copyright: 'Teggo — self-hosted B2B commerce.',
+      copyright: `© ${new Date().getFullYear()} Teggo — self-hosted B2B commerce.`,
     },
     prism: {
       additionalLanguages: ['go', 'bash', 'sql', 'json'],
