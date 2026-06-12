@@ -156,6 +156,13 @@ type Querier interface {
 	// are the primitives. Money columns are decimal strings (sqlc money override).
 	// ===== RFQ =================================================================
 	CreateRFQ(ctx context.Context, arg CreateRFQParams) (Rfq, error)
+	// Rebates / volume incentives (Roadmap Tier 3 #7).
+	// ===== Programs ============================================================
+	CreateRebateProgram(ctx context.Context, arg CreateRebateProgramParams) (RebateProgram, error)
+	// ===== Settlements =========================================================
+	CreateRebateSettlement(ctx context.Context, arg CreateRebateSettlementParams) (RebateSettlement, error)
+	// ===== Tiers ===============================================================
+	CreateRebateTier(ctx context.Context, arg CreateRebateTierParams) (RebateTier, error)
 	CreateRedirect(ctx context.Context, arg CreateRedirectParams) (Redirect, error)
 	// Custom report builder (Pack 3 §1). Definitions are org-scoped; runs/schedules
 	// are authorized via their parent definition (handler fetches the def first).
@@ -224,8 +231,11 @@ type Querier interface {
 	DeleteMerchandisingRule(ctx context.Context, arg DeleteMerchandisingRuleParams) (int64, error)
 	DeletePriceAdjustmentRule(ctx context.Context, arg DeletePriceAdjustmentRuleParams) (int64, error)
 	DeleteProductImage(ctx context.Context, arg DeleteProductImageParams) (int64, error)
+	DeleteProductTranslation(ctx context.Context, arg DeleteProductTranslationParams) (int64, error)
 	DeletePromotion(ctx context.Context, arg DeletePromotionParams) (int64, error)
 	DeleteQuoteItems(ctx context.Context, quoteID int64) error
+	DeleteRebateProgram(ctx context.Context, arg DeleteRebateProgramParams) (int64, error)
+	DeleteRebateTier(ctx context.Context, arg DeleteRebateTierParams) (int64, error)
 	DeleteReportDefinition(ctx context.Context, arg DeleteReportDefinitionParams) error
 	DeleteReportSchedule(ctx context.Context, arg DeleteReportScheduleParams) error
 	DeleteSSOState(ctx context.Context, id int64) error
@@ -236,6 +246,9 @@ type Querier interface {
 	DeleteShoppingListItem(ctx context.Context, arg DeleteShoppingListItemParams) (int64, error)
 	DeleteSubscriptionItems(ctx context.Context, subscriptionID int64) error
 	DeleteTaxRate(ctx context.Context, arg DeleteTaxRateParams) error
+	// DistinctTranslationLocales lists configured locales across an org's products
+	// (for the storefront locale selector).
+	DistinctTranslationLocales(ctx context.Context, organizationID int64) ([]string, error)
 	// ===== Levels ==============================================================
 	EnsureInventoryLevel(ctx context.Context, arg EnsureInventoryLevelParams) error
 	// ExportProductsAdmin streams the full (non-deleted) catalog for CSV export.
@@ -363,6 +376,7 @@ type Querier interface {
 	GetProductIDByPublicIDGlobal(ctx context.Context, publicID uuid.UUID) (int64, error)
 	// GetProductTaxClasses returns the tax class for a set of products (order tax).
 	GetProductTaxClasses(ctx context.Context, arg GetProductTaxClassesParams) ([]GetProductTaxClassesRow, error)
+	GetProductTranslation(ctx context.Context, arg GetProductTranslationParams) (GetProductTranslationRow, error)
 	// GetProductVendorBySlug returns the marketplace vendor name for a product, when
 	// it is vendor-owned (no row for operator/house products). Storefront "sold by".
 	GetProductVendorBySlug(ctx context.Context, arg GetProductVendorBySlugParams) (string, error)
@@ -377,6 +391,7 @@ type Querier interface {
 	GetQuoteByPublicID(ctx context.Context, publicID uuid.UUID) (Quote, error)
 	GetRFQByID(ctx context.Context, arg GetRFQByIDParams) (Rfq, error)
 	GetRFQByPublicID(ctx context.Context, arg GetRFQByPublicIDParams) (Rfq, error)
+	GetRebateProgram(ctx context.Context, arg GetRebateProgramParams) (RebateProgram, error)
 	// Media queries moved to dam.sql (Pack 3 §2 — Digital Asset Management).
 	// ===== Redirects ===========================================================
 	GetRedirect(ctx context.Context, arg GetRedirectParams) (Redirect, error)
@@ -455,6 +470,9 @@ type Querier interface {
 	// ListActivePromotions feeds the engine; schedule/code/cap filtering is applied
 	// in Go (internal/promotions). Ordered by priority so ties resolve deterministically.
 	ListActivePromotions(ctx context.Context, organizationID int64) ([]Promotion, error)
+	// Programs that apply to a customer: org-scoped, active, and either all-customer
+	// (customer_id NULL) or this specific customer.
+	ListActiveRebateProgramsForCustomer(ctx context.Context, arg ListActiveRebateProgramsForCustomerParams) ([]RebateProgram, error)
 	ListActiveVendorUserIDs(ctx context.Context, vendorID int64) ([]int64, error)
 	// Approval routing rules (migration 0033).
 	ListApprovalRoutingRules(ctx context.Context, organizationID int64) ([]ApprovalRoutingRule, error)
@@ -561,6 +579,11 @@ type Querier interface {
 	// A product is capped at 5 images (enforced in the handler). Only type='image'
 	// rows are treated as gallery photos here.
 	ListProductImages(ctx context.Context, productID int64) ([]ListProductImagesRow, error)
+	// Product content translations (Roadmap Tier 3 #8). Per-locale name/description
+	// overrides; the storefront falls back to the base product when none exists.
+	ListProductTranslations(ctx context.Context, productID int64) ([]ProductTranslation, error)
+	// ListProductTranslationsForLocale batch-resolves a page of products for a locale.
+	ListProductTranslationsForLocale(ctx context.Context, arg ListProductTranslationsForLocaleParams) ([]ListProductTranslationsForLocaleRow, error)
 	ListProductsAdmin(ctx context.Context, arg ListProductsAdminParams) ([]Product, error)
 	// ---- vendor portal (audience 'vendor') ----------------------------------
 	ListProductsByVendor(ctx context.Context, vendorID *int64) ([]ListProductsByVendorRow, error)
@@ -578,6 +601,10 @@ type Querier interface {
 	ListRFQItems(ctx context.Context, rfqID int64) ([]ListRFQItemsRow, error)
 	ListRFQsAdmin(ctx context.Context, arg ListRFQsAdminParams) ([]Rfq, error)
 	ListRFQsForCustomer(ctx context.Context, customerID int64) ([]Rfq, error)
+	ListRebatePrograms(ctx context.Context, organizationID int64) ([]RebateProgram, error)
+	ListRebateSettlementsForCustomer(ctx context.Context, arg ListRebateSettlementsForCustomerParams) ([]ListRebateSettlementsForCustomerRow, error)
+	ListRebateSettlementsForProgram(ctx context.Context, programID int64) ([]RebateSettlement, error)
+	ListRebateTiers(ctx context.Context, programID int64) ([]RebateTier, error)
 	ListRedirects(ctx context.Context, websiteID int64) ([]Redirect, error)
 	ListRenditions(ctx context.Context, mediaAssetID int64) ([]MediaRendition, error)
 	ListReportDefinitions(ctx context.Context, organizationID int64) ([]ReportDefinition, error)
@@ -659,6 +686,10 @@ type Querier interface {
 	// PullChanges returns the rep's scoped delta after a cursor (rep-scoped rows
 	// plus globals), bounded by a batch limit and resumable by id.
 	PullChanges(ctx context.Context, arg PullChangesParams) ([]PullChangesRow, error)
+	// ===== Accrual (derived from orders) =======================================
+	// RebateQualifyingTotals sums qualifying (non-cancelled) order subtotal per
+	// customer for a program's currency within a period window. Optional customer scope.
+	RebateQualifyingTotals(ctx context.Context, arg RebateQualifyingTotalsParams) ([]RebateQualifyingTotalsRow, error)
 	// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
 	// currency: for each product it picks the winning candidate list (highest
 	// level, then priority) that has a valid price, and flattens that list's tiers.
@@ -779,6 +810,7 @@ type Querier interface {
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdatePromotion(ctx context.Context, arg UpdatePromotionParams) (Promotion, error)
+	UpdateRebateProgram(ctx context.Context, arg UpdateRebateProgramParams) (RebateProgram, error)
 	UpdateReportDefinition(ctx context.Context, arg UpdateReportDefinitionParams) (ReportDefinition, error)
 	UpdateShoppingListItem(ctx context.Context, arg UpdateShoppingListItemParams) (ShoppingListItem, error)
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (Subscription, error)
@@ -809,6 +841,7 @@ type Querier interface {
 	// priced, configured lines on quotes.
 	// ===== Product config (base price + configurable flag) =====================
 	UpsertProductConfig(ctx context.Context, arg UpsertProductConfigParams) (ProductConfig, error)
+	UpsertProductTranslation(ctx context.Context, arg UpsertProductTranslationParams) (ProductTranslation, error)
 	// ===== Renditions ==========================================================
 	UpsertRendition(ctx context.Context, arg UpsertRenditionParams) (MediaRendition, error)
 	UpsertSearchRedirect(ctx context.Context, arg UpsertSearchRedirectParams) (SearchRedirect, error)

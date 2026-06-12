@@ -270,6 +270,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/products/{id}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListProductTranslations"];
+        /** Set a product's name/description for a locale. */
+        put: operations["adminUpsertProductTranslation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/products/{id}/translations/{locale}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                locale: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteProductTranslation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/locales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Locales available for content (default + configured translations). */
+        get: operations["storefrontLocales"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/categories": {
         parameters: {
             query?: never;
@@ -1274,6 +1329,156 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["adminDeleteMerchandisingRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListRebatePrograms"];
+        put?: never;
+        post: operations["adminCreateRebateProgram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetRebateProgram"];
+        put: operations["adminUpdateRebateProgram"];
+        post?: never;
+        delete: operations["adminDeleteRebateProgram"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates/{id}/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminAddRebateTier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates/{id}/tiers/{tierID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                tierID: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteRebateTier"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates/{id}/report": {
+        parameters: {
+            query?: {
+                /** @description Reference date YYYY-MM-DD selecting the period (default: today). */
+                ref?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** Per-customer accrual + applicable tier for the period. */
+        get: operations["adminRebateReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates/{id}/settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminListRebateSettlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/rebates/{id}/settle": {
+        parameters: {
+            query?: {
+                /** @description Reference date YYYY-MM-DD selecting the period to settle (default: today). */
+                ref?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Settle the period — snapshot amounts + issue credit notes (idempotent). */
+        post: operations["adminSettleRebate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/rebates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The buyer's settled rebates + current-period progress. */
+        get: operations["storefrontRebateStatement"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4119,6 +4324,24 @@ export interface components {
         ProductImageList: {
             items: components["schemas"]["ProductImage"][];
         };
+        ProductTranslation: {
+            /** @description BCP-47-ish locale code, e.g. fr, es, sw */
+            locale: string;
+            name: string;
+            description?: string | null;
+        };
+        ProductTranslationInput: {
+            locale: string;
+            name: string;
+            description?: string | null;
+        };
+        ProductTranslationList: {
+            items: components["schemas"]["ProductTranslation"][];
+        };
+        LocaleOptions: {
+            default: string;
+            locales: string[];
+        };
         ProductImportRow: {
             /** @description Source line number in the CSV (header is line 1). */
             row: number;
@@ -4865,6 +5088,94 @@ export interface components {
         };
         MerchandisingRuleList: {
             items: components["schemas"]["MerchandisingRule"][];
+        };
+        RebateTier: {
+            /** Format: int64 */
+            id: number;
+            min_amount: string;
+            rate_percent: string;
+        };
+        RebateTierInput: {
+            min_amount: string;
+            rate_percent: string;
+            sort_order?: number;
+        };
+        RebateProgram: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            public_id: string;
+            name: string;
+            description?: string | null;
+            /**
+             * Format: int64
+             * @description null = all customers
+             */
+            customer_id?: number | null;
+            /** @enum {string} */
+            period: "monthly" | "quarterly" | "annual";
+            currency: string;
+            is_active: boolean;
+            tiers?: components["schemas"]["RebateTier"][];
+        };
+        RebateProgramInput: {
+            name: string;
+            description?: string | null;
+            /** Format: int64 */
+            customer_id?: number | null;
+            /** @enum {string} */
+            period: "monthly" | "quarterly" | "annual";
+            currency: string;
+            is_active?: boolean;
+        };
+        RebateProgramList: {
+            items: components["schemas"]["RebateProgram"][];
+        };
+        RebateReport: {
+            period_key: string;
+            currency: string;
+            rows: {
+                /** Format: int64 */
+                customer_id?: number;
+                qualifying_total?: string;
+                /** Format: int64 */
+                orders?: number;
+                rate_percent?: string;
+                rebate_amount?: string;
+            }[];
+        };
+        RebateSettleResult: {
+            period_key: string;
+            settled: number;
+            skipped: number;
+            total_rebate: string;
+        };
+        RebateSettlement: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            customer_id: number;
+            period_key: string;
+            qualifying_total: string;
+            rate_percent: string;
+            rebate_amount: string;
+            currency: string;
+            status: string;
+            program_name?: string;
+        };
+        RebateSettlementList: {
+            items: components["schemas"]["RebateSettlement"][];
+        };
+        RebateStatement: {
+            settlements: components["schemas"]["RebateSettlement"][];
+            current: {
+                program?: string;
+                period_key?: string;
+                currency?: string;
+                qualifying_total?: string;
+                rate_percent?: string;
+                projected_rebate?: string;
+            }[];
         };
         RevalidateResult: {
             changed?: {
@@ -5866,6 +6177,8 @@ export interface components {
             page: number;
             sort?: string;
             facets: components["schemas"]["Facet"][];
+            /** @description When set, a search-merchandising redirect — navigate here instead of showing results. */
+            redirect?: string;
         };
         SalesSummary: {
             days: number;
@@ -6778,7 +7091,10 @@ export interface operations {
     };
     storefrontGetProduct: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Display locale for translated name/description. */
+                locale?: string;
+            };
             header?: never;
             path: {
                 slug: string;
@@ -7161,6 +7477,99 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListProductTranslations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductTranslationList"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpsertProductTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductTranslationInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductTranslation"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteProductTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontLocales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocaleOptions"];
+                };
+            };
         };
     };
     adminListCategories: {
@@ -9166,6 +9575,266 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListRebatePrograms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateProgramList"];
+                };
+            };
+        };
+    };
+    adminCreateRebateProgram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebateProgramInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateProgram"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminGetRebateProgram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateProgram"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminUpdateRebateProgram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebateProgramInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateProgram"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteRebateProgram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminAddRebateTier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebateTierInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateTier"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteRebateTier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                tierID: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminRebateReport: {
+        parameters: {
+            query?: {
+                /** @description Reference date YYYY-MM-DD selecting the period (default: today). */
+                ref?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateReport"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListRebateSettlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateSettlementList"];
+                };
+            };
+        };
+    };
+    adminSettleRebate: {
+        parameters: {
+            query?: {
+                /** @description Reference date YYYY-MM-DD selecting the period to settle (default: today). */
+                ref?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateSettleResult"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontRebateStatement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebateStatement"];
+                };
+            };
         };
     };
     storefrontReorderSuggestions: {
@@ -11748,6 +12417,8 @@ export interface operations {
                 sort?: "relevance" | "newest" | "name";
                 page?: number;
                 page_size?: number;
+                /** @description Display locale for translated names/descriptions. */
+                locale?: string;
             };
             header?: never;
             path?: never;

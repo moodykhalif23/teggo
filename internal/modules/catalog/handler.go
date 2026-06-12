@@ -45,6 +45,7 @@ func (h *Handler) RoutesWithOptionalAuth(r chi.Router, authMW, optAuthMW func(ht
 		sr.Get("/storefront/products/{slug}", h.storefrontGet)
 		sr.Get("/storefront/products/{slug}/availability", h.storefrontAvailability)
 		sr.Get("/storefront/catalog", h.storefrontFacetedSearch)
+		sr.Get("/storefront/locales", h.storefrontLocales)
 	})
 
 	// Admin (bearer + permission gated).
@@ -69,6 +70,11 @@ func (h *Handler) RoutesWithOptionalAuth(r chi.Router, authMW, optAuthMW func(ht
 		ar.With(mw.RequirePermission("product.view")).Get("/admin/products/{id}/images", h.listImages)
 		ar.With(mw.RequirePermission("product.manage")).Post("/admin/products/{id}/images", h.addImage)
 		ar.With(mw.RequirePermission("product.manage")).Delete("/admin/products/{id}/images/{imageID}", h.deleteImage)
+
+		// Product content translations (i18n).
+		ar.With(mw.RequirePermission("product.view")).Get("/admin/products/{id}/translations", h.listTranslations)
+		ar.With(mw.RequirePermission("product.manage")).Put("/admin/products/{id}/translations", h.upsertTranslation)
+		ar.With(mw.RequirePermission("product.manage")).Delete("/admin/products/{id}/translations/{locale}", h.deleteTranslation)
 		ar.With(mw.RequirePermission("product.view")).Get("/admin/products/{id}/visibility", h.listVisibility)
 		ar.With(mw.RequirePermission("product.manage")).Post("/admin/products/{id}/visibility", h.createVisibility)
 		ar.With(mw.RequirePermission("product.manage")).Delete("/admin/catalog-visibility/{id}", h.deleteVisibility)
@@ -294,9 +300,21 @@ func (h *Handler) storefrontGet(w http.ResponseWriter, r *http.Request) {
 	if name, e := h.q.GetProductVendorBySlug(r.Context(), gen.GetProductVendorBySlugParams{OrganizationID: orgID, Slug: chi.URLParam(r, "slug")}); e == nil && name != "" {
 		soldBy = &name
 	}
+	name, desc := p.Name, p.Description
+	// i18n: override name/description from a per-locale translation when ?locale set.
+	if locale := localeOf(r); locale != "" {
+		if pid, e := h.q.GetProductIDByPublicID(r.Context(), gen.GetProductIDByPublicIDParams{OrganizationID: orgID, PublicID: p.PublicID}); e == nil {
+			if tr, e2 := h.q.GetProductTranslation(r.Context(), gen.GetProductTranslationParams{ProductID: pid, Lower: locale}); e2 == nil {
+				name = tr.Name
+				if tr.Description != nil {
+					desc = tr.Description
+				}
+			}
+		}
+	}
 	response.JSON(w, http.StatusOK, storefrontProduct{
-		PublicID: p.PublicID.String(), SKU: p.Sku, Name: p.Name, Slug: p.Slug,
-		Description: p.Description, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
+		PublicID: p.PublicID.String(), SKU: p.Sku, Name: name, Slug: p.Slug,
+		Description: desc, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
 		SoldBy: soldBy,
 	})
 }
@@ -456,15 +474,35 @@ func (h *Handler) storefrontFacetedSearch(w http.ResponseWriter, r *http.Request
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve catalog visibility")
 		return
 	}
+	// i18n: batch-resolve per-locale name/description for this page when ?locale set.
+	trans := map[int64]gen.ListProductTranslationsForLocaleRow{}
+	if locale := localeOf(r); locale != "" && len(rows) > 0 {
+		ids := make([]int64, len(rows))
+		for i, p := range rows {
+			ids[i] = p.ID
+		}
+		if trs, e := h.q.ListProductTranslationsForLocale(r.Context(), gen.ListProductTranslationsForLocaleParams{Column1: ids, Lower: locale}); e == nil {
+			for _, t := range trs {
+				trans[t.ProductID] = t
+			}
+		}
+	}
 	items := make([]storefrontProduct, 0, len(rows))
 	for _, p := range rows {
 		if hidden[p.ID] {
 			total-- // keep the count consistent with the filtered page
 			continue
 		}
+		name, desc := p.Name, p.Description
+		if tr, ok := trans[p.ID]; ok {
+			name = tr.Name
+			if tr.Description != nil {
+				desc = tr.Description
+			}
+		}
 		items = append(items, storefrontProduct{
-			PublicID: p.PublicID.String(), SKU: p.Sku, Name: p.Name, Slug: p.Slug,
-			Description: p.Description, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
+			PublicID: p.PublicID.String(), SKU: p.Sku, Name: name, Slug: p.Slug,
+			Description: desc, Status: p.Status, Attributes: rawJSON(p.Attributes), Unit: p.Unit,
 		})
 	}
 	if total < 0 {

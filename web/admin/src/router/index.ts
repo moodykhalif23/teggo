@@ -135,6 +135,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'subscription.view' },
       },
       {
+        path: 'rebates',
+        name: 'rebates',
+        component: () => import('@/views/rebates/RebatesView.vue'),
+        meta: { permission: 'rebate.view' },
+      },
+      {
         path: 'orders/:id',
         name: 'order-detail',
         component: () => import('@/views/sales/OrderDetailView.vue'),

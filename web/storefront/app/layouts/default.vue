@@ -5,6 +5,19 @@ import InputText from 'primevue/inputtext'
 const { isAuthenticated, logout } = useAuth()
 const router = useRouter()
 const route = useRoute()
+const client = useClient()
+
+// i18n: content-locale selector (populated from the store's configured locales).
+const locale = useLocale()
+const localeOptions = ref<string[]>([])
+const localeDefault = ref('')
+onMounted(async () => {
+  const { data } = await client.GET('/storefront/locales')
+  if (data) {
+    localeOptions.value = data.locales ?? []
+    localeDefault.value = data.default ?? ''
+  }
+})
 
 const term = ref((route.query.q as string) ?? '')
 // Mobile nav drawer (small screens only). Closes on navigation.
@@ -42,6 +55,10 @@ function signOut() {
             @keyup.enter="search"
           />
         </span>
+        <select v-if="localeOptions.length" v-model="locale" class="locale-select" aria-label="Language">
+          <option value="">{{ localeDefault || 'Default' }}</option>
+          <option v-for="l in localeOptions" :key="l" :value="l">{{ l }}</option>
+        </select>
         <ClientOnly>
           <NotificationBell v-if="isAuthenticated" class="header-bell" />
         </ClientOnly>
@@ -68,6 +85,7 @@ function signOut() {
         <NuxtLink v-if="isAuthenticated" to="/account/subscriptions">Recurring</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/returns">Returns</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/invoices">Invoices</NuxtLink>
+        <NuxtLink v-if="isAuthenticated" to="/account/rebates">Rebates</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/budgets">Budgets</NuxtLink>
         <NuxtLink v-if="isAuthenticated" to="/account/settings">Account</NuxtLink>
       </nav>
@@ -174,6 +192,15 @@ function signOut() {
 .cart-link :deep(.p-button-label),
 .auth-link :deep(.p-button-label) {
   white-space: nowrap;
+}
+.locale-select {
+  border: 1px solid var(--p-surface-300, #cbd5e1);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  background: var(--p-surface-0, #fff);
+  color: var(--p-text-color, #334155);
+  font: inherit;
+  cursor: pointer;
 }
 .search {
   display: flex;

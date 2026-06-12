@@ -7,16 +7,21 @@ const route = useRoute()
 const router = useRouter()
 const client = useClient()
 const { isAuthenticated } = useAuth()
+const locale = useLocale()
 
 const { data: product, error } = await useAsyncData(
-  () => `product-${route.params.slug}`,
+  () => `product-${route.params.slug}-${locale.value}`,
   async () => {
     const { data, error } = await client.GET('/storefront/products/{slug}', {
-      params: { path: { slug: route.params.slug as string } },
+      params: {
+        path: { slug: route.params.slug as string },
+        query: locale.value ? { locale: locale.value } : {},
+      },
     })
     if (error) throw createError({ statusCode: 404, statusMessage: 'Product not found' })
     return data
   },
+  { watch: [locale] },
 )
 
 import type { components } from '@teggo/api/schema'

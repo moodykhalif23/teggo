@@ -143,6 +143,33 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/ProductImage' } }
 
+    ProductTranslation:
+      type: object
+      required: [locale, name]
+      properties:
+        locale: { type: string, description: 'BCP-47-ish locale code, e.g. fr, es, sw' }
+        name: { type: string }
+        description: { type: string, nullable: true }
+    ProductTranslationInput:
+      type: object
+      required: [locale, name]
+      properties:
+        locale: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+    ProductTranslationList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProductTranslation' } }
+
+    LocaleOptions:
+      type: object
+      required: [default, locales]
+      properties:
+        default: { type: string }
+        locales: { type: array, items: { type: string } }
+
     ProductImportRow:
       type: object
       required: [row, action]
@@ -966,6 +993,107 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/MerchandisingRule' } }
+
+    RebateTier:
+      type: object
+      required: [id, min_amount, rate_percent]
+      properties:
+        id: { type: integer, format: int64 }
+        min_amount: { type: string }
+        rate_percent: { type: string }
+    RebateTierInput:
+      type: object
+      required: [min_amount, rate_percent]
+      properties:
+        min_amount: { type: string }
+        rate_percent: { type: string }
+        sort_order: { type: integer }
+    RebateProgram:
+      type: object
+      required: [id, public_id, name, period, currency, is_active]
+      properties:
+        id: { type: integer, format: int64 }
+        public_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        customer_id: { type: integer, format: int64, nullable: true, description: 'null = all customers' }
+        period: { type: string, enum: [monthly, quarterly, annual] }
+        currency: { type: string }
+        is_active: { type: boolean }
+        tiers: { type: array, items: { $ref: '#/components/schemas/RebateTier' } }
+    RebateProgramInput:
+      type: object
+      required: [name, period, currency]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        customer_id: { type: integer, format: int64, nullable: true }
+        period: { type: string, enum: [monthly, quarterly, annual] }
+        currency: { type: string }
+        is_active: { type: boolean }
+    RebateProgramList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/RebateProgram' } }
+    RebateReport:
+      type: object
+      required: [period_key, currency, rows]
+      properties:
+        period_key: { type: string }
+        currency: { type: string }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              customer_id: { type: integer, format: int64 }
+              qualifying_total: { type: string }
+              orders: { type: integer, format: int64 }
+              rate_percent: { type: string }
+              rebate_amount: { type: string }
+    RebateSettleResult:
+      type: object
+      required: [period_key, settled, skipped, total_rebate]
+      properties:
+        period_key: { type: string }
+        settled: { type: integer }
+        skipped: { type: integer }
+        total_rebate: { type: string }
+    RebateSettlement:
+      type: object
+      required: [id, customer_id, period_key, qualifying_total, rate_percent, rebate_amount, currency, status]
+      properties:
+        id: { type: integer, format: int64 }
+        customer_id: { type: integer, format: int64 }
+        period_key: { type: string }
+        qualifying_total: { type: string }
+        rate_percent: { type: string }
+        rebate_amount: { type: string }
+        currency: { type: string }
+        status: { type: string }
+        program_name: { type: string }
+    RebateSettlementList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/RebateSettlement' } }
+    RebateStatement:
+      type: object
+      required: [settlements, current]
+      properties:
+        settlements: { type: array, items: { $ref: '#/components/schemas/RebateSettlement' } }
+        current:
+          type: array
+          items:
+            type: object
+            properties:
+              program: { type: string }
+              period_key: { type: string }
+              currency: { type: string }
+              qualifying_total: { type: string }
+              rate_percent: { type: string }
+              projected_rebate: { type: string }
 
     RevalidateResult:
       type: object
@@ -2024,6 +2152,7 @@ components:
         page: { type: integer }
         sort: { type: string }
         facets: { type: array, items: { $ref: '#/components/schemas/Facet' } }
+        redirect: { type: string, description: 'When set, a search-merchandising redirect — navigate here instead of showing results.' }
 
     # ----- Reporting (Pack 3 §1, V1) -----
     SalesSummary:
@@ -2938,6 +3067,7 @@ paths:
       security: []
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: locale, in: query, required: false, schema: { type: string }, description: 'Display locale for translated name/description.' }
       responses:
         '200':
           description: OK
@@ -3135,6 +3265,47 @@ paths:
       responses:
         '204': { description: No Content }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/products/{id}/translations:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Catalog]
+      operationId: adminListProductTranslations
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ProductTranslationList' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Catalog]
+      operationId: adminUpsertProductTranslation
+      summary: Set a product's name/description for a locale.
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProductTranslationInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ProductTranslation' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/products/{id}/translations/{locale}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      - { name: locale, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [Catalog]
+      operationId: adminDeleteProductTranslation
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/locales:
+    get:
+      tags: [Catalog]
+      operationId: storefrontLocales
+      summary: Locales available for content (default + configured translations).
+      security: []
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LocaleOptions' } } } }
 
   /admin/categories:
     get:
@@ -4059,6 +4230,109 @@ paths:
       responses:
         '204': { description: No Content }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/rebates:
+    get:
+      tags: [Rebates]
+      operationId: adminListRebatePrograms
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateProgramList' } } } }
+    post:
+      tags: [Rebates]
+      operationId: adminCreateRebateProgram
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RebateProgramInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/RebateProgram' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/rebates/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer, format: int64 } }]
+    get:
+      tags: [Rebates]
+      operationId: adminGetRebateProgram
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateProgram' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Rebates]
+      operationId: adminUpdateRebateProgram
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RebateProgramInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateProgram' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Rebates]
+      operationId: adminDeleteRebateProgram
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/rebates/{id}/tiers:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer, format: int64 } }]
+    post:
+      tags: [Rebates]
+      operationId: adminAddRebateTier
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RebateTierInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/RebateTier' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/rebates/{id}/tiers/{tierID}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      - { name: tierID, in: path, required: true, schema: { type: integer, format: int64 } }
+    delete:
+      tags: [Rebates]
+      operationId: adminDeleteRebateTier
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/rebates/{id}/report:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      - { name: ref, in: query, required: false, schema: { type: string }, description: 'Reference date YYYY-MM-DD selecting the period (default: today).' }
+    get:
+      tags: [Rebates]
+      operationId: adminRebateReport
+      summary: Per-customer accrual + applicable tier for the period.
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateReport' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/rebates/{id}/settlements:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer, format: int64 } }]
+    get:
+      tags: [Rebates]
+      operationId: adminListRebateSettlements
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateSettlementList' } } } }
+  /admin/rebates/{id}/settle:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      - { name: ref, in: query, required: false, schema: { type: string }, description: 'Reference date YYYY-MM-DD selecting the period to settle (default: today).' }
+    post:
+      tags: [Rebates]
+      operationId: adminSettleRebate
+      summary: Settle the period — snapshot amounts + issue credit notes (idempotent).
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateSettleResult' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/rebates:
+    get:
+      tags: [Rebates]
+      operationId: storefrontRebateStatement
+      summary: The buyer's settled rebates + current-period progress.
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RebateStatement' } } } }
 
   /storefront/account/reorder-suggestions:
     get:
@@ -5162,6 +5436,7 @@ paths:
         - { name: sort, in: query, schema: { type: string, enum: [relevance, newest, name] } }
         - { name: page, in: query, schema: { type: integer, default: 1 } }
         - { name: page_size, in: query, schema: { type: integer, default: 24 } }
+        - { name: locale, in: query, required: false, schema: { type: string }, description: 'Display locale for translated names/descriptions.' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/FacetedSearchResult' } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }

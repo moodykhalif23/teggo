@@ -99,16 +99,30 @@ Search is Postgres FTS only — no curation.
 
 ## Tier 3 — completeness, schedule opportunistically
 
-### 7. Rebates / volume incentives  ·  Impact: Med (vertical-dependent) · Effort: L
+### 7. Rebates / volume incentives  ·  ✅ Done · Impact: Med (vertical-dependent) · Effort: L
 Retroactive/tiered rebates are big in distribution but niche elsewhere.
-- **Data**: `rebate_programs` (tiers, period, accrual basis), `rebate_accruals`.
-- **Engine**: accrue against qualifying orders; period-end settlement → credit note / payout.
-- **Surfaces**: admin program setup + accrual report; buyer rebate statement.
+- **Data** (`0050`): `rebate_programs` (period, currency, scope), `rebate_tiers` (min-spend → rate),
+  `rebate_settlements` (unique per program+customer+period). Accrual is **derived from orders**
+  on-demand (no per-order write) for safety/simplicity.
+- **Engine** (`internal/rebates`): `PeriodWindow` (monthly/quarterly/annual) + `Applicable`
+  (retroactive top-tier selection) + `Rebate`. Unit-tested.
+- **Surfaces**: admin Rebates screen — programs + tiers, an accrual **report** (per-customer
+  qualifying total + tier + projected), and **Settle** (idempotent; snapshots the amount + issues a
+  credit note via the existing credit-note path). Buyer **rebate statement** (current progress +
+  earned/settled) at `/account/rebates`. Perms `rebate.view`/`rebate.manage`.
+- **Deferred (future):** event-based accrual (per-order write) for scale; payout (vs. credit note);
+  customer-group scope; multi-currency programs.
 
-### 8. Storefront i18n (product/content translations)  ·  Impact: Med (global sellers) · Effort: M
+### 8. Storefront i18n (product/content translations)  ·  ✅ Done · Impact: Med (global sellers) · Effort: M
 CMS/tenancy carry a `locale`; product/category content isn't translatable.
-- **Data**: translation tables (or JSONB locale maps) for product name/description, category, attributes.
-- **Surfaces**: admin per-locale editors; Nuxt locale routing + content resolution.
+- **Data**: reuses the existing `product_translations` (product_id, locale, name, description) — no migration.
+- **Behavior**: storefront reads resolve a per-locale name/description by `?locale=` (detail + faceted
+  search, batch-resolved), falling back to the base product when none exists. `GET /storefront/locales`
+  lists the website default + configured locales. Managed under `product.manage` (no new perm).
+- **Surfaces**: admin Translations editor in the product dialog (per-locale name/description);
+  storefront header **locale selector** (Nuxt `useLocale` state) → product detail localizes live.
+- **Deferred (future):** category/attribute translations; localizing the legacy `/storefront/products`
+  list + listing pages (faceted search + detail are localized); Nuxt locale-prefixed routing.
 
 ### 9. Loyalty / rewards  ·  Impact: Low–Med · Effort: L
 Less common in pure B2B; consider only if a target vertical needs it. Likely overlaps

@@ -859,6 +859,43 @@ type QuoteRevision struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type RebateProgram struct {
+	ID             int64     `json:"id"`
+	PublicID       uuid.UUID `json:"public_id"`
+	OrganizationID int64     `json:"organization_id"`
+	Name           string    `json:"name"`
+	Description    *string   `json:"description"`
+	CustomerID     *int64    `json:"customer_id"`
+	Period         string    `json:"period"`
+	Basis          string    `json:"basis"`
+	Currency       string    `json:"currency"`
+	IsActive       bool      `json:"is_active"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type RebateSettlement struct {
+	ID              int64     `json:"id"`
+	ProgramID       int64     `json:"program_id"`
+	CustomerID      int64     `json:"customer_id"`
+	PeriodKey       string    `json:"period_key"`
+	QualifyingTotal string    `json:"qualifying_total"`
+	RatePercent     string    `json:"rate_percent"`
+	RebateAmount    string    `json:"rebate_amount"`
+	Currency        string    `json:"currency"`
+	Status          string    `json:"status"`
+	CreditNoteID    *int64    `json:"credit_note_id"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+type RebateTier struct {
+	ID          int64  `json:"id"`
+	ProgramID   int64  `json:"program_id"`
+	MinAmount   string `json:"min_amount"`
+	RatePercent string `json:"rate_percent"`
+	SortOrder   int32  `json:"sort_order"`
+}
+
 type Redirect struct {
 	ID         int64  `json:"id"`
 	WebsiteID  int64  `json:"website_id"`

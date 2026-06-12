@@ -36,6 +36,7 @@ import (
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
 	"b2bcommerce/internal/modules/promo"
+	"b2bcommerce/internal/modules/rebate"
 	"b2bcommerce/internal/modules/reporting"
 	"b2bcommerce/internal/modules/sales"
 	"b2bcommerce/internal/modules/settings"
@@ -218,6 +219,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	promo.New(st.Queries()).Routes(r, authMW)
 	fxadmin.New(st.Pool()).Routes(r, authMW)
 	merch.New(st.Pool()).Routes(r, authMW)
+	rebate.New(st.Pool()).Routes(r, authMW)
 	subscription.New(st.Pool()).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)

@@ -119,6 +119,42 @@ async function removeVisibility(id: number) {
   if (!err) loadVisibility()
 }
 
+// ---- Translations (i18n: per-locale name/description) ----
+type Translation = components['schemas']['ProductTranslation']
+const translations = ref<Translation[]>([])
+const transForm = reactive({ locale: '', name: '', description: '' })
+
+async function loadTranslations() {
+  if (!props.product) {
+    translations.value = []
+    return
+  }
+  const { data } = await api.GET('/admin/products/{id}/translations', { params: { path: { id: props.product.id } } })
+  translations.value = data?.items ?? []
+}
+async function saveTranslation() {
+  if (!props.product || !transForm.locale.trim() || !transForm.name.trim()) return
+  const { error: err } = await api.PUT('/admin/products/{id}/translations', {
+    params: { path: { id: props.product.id } },
+    body: { locale: transForm.locale.trim(), name: transForm.name.trim(), description: transForm.description.trim() || null },
+  })
+  if (err) {
+    toast.add({ severity: 'error', summary: 'Could not save translation', detail: errMessage(err), life: 3500 })
+    return
+  }
+  transForm.locale = ''
+  transForm.name = ''
+  transForm.description = ''
+  loadTranslations()
+}
+async function removeTranslation(locale: string) {
+  if (!props.product) return
+  const { error: err } = await api.DELETE('/admin/products/{id}/translations/{locale}', {
+    params: { path: { id: props.product.id, locale } },
+  })
+  if (!err) loadTranslations()
+}
+
 const types = ['simple', 'configurable', 'kit', 'digital']
 const statuses = ['draft', 'active', 'disabled']
 
@@ -151,9 +187,11 @@ watch(
       loadCustomers()
       loadVisibility()
       loadImages()
+      loadTranslations()
     } else {
       visRules.value = []
       images.value = []
+      translations.value = []
       Object.assign(form, { sku: '', name: '', slug: '', type: 'simple', status: 'draft', unit: 'each', description: '' })
       attrsText.value = '{}'
     }
@@ -259,6 +297,26 @@ async function save() {
         <input ref="imageInput" type="file" accept="image/*" hidden @change="onImageFile" />
       </div>
 
+      <div v-if="product" class="field i18n">
+        <label>Translations <span class="hint">(per-locale name &amp; description; falls back to the default above)</span></label>
+        <ul class="tr-list">
+          <li v-for="t in translations" :key="t.locale" class="tr">
+            <span class="tr-locale">{{ t.locale }}</span>
+            <span class="tr-name">{{ t.name }}</span>
+            <Button icon="pi pi-times" text rounded size="small" severity="danger" @click="removeTranslation(t.locale)" />
+          </li>
+          <li v-if="!translations.length" class="muted">No translations yet.</li>
+        </ul>
+        <div class="tr-add">
+          <InputText v-model="transForm.locale" placeholder="Locale (fr)" class="tr-loc" />
+          <InputText v-model="transForm.name" placeholder="Name in locale" class="grow" />
+        </div>
+        <div class="tr-add">
+          <InputText v-model="transForm.description" placeholder="Description (optional)" class="grow" />
+          <Button label="Add" icon="pi pi-plus" size="small" :disabled="!transForm.locale.trim() || !transForm.name.trim()" @click="saveTranslation" />
+        </div>
+      </div>
+
       <div v-if="product" class="field vis">
         <label>Catalog visibility <span class="hint">(hide this product from specific customers)</span></label>
         <ul class="vis-list">
@@ -362,6 +420,14 @@ async function save() {
 }
 .img-add:hover:not(:disabled) { border-color: var(--p-primary-color, #16a34a); color: var(--p-primary-color, #16a34a); }
 .img-add:disabled { cursor: progress; opacity: 0.7; }
+.i18n { border-top: 1px solid var(--p-surface-200, #e2e8f0); padding-top: 0.8rem; }
+.tr-list { list-style: none; margin: 0 0 0.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.tr { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+.tr-locale { font-weight: 700; text-transform: uppercase; min-width: 2.5rem; }
+.tr-name { flex: 1; }
+.tr-add { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; }
+.tr-add .tr-loc { width: 6rem; }
+.tr-add .grow { flex: 1; }
 .vis { border-top: 1px solid var(--p-surface-200, #e2e8f0); padding-top: 0.8rem; }
 .hint { font-weight: 400; color: var(--p-text-muted-color, #64748b); font-size: 0.75rem; }
 .vis-list { list-style: none; margin: 0 0 0.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
