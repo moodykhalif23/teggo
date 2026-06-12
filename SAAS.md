@@ -79,21 +79,36 @@ manage tiers.
   decrement on media delete (no delete endpoint exists yet); soft-warn
   thresholds before the hard block.
 
-## 3. Isolation hardening  ·  Impact: High (risk reduction) · Effort: M
-Shared-schema isolation rests on every query remembering its `org_id` filter; one
-missed filter is a cross-tenant leak. The test convention covers this well — add
-defense-in-depth:
-- [ ] **Postgres row-level security**: `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` +
-  a `current_setting('app.org_id')` policy per tenant table; the API sets
-  `app.org_id` per request/tx. Queries keep their explicit filters — RLS is the net,
-  not the mechanism.
-- [ ] A migration-lint check (CI) that every new tenant table gets the RLS policy.
-- [ ] Cross-tenant probe tests: for each module, a second org's token attempts every
-  read/write against org 1's resources (some exist already — make it a convention
-  gate for new modules).
-- [ ] Keep **DB-per-tenant in the back pocket** as a premium/enterprise tier — the
-  sqlc + pgx pool layer makes a per-org connection string feasible later; don't
-  build it now.
+## 3. Isolation hardening  ·  ✅ Done · Impact: High (risk reduction) · Effort: M
+Queries keep their explicit `org_id` filters as the mechanism; Postgres RLS is
+now the net underneath — a query that forgets its WHERE clause returns nothing
+foreign instead of everything.
+- **Net** (`0054`): every table with `organization_id` (50 at ship time) carries
+  a FORCEd `org_isolation` policy keyed on the `app.org_id` session setting,
+  failing OPEN when unset (workers, migrations, tests unchanged). Because docker
+  `POSTGRES_USER` connections are superusers (which bypass RLS no matter what),
+  arming also `SET ROLE teggo_app` — a NOLOGIN/NOBYPASSRLS role with plain DML
+  rights created by the migration.
+- **Arming** (`internal/db` + `internal/tenantctx`): the API pool's
+  `BeforeAcquire` hook reads the request's org (stashed in context by the auth
+  middlewares) and pins role + setting per connection, with a per-conn cache so
+  the round-trip only happens when the org changes. The worker runs unarmed
+  (cross-org sweeps). NOTE: needs session pooling — PgBouncer transaction mode
+  would break it.
+- **Bypass**: `tenantctx.Bypass(ctx)` is the grep-able escape hatch, used only
+  by the platform-operator endpoints that are legitimately cross-tenant (org
+  list counts, plan assignment).
+- **Convention gates** (`internal/isolation`): a lint test fails the suite if
+  any NEW table with `organization_id` lacks the policy; net tests prove an
+  armed session scopes UNFILTERED SQL and that cross-org INSERT dies on WITH
+  CHECK; an end-to-end probe runs the real HTTP stack on an armed pool — a
+  foreign org's fully-permissioned token sweeps 16 admin read endpoints without
+  leaking an org-1 marker, object fetch/update of foreign rows 404s, and the
+  operator endpoints still work through their bypass.
+- **Deferred (future):** join-based policies for tables scoped indirectly via
+  `customer_id` (carts, invoices, customer_users — reachable only through
+  org-scoped parents today); arming the worker per-job; DB-per-tenant stays in
+  the back pocket as a premium tier.
 
 ## 4. Per-tenant config  ·  ✅ Done · Impact: High · Effort: M
 Payments, email identity and branding are org-scoped settings, not env vars.
@@ -141,7 +156,7 @@ Payments, email identity and branding are org-scoped settings, not env vars.
 2. ~~Tenant provisioning (#1)~~ — ✅ shipped.
 3. ~~Per-tenant config (#4)~~ — ✅ shipped.
 4. ~~Platform billing & metering (#2)~~ — ✅ shipped (payment collection deferred).
-5. **Isolation hardening** (#3) — land RLS before opening signup to strangers.
+5. ~~Isolation hardening (#3)~~ — ✅ shipped (RLS net armed in the API).
 6. **Infra swaps** (#5) — opportunistically; object storage + TLS first.
 
 ## Cross-cutting (do alongside whatever ships)

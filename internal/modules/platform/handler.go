@@ -21,6 +21,7 @@ import (
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
 	"b2bcommerce/internal/tenant"
+	"b2bcommerce/internal/tenantctx"
 )
 
 // Emailer schedules the verification email; nil disables sending (the token
@@ -170,7 +171,9 @@ type orgDTO struct {
 }
 
 func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.q.ListOrganizationsWithCounts(r.Context())
+	// Operator overview is deliberately cross-tenant (platform.view-gated):
+	// stand the RLS net down so per-org user/website counts are real.
+	rows, err := h.q.ListOrganizationsWithCounts(tenantctx.Bypass(r.Context()))
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not list organizations")
 		return

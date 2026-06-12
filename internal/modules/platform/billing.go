@@ -12,6 +12,7 @@ import (
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
+	"b2bcommerce/internal/tenantctx"
 )
 
 // WithBilling wires the plan/metering service; returns the handler for chaining
@@ -187,7 +188,9 @@ func (h *Handler) setOrgPlan(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusNotFound, "not_found", "organization not found")
 		return
 	}
-	if _, err := h.q.SetOrgPlan(r.Context(), gen.SetOrgPlanParams{OrganizationID: id, PlanID: plan.ID}); err != nil {
+	// Writing another org's plan row is the operator's job — the RLS net must
+	// stand down for this one platform.manage-gated insert.
+	if _, err := h.q.SetOrgPlan(tenantctx.Bypass(r.Context()), gen.SetOrgPlanParams{OrganizationID: id, PlanID: plan.ID}); err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not assign plan")
 		return
 	}

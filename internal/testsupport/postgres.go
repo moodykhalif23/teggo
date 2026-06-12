@@ -92,6 +92,14 @@ func ensureServer(t *testing.T) {
 // NewDB returns a pool to an isolated, freshly migrated database. The database
 // is cloned from the migrated template (fast) and dropped at test end.
 func NewDB(t *testing.T) *pgxpool.Pool {
+	pool, _ := NewDBWithDSN(t)
+	return pool
+}
+
+// NewDBWithDSN is NewDB exposing the database's DSN, for tests that need an
+// extra pool with different tuning (e.g. the RLS-armed pool in the isolation
+// suite).
+func NewDBWithDSN(t *testing.T) (*pgxpool.Pool, string) {
 	t.Helper()
 	ensureServer(t)
 
@@ -113,7 +121,7 @@ func NewDB(t *testing.T) *pgxpool.Pool {
 		// Best-effort drop; the server is torn down with the container anyway.
 		_ = dropDatabase(context.Background(), adminDSN, name)
 	})
-	return pool
+	return pool, dsn
 }
 
 // migrateAll applies the embedded app migrations and river's own tables,

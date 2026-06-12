@@ -34,8 +34,10 @@ func main() {
 	logger := logging.Setup(cfg.Env, cfg.LogLevel)
 
 	ctx := context.Background()
+
 	pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseURL, db.PoolConfig{
 		MaxConns: cfg.DBMaxConns, MaxConnIdleTime: cfg.DBMaxConnIdleTime,
+		ArmTenantRLS: true,
 	})
 	if err != nil {
 		logger.Error("db connect failed", "err", err)

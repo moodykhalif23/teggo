@@ -7,6 +7,7 @@ import (
 
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/server/response"
+	"b2bcommerce/internal/tenantctx"
 )
 
 type ctxKey int
@@ -29,6 +30,8 @@ func Authenticator(issuer *auth.Issuer) func(http.Handler) http.Handler {
 				return
 			}
 			ctx := context.WithValue(r.Context(), claimsKey, claims)
+
+			ctx = tenantctx.WithOrg(ctx, claims.OrgID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -44,7 +47,8 @@ func OptionalAuthenticator(issuer *auth.Issuer) func(http.Handler) http.Handler 
 			h := r.Header.Get("Authorization")
 			if strings.HasPrefix(h, "Bearer ") {
 				if claims, err := issuer.Parse(strings.TrimPrefix(h, "Bearer ")); err == nil {
-					r = r.WithContext(context.WithValue(r.Context(), claimsKey, claims))
+					ctx := context.WithValue(r.Context(), claimsKey, claims)
+					r = r.WithContext(tenantctx.WithOrg(ctx, claims.OrgID))
 				}
 			}
 			next.ServeHTTP(w, r)
