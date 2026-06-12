@@ -87,6 +87,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'fx.view' },
       },
       {
+        path: 'merchandising',
+        name: 'merchandising',
+        component: () => import('@/views/merchandising/MerchandisingView.vue'),
+        meta: { permission: 'merchandising.view' },
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('@/views/settings/SettingsView.vue'),

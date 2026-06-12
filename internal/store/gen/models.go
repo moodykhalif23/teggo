@@ -486,6 +486,17 @@ type MenuItem struct {
 	SortOrder  int32   `json:"sort_order"`
 }
 
+type MerchandisingRule struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	ScopeType      string    `json:"scope_type"`
+	ScopeValue     string    `json:"scope_value"`
+	ProductID      int64     `json:"product_id"`
+	Action         string    `json:"action"`
+	Position       int32     `json:"position"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type MvDailySale struct {
 	OrganizationID int64       `json:"organization_id"`
 	Day            pgtype.Date `json:"day"`
@@ -948,6 +959,22 @@ type Role struct {
 type RolePermission struct {
 	RoleID     int64  `json:"role_id"`
 	Permission string `json:"permission"`
+}
+
+type SearchRedirect struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	Query          string    `json:"query"`
+	Target         string    `json:"target"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type SearchSynonym struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	Term           string    `json:"term"`
+	Synonyms       string    `json:"synonyms"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type Shipment struct {

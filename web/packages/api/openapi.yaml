@@ -902,6 +902,71 @@ components:
         base: { type: string }
         currencies: { type: array, items: { type: string } }
 
+    SearchSynonym:
+      type: object
+      required: [id, term, synonyms]
+      properties:
+        id: { type: integer, format: int64 }
+        term: { type: string }
+        synonyms: { type: string, description: 'Space/comma-separated expansion terms.' }
+    SearchSynonymInput:
+      type: object
+      required: [term, synonyms]
+      properties:
+        term: { type: string }
+        synonyms: { type: string }
+    SearchSynonymList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/SearchSynonym' } }
+
+    SearchRedirect:
+      type: object
+      required: [id, query, target]
+      properties:
+        id: { type: integer, format: int64 }
+        query: { type: string }
+        target: { type: string }
+    SearchRedirectInput:
+      type: object
+      required: [query, target]
+      properties:
+        query: { type: string }
+        target: { type: string, description: 'Storefront path, e.g. /c/clearance' }
+    SearchRedirectList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/SearchRedirect' } }
+
+    MerchandisingRule:
+      type: object
+      required: [id, scope_type, scope_value, product_id, action, position]
+      properties:
+        id: { type: integer, format: int64 }
+        scope_type: { type: string, enum: [query, category] }
+        scope_value: { type: string }
+        product_id: { type: integer, format: int64 }
+        sku: { type: string }
+        name: { type: string }
+        action: { type: string, enum: [pin, boost, bury] }
+        position: { type: integer }
+    MerchandisingRuleInput:
+      type: object
+      required: [scope_type, scope_value, product_id, action]
+      properties:
+        scope_type: { type: string, enum: [query, category] }
+        scope_value: { type: string }
+        product_id: { type: integer, format: int64 }
+        action: { type: string, enum: [pin, boost, bury] }
+        position: { type: integer }
+    MerchandisingRuleList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MerchandisingRule' } }
+
     RevalidateResult:
       type: object
       properties:
@@ -3919,6 +3984,81 @@ paths:
       security: [{ storefrontAuth: [] }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CurrencyOptions' } } } }
+
+  /admin/search-synonyms:
+    get:
+      tags: [Merchandising]
+      operationId: adminListSearchSynonyms
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SearchSynonymList' } } } }
+    post:
+      tags: [Merchandising]
+      operationId: adminUpsertSearchSynonym
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SearchSynonymInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/SearchSynonym' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/search-synonyms/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer, format: int64 } }]
+    delete:
+      tags: [Merchandising]
+      operationId: adminDeleteSearchSynonym
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/search-redirects:
+    get:
+      tags: [Merchandising]
+      operationId: adminListSearchRedirects
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SearchRedirectList' } } } }
+    post:
+      tags: [Merchandising]
+      operationId: adminUpsertSearchRedirect
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SearchRedirectInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/SearchRedirect' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/search-redirects/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer, format: int64 } }]
+    delete:
+      tags: [Merchandising]
+      operationId: adminDeleteSearchRedirect
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/merchandising-rules:
+    get:
+      tags: [Merchandising]
+      operationId: adminListMerchandisingRules
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MerchandisingRuleList' } } } }
+    post:
+      tags: [Merchandising]
+      operationId: adminCreateMerchandisingRule
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MerchandisingRuleInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/MerchandisingRule' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/merchandising-rules/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer, format: int64 } }]
+    delete:
+      tags: [Merchandising]
+      operationId: adminDeleteMerchandisingRule
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /storefront/account/reorder-suggestions:
     get:

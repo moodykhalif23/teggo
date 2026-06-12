@@ -31,6 +31,7 @@ import (
 	"b2bcommerce/internal/modules/health"
 	"b2bcommerce/internal/modules/integration"
 	"b2bcommerce/internal/modules/marketplace"
+	"b2bcommerce/internal/modules/merch"
 	"b2bcommerce/internal/modules/notifications"
 	"b2bcommerce/internal/modules/otc"
 	"b2bcommerce/internal/modules/pricing"
@@ -216,6 +217,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	promo.New(st.Queries()).Routes(r, authMW)
 	fxadmin.New(st.Pool()).Routes(r, authMW)
+	merch.New(st.Pool()).Routes(r, authMW)
 	subscription.New(st.Pool()).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)

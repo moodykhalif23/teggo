@@ -54,6 +54,7 @@ const groups: NavGroup[] = [
       { label: 'Categories', icon: 'pi pi-sitemap', routeName: 'categories', permission: 'category.view' },
       { label: 'Attributes', icon: 'pi pi-tags', routeName: 'attributes', permission: 'attribute.view' },
       { label: 'Configurator', icon: 'pi pi-sliders-h', routeName: 'configurator', permission: 'product.view' },
+      { label: 'Search merchandising', icon: 'pi pi-search-plus', routeName: 'merchandising', permission: 'merchandising.view' },
     ],
   },
   {

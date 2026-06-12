@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"b2bcommerce/internal/changelog"
+	"b2bcommerce/internal/merchandising"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
@@ -352,9 +353,26 @@ func (h *Handler) storefrontFacetedSearch(w http.ResponseWriter, r *http.Request
 	sort := q.Get("sort") // "relevance" | "newest" | else name
 
 	// Optional keyword.
+	origQ := q.Get("q")
 	var qPtr *string
-	if s := q.Get("q"); s != "" {
-		qPtr = &s
+	if origQ != "" {
+		qPtr = &origQ
+		// Search merchandising: a query redirect jumps straight to a page.
+		if target, rerr := h.q.GetSearchRedirect(r.Context(), gen.GetSearchRedirectParams{OrganizationID: orgID, Lower: origQ}); rerr == nil && target != "" {
+			response.JSON(w, http.StatusOK, map[string]any{
+				"redirect": target, "items": []storefrontProduct{}, "total": 0, "page": page, "sort": sort, "facets": []any{},
+			})
+			return
+		}
+		// Synonym expansion (OR-append configured synonyms before FTS).
+		if syns, serr := h.q.ListSearchSynonyms(r.Context(), orgID); serr == nil && len(syns) > 0 {
+			m := make(map[string]string, len(syns))
+			for _, s := range syns {
+				m[strings.ToLower(s.Term)] = s.Synonyms
+			}
+			expanded := merchandising.ExpandQuery(origQ, m)
+			qPtr = &expanded
+		}
 	}
 	// Optional attribute filter (JSON object of equalities).
 	var attrs []byte
@@ -388,6 +406,35 @@ func (h *Handler) storefrontFacetedSearch(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not search catalog")
 		return
+	}
+
+	// Search merchandising: apply pin/boost/bury rules for this query (or category)
+	// to the result page. Scope on the original query when present, else category.
+	scopeType, scopeValue := "query", origQ
+	if scopeValue == "" {
+		scopeType, scopeValue = "category", q.Get("category")
+	}
+	if scopeValue != "" {
+		if mrules, mErr := h.q.ListMerchandisingRulesForScope(r.Context(), gen.ListMerchandisingRulesForScopeParams{
+			OrganizationID: orgID, ScopeType: scopeType, Lower: scopeValue,
+		}); mErr == nil && len(mrules) > 0 {
+			eng := make([]merchandising.Rule, len(mrules))
+			for i, m := range mrules {
+				eng[i] = merchandising.Rule{ProductID: m.ProductID, Action: m.Action, Position: m.Position}
+			}
+			ids := make([]int64, len(rows))
+			byID := make(map[int64]gen.SearchProductsFacetedRow, len(rows))
+			for i, row := range rows {
+				ids[i] = row.ID
+				byID[row.ID] = row
+			}
+			ordered := merchandising.Reorder(ids, eng)
+			reordered := make([]gen.SearchProductsFacetedRow, 0, len(rows))
+			for _, id := range ordered {
+				reordered = append(reordered, byID[id])
+			}
+			rows = reordered
+		}
 	}
 	total, err := h.q.CountProductsFaceted(r.Context(), gen.CountProductsFacetedParams{
 		Org: orgID, Q: qPtr, Attrs: attrs, CatIds: catIDs,

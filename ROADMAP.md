@@ -56,7 +56,7 @@ The dashboard wants an **org-wide low-stock list** but inventory is per-product
 
 ---
 
-## Tier 2 — strong value, medium effort
+## Tier 2 — ✅ DONE (all three shipped: subscriptions, multi-currency, search merchandising)
 
 ### 4. Subscriptions / recurring & standing orders  ·  ✅ Done · Impact: High · Effort: L
 Auto-replenishment is core to B2B repeat buying; today only manual reorder + lists.
@@ -83,12 +83,17 @@ Currency columns exist per price-list, but there's no presentation/FX layer.
 - **Deferred (future):** settle orders fully in the buyer's currency (store line items converted),
   and convert product-card prices in the catalog (currently cart-level display).
 
-### 6. Search merchandising  ·  Impact: Med · Effort: M
+### 6. Search merchandising  ·  ✅ Done · Impact: Med · Effort: M
 Search is Postgres FTS only — no curation.
-- **Data**: `search_synonyms`, `search_redirects`, `merchandising_rules` (boost/bury/pin
+- **Data** (`0049`): `search_synonyms`, `search_redirects`, `merchandising_rules` (pin/boost/bury
   per query or category).
-- **Surfaces**: admin merchandising screens; apply rules + synonyms in the storefront
-  search/catalog query; facet config.
+- **Engine**: `internal/merchandising` — `ExpandQuery` (synonym OR-expansion into websearch syntax)
+  + `Reorder` (pin → boost → normal → bury). Applied in the storefront faceted catalog search:
+  query redirect short-circuits, synonyms expand before FTS, rules reorder the result page.
+- **Surfaces**: admin “Search merchandising” screen (synonyms / redirects / rules);
+  `merchandising.view`/`merchandising.manage` perms.
+- **Deferred (future):** cross-page pin / force-include of non-matching products; facet config;
+  storefront search page honoring the `redirect` field (server returns it; reorder is transparent).
 
 ---
 

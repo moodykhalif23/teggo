@@ -1177,6 +1177,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/search-synonyms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListSearchSynonyms"];
+        put?: never;
+        post: operations["adminUpsertSearchSynonym"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/search-synonyms/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteSearchSynonym"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/search-redirects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListSearchRedirects"];
+        put?: never;
+        post: operations["adminUpsertSearchRedirect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/search-redirects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteSearchRedirect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/merchandising-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListMerchandisingRules"];
+        put?: never;
+        post: operations["adminCreateMerchandisingRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/merchandising-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteMerchandisingRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storefront/account/reorder-suggestions": {
         parameters: {
             query?: never;
@@ -4708,6 +4810,61 @@ export interface components {
         CurrencyOptions: {
             base: string;
             currencies: string[];
+        };
+        SearchSynonym: {
+            /** Format: int64 */
+            id: number;
+            term: string;
+            /** @description Space/comma-separated expansion terms. */
+            synonyms: string;
+        };
+        SearchSynonymInput: {
+            term: string;
+            synonyms: string;
+        };
+        SearchSynonymList: {
+            items: components["schemas"]["SearchSynonym"][];
+        };
+        SearchRedirect: {
+            /** Format: int64 */
+            id: number;
+            query: string;
+            target: string;
+        };
+        SearchRedirectInput: {
+            query: string;
+            /** @description Storefront path, e.g. /c/clearance */
+            target: string;
+        };
+        SearchRedirectList: {
+            items: components["schemas"]["SearchRedirect"][];
+        };
+        MerchandisingRule: {
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            scope_type: "query" | "category";
+            scope_value: string;
+            /** Format: int64 */
+            product_id: number;
+            sku?: string;
+            name?: string;
+            /** @enum {string} */
+            action: "pin" | "boost" | "bury";
+            position: number;
+        };
+        MerchandisingRuleInput: {
+            /** @enum {string} */
+            scope_type: "query" | "category";
+            scope_value: string;
+            /** Format: int64 */
+            product_id: number;
+            /** @enum {string} */
+            action: "pin" | "boost" | "bury";
+            position?: number;
+        };
+        MerchandisingRuleList: {
+            items: components["schemas"]["MerchandisingRule"][];
         };
         RevalidateResult: {
             changed?: {
@@ -8811,6 +8968,204 @@ export interface operations {
                     "application/json": components["schemas"]["CurrencyOptions"];
                 };
             };
+        };
+    };
+    adminListSearchSynonyms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSynonymList"];
+                };
+            };
+        };
+    };
+    adminUpsertSearchSynonym: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchSynonymInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSynonym"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteSearchSynonym: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListSearchRedirects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchRedirectList"];
+                };
+            };
+        };
+    };
+    adminUpsertSearchRedirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchRedirectInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchRedirect"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteSearchRedirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListMerchandisingRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchandisingRuleList"];
+                };
+            };
+        };
+    };
+    adminCreateMerchandisingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MerchandisingRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchandisingRule"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteMerchandisingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
         };
     };
     storefrontReorderSuggestions: {

@@ -112,6 +112,7 @@ type Querier interface {
 	CreateMediaAsset(ctx context.Context, arg CreateMediaAssetParams) (MediaAsset, error)
 	// ===== Menus ===============================================================
 	CreateMenu(ctx context.Context, arg CreateMenuParams) (Menu, error)
+	CreateMerchandisingRule(ctx context.Context, arg CreateMerchandisingRuleParams) (MerchandisingRule, error)
 	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
 	// ===== Opportunities =======================================================
 	CreateOpportunity(ctx context.Context, arg CreateOpportunityParams) (Opportunity, error)
@@ -220,6 +221,7 @@ type Querier interface {
 	DeleteConfigSetting(ctx context.Context, arg DeleteConfigSettingParams) (int64, error)
 	DeleteFxRate(ctx context.Context, arg DeleteFxRateParams) (int64, error)
 	DeleteMediaTags(ctx context.Context, mediaAssetID int64) error
+	DeleteMerchandisingRule(ctx context.Context, arg DeleteMerchandisingRuleParams) (int64, error)
 	DeletePriceAdjustmentRule(ctx context.Context, arg DeletePriceAdjustmentRuleParams) (int64, error)
 	DeleteProductImage(ctx context.Context, arg DeleteProductImageParams) (int64, error)
 	DeletePromotion(ctx context.Context, arg DeletePromotionParams) (int64, error)
@@ -227,6 +229,8 @@ type Querier interface {
 	DeleteReportDefinition(ctx context.Context, arg DeleteReportDefinitionParams) error
 	DeleteReportSchedule(ctx context.Context, arg DeleteReportScheduleParams) error
 	DeleteSSOState(ctx context.Context, id int64) error
+	DeleteSearchRedirect(ctx context.Context, arg DeleteSearchRedirectParams) (int64, error)
+	DeleteSearchSynonym(ctx context.Context, arg DeleteSearchSynonymParams) (int64, error)
 	DeleteShippingRate(ctx context.Context, arg DeleteShippingRateParams) error
 	DeleteShoppingList(ctx context.Context, arg DeleteShoppingListParams) (int64, error)
 	DeleteShoppingListItem(ctx context.Context, arg DeleteShoppingListItemParams) (int64, error)
@@ -384,6 +388,7 @@ type Querier interface {
 	// GetReturnByPublicID loads a return by public id within the customer (storefront).
 	GetReturnByPublicID(ctx context.Context, publicID uuid.UUID) (Return, error)
 	GetSSOState(ctx context.Context, state string) (SsoState, error)
+	GetSearchRedirect(ctx context.Context, arg GetSearchRedirectParams) (string, error)
 	GetShipment(ctx context.Context, id int64) (Shipment, error)
 	// GetShipmentWithOrg authorizes a shipment by org (via its order) and returns
 	// the destination address for label region resolution.
@@ -516,6 +521,10 @@ type Querier interface {
 	ListMediaTags(ctx context.Context, mediaAssetID int64) ([]string, error)
 	ListMenuItems(ctx context.Context, menuID int64) ([]MenuItem, error)
 	ListMenusForWebsite(ctx context.Context, websiteID int64) ([]Menu, error)
+	// ===== Merchandising rules =================================================
+	ListMerchandisingRules(ctx context.Context, organizationID int64) ([]ListMerchandisingRulesRow, error)
+	// ListMerchandisingRulesForScope feeds the storefront search reorder.
+	ListMerchandisingRulesForScope(ctx context.Context, arg ListMerchandisingRulesForScopeParams) ([]ListMerchandisingRulesForScopeRow, error)
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
 	// ListOpenInvoicesForOrg returns the org's unpaid (issued/overdue) invoices for
 	// the AR-aging report.
@@ -578,6 +587,11 @@ type Querier interface {
 	ListReturnsAdmin(ctx context.Context, arg ListReturnsAdminParams) ([]Return, error)
 	ListReturnsForCustomer(ctx context.Context, customerID int64) ([]Return, error)
 	ListReturnsForOrder(ctx context.Context, orderID int64) ([]Return, error)
+	// ===== Redirects ===========================================================
+	ListSearchRedirects(ctx context.Context, organizationID int64) ([]SearchRedirect, error)
+	// Search merchandising (Roadmap Tier 2 #6).
+	// ===== Synonyms ============================================================
+	ListSearchSynonyms(ctx context.Context, organizationID int64) ([]SearchSynonym, error)
 	// ---- payouts -------------------------------------------------------------
 	// ListSettledUnpaidVendorOrders returns delivered vendor_orders not yet attached
 	// to a payout, for batching a vendor disbursement.
@@ -797,6 +811,8 @@ type Querier interface {
 	UpsertProductConfig(ctx context.Context, arg UpsertProductConfigParams) (ProductConfig, error)
 	// ===== Renditions ==========================================================
 	UpsertRendition(ctx context.Context, arg UpsertRenditionParams) (MediaRendition, error)
+	UpsertSearchRedirect(ctx context.Context, arg UpsertSearchRedirectParams) (SearchRedirect, error)
+	UpsertSearchSynonym(ctx context.Context, arg UpsertSearchSynonymParams) (SearchSynonym, error)
 	// Shipping adapter (Pack 2 §4.3): table-rate config + shipment label/track.
 	UpsertShippingRate(ctx context.Context, arg UpsertShippingRateParams) (ShippingRate, error)
 	UpsertShoppingListItem(ctx context.Context, arg UpsertShoppingListItemParams) (ShoppingListItem, error)
