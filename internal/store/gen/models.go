@@ -327,6 +327,16 @@ type FieldDevice struct {
 	CreatedAt      time.Time          `json:"created_at"`
 }
 
+type FxRate struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	BaseCurrency   string    `json:"base_currency"`
+	QuoteCurrency  string    `json:"quote_currency"`
+	Rate           string    `json:"rate"`
+	AsOf           time.Time `json:"as_of"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type IdentityProvider struct {
 	ID             int64     `json:"id"`
 	OrganizationID int64     `json:"organization_id"`
@@ -562,6 +572,9 @@ type Order struct {
 	DiscountTotal         string      `json:"discount_total"`
 	PromotionID           *int64      `json:"promotion_id"`
 	PromotionCode         *string     `json:"promotion_code"`
+	DisplayCurrency       *string     `json:"display_currency"`
+	FxRate                *string     `json:"fx_rate"`
+	DisplayGrandTotal     *string     `json:"display_grand_total"`
 }
 
 type OrderItem struct {

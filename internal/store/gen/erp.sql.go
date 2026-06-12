@@ -301,7 +301,7 @@ func (q *Queries) ListInvoicesToSync(ctx context.Context, arg ListInvoicesToSync
 
 const listOrdersToSync = `-- name: ListOrdersToSync :many
 
-SELECT o.id, o.public_id, o.organization_id, o.website_id, o.customer_id, o.customer_user_id, o.quote_id, o.placed_by_sales_rep_id, o.status, o.currency, o.po_number, o.requested_delivery_date, o.billing_address, o.shipping_address, o.subtotal, o.tax_total, o.shipping_total, o.grand_total, o.created_at, o.updated_at, o.cost_center, o.discount_total, o.promotion_id, o.promotion_code FROM orders o
+SELECT o.id, o.public_id, o.organization_id, o.website_id, o.customer_id, o.customer_user_id, o.quote_id, o.placed_by_sales_rep_id, o.status, o.currency, o.po_number, o.requested_delivery_date, o.billing_address, o.shipping_address, o.subtotal, o.tax_total, o.shipping_total, o.grand_total, o.created_at, o.updated_at, o.cost_center, o.discount_total, o.promotion_id, o.promotion_code, o.display_currency, o.fx_rate, o.display_grand_total FROM orders o
 WHERE o.organization_id = $1
   AND o.status IN ('confirmed','processing','shipped','delivered','closed')
   AND NOT EXISTS (
@@ -352,6 +352,9 @@ func (q *Queries) ListOrdersToSync(ctx context.Context, arg ListOrdersToSyncPara
 			&i.DiscountTotal,
 			&i.PromotionID,
 			&i.PromotionCode,
+			&i.DisplayCurrency,
+			&i.FxRate,
+			&i.DisplayGrandTotal,
 		); err != nil {
 			return nil, err
 		}

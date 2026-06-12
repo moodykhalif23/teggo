@@ -7,13 +7,24 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import Select from 'primevue/select'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import { reactive } from 'vue'
 import { api, errMessage } from '@/lib/client'
+import { useProductOptions } from '@/composables/useRecordOptions'
 import type { components } from '@teggo/api/schema'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 type Subscription = components['schemas']['Subscription']
+
+const cadenceOptions = [
+  { label: 'Weekly', value: 'weekly' },
+  { label: 'Every 2 weeks', value: 'biweekly' },
+  { label: 'Monthly', value: 'monthly' },
+  { label: 'Quarterly', value: 'quarterly' },
+]
 
 const rows = ref<Subscription[]>([])
 const loading = ref(false)
@@ -23,6 +34,57 @@ const confirm = useConfirm()
 
 const detail = ref<Subscription | null>(null)
 const detailOpen = ref(false)
+
+// ---- edit ----
+const { productOptions, productsLoaded, loadProducts } = useProductOptions()
+const editOpen = ref(false)
+const editSaving = ref(false)
+const editErr = ref('')
+interface EditLine { product_id: number | null; quantity: string; unit: string }
+const editForm = reactive<{ id: number; name: string; cadence: string; lines: EditLine[] }>({
+  id: 0, name: '', cadence: 'monthly', lines: [],
+})
+
+async function openEdit(s: Subscription) {
+  loadProducts()
+  editErr.value = ''
+  const { data } = await api.GET('/admin/subscriptions/{id}', { params: { path: { id: s.id } } })
+  const full = data ?? s
+  editForm.id = full.id
+  editForm.name = full.name ?? ''
+  editForm.cadence = full.cadence
+  editForm.lines = (full.items ?? []).map((it) => ({ product_id: it.product_id, quantity: it.quantity, unit: it.unit }))
+  if (!editForm.lines.length) editForm.lines.push({ product_id: null, quantity: '1', unit: 'each' })
+  editOpen.value = true
+}
+function addEditLine() {
+  editForm.lines.push({ product_id: null, quantity: '1', unit: 'each' })
+}
+function removeEditLine(i: number) {
+  editForm.lines.splice(i, 1)
+  if (!editForm.lines.length) addEditLine()
+}
+async function saveEdit() {
+  const items = editForm.lines
+    .filter((l) => l.product_id)
+    .map((l) => ({ product_id: l.product_id as number, quantity: l.quantity || '1', unit: l.unit || 'each' }))
+  if (!items.length) {
+    editErr.value = 'At least one product is required.'
+    return
+  }
+  editSaving.value = true
+  const { error: err } = await api.PUT('/admin/subscriptions/{id}', {
+    params: { path: { id: editForm.id } },
+    body: { name: editForm.name || null, cadence: editForm.cadence as 'weekly' | 'biweekly' | 'monthly' | 'quarterly', items },
+  })
+  editSaving.value = false
+  if (err) {
+    editErr.value = errMessage(err, 'Save failed')
+    return
+  }
+  editOpen.value = false
+  load()
+}
 
 async function load() {
   loading.value = true
@@ -116,6 +178,7 @@ onMounted(load)
       <Column header="" style="width: 12rem">
         <template #body="{ data }">
           <Button icon="pi pi-eye" severity="secondary" text rounded @click="openDetail(data)" />
+          <Button v-if="data.status !== 'cancelled'" icon="pi pi-pencil" severity="secondary" text rounded title="Edit" @click="openEdit(data)" />
           <Button v-if="data.status === 'active'" icon="pi pi-play" severity="secondary" text rounded title="Run now" @click="runNow(data)" />
           <Button v-if="data.status === 'active'" icon="pi pi-pause" severity="secondary" text rounded title="Pause" @click="setStatus(data, 'paused')" />
           <Button v-if="data.status === 'paused'" icon="pi pi-play-circle" severity="secondary" text rounded title="Resume" @click="setStatus(data, 'active')" />
@@ -160,6 +223,37 @@ onMounted(load)
         <Button label="Close" severity="secondary" text @click="detailOpen = false" />
       </template>
     </Dialog>
+
+    <!-- Edit cadence + items -->
+    <Dialog v-model:visible="editOpen" modal header="Edit subscription" :style="{ width: '40rem' }">
+      <Message v-if="editErr" severity="error" :closable="false" class="mb">{{ editErr }}</Message>
+      <div class="grid2 mb">
+        <div class="field"><label>Name</label><InputText v-model="editForm.name" fluid /></div>
+        <div class="field"><label>Cadence</label><Select v-model="editForm.cadence" :options="cadenceOptions" optionLabel="label" optionValue="value" fluid /></div>
+      </div>
+      <div class="lines-head">
+        <label>Items</label>
+        <Button label="Add line" icon="pi pi-plus" size="small" text @click="addEditLine" />
+      </div>
+      <table class="lines">
+        <thead><tr><th>Product</th><th class="num">Qty</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="(l, i) in editForm.lines" :key="i">
+            <td>
+              <Select v-model="l.product_id" :options="productOptions" optionLabel="label" optionValue="id" filter
+                filterPlaceholder="Search…" placeholder="Select a product"
+                :emptyMessage="productsLoaded ? 'No products' : 'Loading…'" showClear fluid />
+            </td>
+            <td class="num"><InputText v-model="l.quantity" class="sm" /></td>
+            <td><Button icon="pi pi-times" text rounded severity="danger" :disabled="editForm.lines.length === 1" @click="removeEditLine(i)" /></td>
+          </tr>
+        </tbody>
+      </table>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="editOpen = false" />
+        <Button label="Save" :loading="editSaving" @click="saveEdit" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -168,4 +262,14 @@ onMounted(load)
 .muted { color: var(--p-text-muted-color, #64748b); font-weight: 400; }
 .meta { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 h4 { margin: 0.5rem 0 0.5rem; font-size: 0.9rem; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; }
+.field label { font-size: 0.85rem; font-weight: 600; }
+.lines-head { display: flex; align-items: center; justify-content: space-between; }
+.lines-head label { font-size: 0.85rem; font-weight: 600; }
+.lines { width: 100%; border-collapse: collapse; }
+.lines th { text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--p-text-muted-color, #64748b); padding: 0.25rem 0.4rem; }
+.lines th.num, .lines td.num { text-align: right; }
+.lines td { padding: 0.25rem 0.4rem; vertical-align: middle; }
+.lines :deep(.sm) { width: 6rem; text-align: right; }
 </style>

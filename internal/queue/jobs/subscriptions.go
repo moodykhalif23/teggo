@@ -18,10 +18,11 @@ func (MaterializeDueSubscriptionsArgs) Kind() string { return "materialize_due_s
 
 type MaterializeSubscriptionsWorker struct {
 	river.WorkerDefaults[MaterializeDueSubscriptionsArgs]
-	Pool *pgxpool.Pool
+	Pool   *pgxpool.Pool
+	Mailer subscriptions.Emailer // optional; sends buyer order-placed emails
 }
 
 func (w *MaterializeSubscriptionsWorker) Work(ctx context.Context, _ *river.Job[MaterializeDueSubscriptionsArgs]) error {
-	_, err := subscriptions.MaterializeDue(ctx, w.Pool, time.Now().UTC())
+	_, err := subscriptions.MaterializeDue(ctx, w.Pool, time.Now().UTC(), w.Mailer)
 	return err
 }

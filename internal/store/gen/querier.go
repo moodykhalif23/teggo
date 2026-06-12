@@ -95,6 +95,7 @@ type Querier interface {
 	CreateExternalIdentity(ctx context.Context, arg CreateExternalIdentityParams) (ExternalIdentity, error)
 	// ===== External refs + sync logs ===========================================
 	CreateExternalRef(ctx context.Context, arg CreateExternalRefParams) (ExternalRef, error)
+	CreateFxRate(ctx context.Context, arg CreateFxRateParams) (FxRate, error)
 	// SSO / federated identity (PRD §15).
 	// ===== Identity providers ==================================================
 	CreateIdentityProvider(ctx context.Context, arg CreateIdentityProviderParams) (IdentityProvider, error)
@@ -217,6 +218,7 @@ type Querier interface {
 	DeleteCatalogVisibility(ctx context.Context, arg DeleteCatalogVisibilityParams) (int64, error)
 	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
 	DeleteConfigSetting(ctx context.Context, arg DeleteConfigSettingParams) (int64, error)
+	DeleteFxRate(ctx context.Context, arg DeleteFxRateParams) (int64, error)
 	DeleteMediaTags(ctx context.Context, mediaAssetID int64) error
 	DeletePriceAdjustmentRule(ctx context.Context, arg DeletePriceAdjustmentRuleParams) (int64, error)
 	DeleteProductImage(ctx context.Context, arg DeleteProductImageParams) (int64, error)
@@ -228,6 +230,7 @@ type Querier interface {
 	DeleteShippingRate(ctx context.Context, arg DeleteShippingRateParams) error
 	DeleteShoppingList(ctx context.Context, arg DeleteShoppingListParams) (int64, error)
 	DeleteShoppingListItem(ctx context.Context, arg DeleteShoppingListItemParams) (int64, error)
+	DeleteSubscriptionItems(ctx context.Context, subscriptionID int64) error
 	DeleteTaxRate(ctx context.Context, arg DeleteTaxRateParams) error
 	// ===== Levels ==============================================================
 	EnsureInventoryLevel(ctx context.Context, arg EnsureInventoryLevelParams) error
@@ -279,6 +282,8 @@ type Querier interface {
 	GetCustomerUser(ctx context.Context, arg GetCustomerUserParams) (GetCustomerUserRow, error)
 	// GetCustomerUserByEmail links a buyer SSO subject to an existing customer-user.
 	GetCustomerUserByEmail(ctx context.Context, arg GetCustomerUserByEmailParams) (GetCustomerUserByEmailRow, error)
+	// GetCustomerUserEmailByID resolves the buyer email for subscription notifications.
+	GetCustomerUserEmailByID(ctx context.Context, id int64) (string, error)
 	// GetCustomerUserForLogin resolves a customer-user by email within an org for
 	// storefront authentication (email is citext, so case-insensitive).
 	GetCustomerUserForLogin(ctx context.Context, arg GetCustomerUserForLoginParams) (GetCustomerUserForLoginRow, error)
@@ -316,6 +321,9 @@ type Querier interface {
 	// GetInvoiceForRender gathers everything the PDF template needs in one row:
 	// the invoice, its order context, and the customer/organization names.
 	GetInvoiceForRender(ctx context.Context, id int64) (GetInvoiceForRenderRow, error)
+	// FX rates (Roadmap Tier 2 #5).
+	// GetLatestFxRate returns the most recent base→quote rate for an org.
+	GetLatestFxRate(ctx context.Context, arg GetLatestFxRateParams) (string, error)
 	GetLead(ctx context.Context, arg GetLeadParams) (Lead, error)
 	// GetMediaAssetForOrg validates that a media asset belongs to the caller's org
 	// and returns its servable URL (so the product image can denormalize it).
@@ -497,6 +505,8 @@ type Querier interface {
 	ListInvoicesForCustomer(ctx context.Context, customerID int64) ([]Invoice, error)
 	ListInvoicesForOrder(ctx context.Context, orderID int64) ([]Invoice, error)
 	ListInvoicesToSync(ctx context.Context, arg ListInvoicesToSyncParams) ([]Invoice, error)
+	// ListLatestFxRates returns the current rate for each configured pair.
+	ListLatestFxRates(ctx context.Context, organizationID int64) ([]FxRate, error)
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
 	// ListLowStock returns inventory lines at or below their reorder threshold,
 	// org-scoped, worst (largest shortfall) first. Lines with no threshold configured
@@ -546,6 +556,9 @@ type Querier interface {
 	// ---- vendor portal (audience 'vendor') ----------------------------------
 	ListProductsByVendor(ctx context.Context, vendorID *int64) ([]ListProductsByVendorRow, error)
 	ListPromotions(ctx context.Context, organizationID int64) ([]Promotion, error)
+	// ListQuoteCurrencies returns the display currencies available from a base
+	// (for the storefront currency selector).
+	ListQuoteCurrencies(ctx context.Context, arg ListQuoteCurrenciesParams) ([]string, error)
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]ListQuoteItemsRow, error)
 	ListQuoteRevisions(ctx context.Context, quoteID int64) ([]ListQuoteRevisionsRow, error)
 	ListQuotesAdmin(ctx context.Context, arg ListQuotesAdminParams) ([]Quote, error)
@@ -691,6 +704,8 @@ type Querier interface {
 	SetMediaStatus(ctx context.Context, arg SetMediaStatusParams) error
 	SetOpportunityStage(ctx context.Context, arg SetOpportunityStageParams) (Opportunity, error)
 	SetOrderCostCenter(ctx context.Context, arg SetOrderCostCenterParams) error
+	// SetOrderFxSnapshot locks the buyer's display currency + rate onto an order.
+	SetOrderFxSnapshot(ctx context.Context, arg SetOrderFxSnapshotParams) error
 	SetOrderItemVendor(ctx context.Context, arg SetOrderItemVendorParams) error
 	// SetOrderPromotion records the applied promotion on an order. grand_total is
 	// already set (to the discounted value) at order creation, so it's untouched here.
@@ -752,6 +767,8 @@ type Querier interface {
 	UpdatePromotion(ctx context.Context, arg UpdatePromotionParams) (Promotion, error)
 	UpdateReportDefinition(ctx context.Context, arg UpdateReportDefinitionParams) (ReportDefinition, error)
 	UpdateShoppingListItem(ctx context.Context, arg UpdateShoppingListItemParams) (ShoppingListItem, error)
+	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (Subscription, error)
+	UpdateSubscriptionForCustomer(ctx context.Context, arg UpdateSubscriptionForCustomerParams) (Subscription, error)
 	UpdateTradingPartner(ctx context.Context, arg UpdateTradingPartnerParams) (TradingPartner, error)
 	UpdateVendor(ctx context.Context, arg UpdateVendorParams) (Vendor, error)
 	UpdateVendorProduct(ctx context.Context, arg UpdateVendorProductParams) (UpdateVendorProductRow, error)

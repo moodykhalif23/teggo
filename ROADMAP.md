@@ -66,16 +66,22 @@ Auto-replenishment is core to B2B repeat buying; today only manual reorder + lis
   records a run and advances the schedule (engine in `internal/subscriptions`, run per-subscription tx).
 - **Surfaces**: storefront “Set up recurring” on a past order + an account → Recurring page
   (pause/skip/cancel); admin Subscriptions screen (list/detail/status/**run now**).
-- **Deferred (future):** edit a subscription's items/cadence after creation; per-line price lock;
-  buyer-facing “next delivery” email; promotions applied to subscription orders.
+- **Shipped follow-ups:** edit a subscription's cadence/items after creation (admin + storefront);
+  automatic promotions applied to subscription orders; a transactional “order placed” email to the
+  buyer on each run (via the worker).
+- **Deferred (future):** per-line price lock; a *pre-delivery reminder* email (vs. the order-placed one).
 
-### 5. Multi-currency display & FX  ·  Impact: Med · Effort: M
+### 5. Multi-currency display & FX  ·  ✅ Done · Impact: Med · Effort: M
 Currency columns exist per price-list, but there's no presentation/FX layer.
-- **Data**: `fx_rates` (base, quote, rate, as_of); website/customer default currency
-  (website already has `default_currency`).
-- **Behavior**: resolve display currency per website/customer; convert where a native
-  price list isn't defined; lock FX at order placement.
-- **Surfaces**: currency selector; show prices/totals in buyer currency end-to-end.
+- **Data**: `fx_rates` (org, base, quote, rate, as_of — time series, latest wins). Migration `0048`.
+  Orders gained `display_currency` / `fx_rate` / `display_grand_total` for the FX lock snapshot.
+- **Engine**: `internal/fx` — `Rate(org, base, quote)` (latest, "1" if equal) + exact `Convert`
+  via `internal/money`. Admin FX-rate CRUD (`fx.view`/`fx.manage`).
+- **Surfaces**: storefront currency selector + `GET /storefront/currencies`; the cart returns an
+  indicative `display` block via `?currency=`; checkout **locks** the rate + quoted total onto the
+  order. Admin “Exchange rates” screen under Pricing.
+- **Deferred (future):** settle orders fully in the buyer's currency (store line items converted),
+  and convert product-card prices in the catalog (currently cart-level display).
 
 ### 6. Search merchandising  ·  Impact: Med · Effort: M
 Search is Postgres FTS only — no curation.

@@ -12,6 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"strings"
+
+	"b2bcommerce/internal/fx"
 	"b2bcommerce/internal/inventory"
 	"b2bcommerce/internal/modules/marketplace"
 	"b2bcommerce/internal/money"
@@ -178,8 +181,9 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 		RequestedDeliveryDate *time.Time    `json:"requested_delivery_date"`
 		BillingAddress        *addressInput `json:"billing_address"`
 		ShippingAddress       *addressInput `json:"shipping_address"`
-		ShippingAmount        *string       `json:"shipping_amount"` // chosen shipping rate
-		CostCenter            *string       `json:"cost_center"`     // procurement budget attribution
+		ShippingAmount        *string       `json:"shipping_amount"`  // chosen shipping rate
+		CostCenter            *string       `json:"cost_center"`      // procurement budget attribution
+		DisplayCurrency       *string       `json:"display_currency"` // FX lock: currency the buyer was quoted in
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	costCenter := ""
@@ -308,6 +312,17 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 			}
 			if e := q.IncrementPromotionRedeemed(r.Context(), *promoID); e != nil {
 				return e
+			}
+		}
+		// FX lock: if the buyer was quoted in a display currency, snapshot the rate
+		// + converted total onto the order (the order still transacts in base).
+		if req.DisplayCurrency != nil {
+			dc := strings.ToUpper(strings.TrimSpace(*req.DisplayCurrency))
+			if dc != "" && dc != cart.Currency {
+				if rate, ok, _ := fx.NewService(q).Rate(r.Context(), cc.orgID, cart.Currency, dc); ok {
+					dg, _ := fx.Convert(grand, rate)
+					_ = q.SetOrderFxSnapshot(r.Context(), gen.SetOrderFxSnapshotParams{ID: order.ID, DisplayCurrency: &dc, FxRate: &rate, DisplayGrandTotal: &dg})
+				}
 			}
 		}
 		if costCenter != "" {

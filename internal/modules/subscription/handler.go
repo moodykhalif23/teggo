@@ -34,6 +34,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		ar.Use(mw.RequireAudience("admin"))
 		ar.With(mw.RequirePermission("subscription.view")).Get("/admin/subscriptions", h.adminList)
 		ar.With(mw.RequirePermission("subscription.view")).Get("/admin/subscriptions/{id}", h.adminGet)
+		ar.With(mw.RequirePermission("subscription.manage")).Put("/admin/subscriptions/{id}", h.adminUpdate)
 		ar.With(mw.RequirePermission("subscription.manage")).Post("/admin/subscriptions/{id}/status", h.adminSetStatus)
 		ar.With(mw.RequirePermission("subscription.manage")).Post("/admin/subscriptions/{id}/run", h.adminRunNow)
 	})
@@ -44,6 +45,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Get("/storefront/subscriptions", h.myList)
 		sr.Post("/storefront/subscriptions", h.create)
 		sr.Get("/storefront/subscriptions/{id}", h.myGet)
+		sr.Put("/storefront/subscriptions/{id}", h.myUpdate)
 		sr.Post("/storefront/subscriptions/{id}/status", h.mySetStatus)
 		sr.Post("/storefront/subscriptions/{id}/skip", h.mySkip)
 	})
@@ -213,12 +215,118 @@ func (h *Handler) adminRunNow(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusConflict, "not_active", "only active subscriptions can be run")
 		return
 	}
-	created, err := subscriptions.RunNow(r.Context(), h.pool, s, time.Now().UTC())
+	created, err := subscriptions.RunNow(r.Context(), h.pool, s, time.Now().UTC(), nil)
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "run failed")
 		return
 	}
 	response.JSON(w, http.StatusOK, map[string]any{"order_created": created})
+}
+
+// lineInput is a subscription line in create/edit payloads.
+type lineInput struct {
+	ProductID int64  `json:"product_id"`
+	Quantity  string `json:"quantity"`
+	Unit      string `json:"unit"`
+}
+
+// editInput is the create/edit body (cadence + items, plus metadata).
+type editInput struct {
+	Name     *string     `json:"name"`
+	Cadence  string      `json:"cadence"`
+	PoNumber *string     `json:"po_number"`
+	Items    []lineInput `json:"items"`
+}
+
+// replaceItems swaps a subscription's items for the given set (within a tx).
+func replaceItems(r *http.Request, q *gen.Queries, subID int64, items []lineInput) error {
+	if err := q.DeleteSubscriptionItems(r.Context(), subID); err != nil {
+		return err
+	}
+	for _, it := range items {
+		if it.ProductID == 0 {
+			continue
+		}
+		qty := it.Quantity
+		if qty == "" {
+			qty = "1"
+		}
+		unit := it.Unit
+		if unit == "" {
+			unit = "each"
+		}
+		if _, err := q.CreateSubscriptionItem(r.Context(), gen.CreateSubscriptionItemParams{
+			SubscriptionID: subID, ProductID: it.ProductID, Quantity: qty, Unit: unit,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// decodeEdit reads + validates an edit body.
+func decodeEdit(w http.ResponseWriter, r *http.Request) (editInput, bool) {
+	var in editInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid body")
+		return in, false
+	}
+	if !validCadence(in.Cadence) {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "cadence must be weekly, biweekly, monthly or quarterly")
+		return in, false
+	}
+	if len(in.Items) == 0 {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "at least one item is required")
+		return in, false
+	}
+	return in, true
+}
+
+func (h *Handler) adminUpdate(w http.ResponseWriter, r *http.Request) {
+	c, ok := mw.ClaimsFrom(r.Context())
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no claims")
+		return
+	}
+	id, err := pathID(r)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return
+	}
+	in, ok := decodeEdit(w, r)
+	if !ok {
+		return
+	}
+	cur, err := h.q.GetSubscription(r.Context(), gen.GetSubscriptionParams{OrganizationID: c.OrgID, ID: id})
+	if err != nil {
+		response.Fail(w, http.StatusNotFound, "not_found", "subscription not found")
+		return
+	}
+	if cur.Status == "cancelled" {
+		response.Fail(w, http.StatusConflict, "cancelled", "a cancelled subscription cannot be edited")
+		return
+	}
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not start")
+		return
+	}
+	defer tx.Rollback(r.Context()) //nolint:errcheck
+	q := gen.New(tx)
+	s, err := q.UpdateSubscription(r.Context(), gen.UpdateSubscriptionParams{OrganizationID: c.OrgID, ID: id, Name: in.Name, Cadence: in.Cadence, PoNumber: in.PoNumber})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not update subscription")
+		return
+	}
+	if err := replaceItems(r, q, id, in.Items); err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid item")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not save")
+		return
+	}
+	response.JSON(w, http.StatusOK, h.loadDetail(r, s))
 }
 
 // ---- storefront ----------------------------------------------------------
@@ -395,6 +503,53 @@ func (h *Handler) mySetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, toDTO(s))
+}
+
+func (h *Handler) myUpdate(w http.ResponseWriter, r *http.Request) {
+	a, ok := storefrontActor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	id, err := pathID(r)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
+		return
+	}
+	in, ok := decodeEdit(w, r)
+	if !ok {
+		return
+	}
+	cur, err := h.q.GetSubscriptionForCustomer(r.Context(), gen.GetSubscriptionForCustomerParams{CustomerID: a.customerID, ID: id})
+	if err != nil {
+		response.Fail(w, http.StatusNotFound, "not_found", "subscription not found")
+		return
+	}
+	if cur.Status == "cancelled" {
+		response.Fail(w, http.StatusConflict, "cancelled", "a cancelled subscription cannot be edited")
+		return
+	}
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not start")
+		return
+	}
+	defer tx.Rollback(r.Context()) //nolint:errcheck
+	q := gen.New(tx)
+	s, err := q.UpdateSubscriptionForCustomer(r.Context(), gen.UpdateSubscriptionForCustomerParams{CustomerID: a.customerID, ID: id, Name: in.Name, Cadence: in.Cadence, PoNumber: in.PoNumber})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not update subscription")
+		return
+	}
+	if err := replaceItems(r, q, id, in.Items); err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid item")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not save")
+		return
+	}
+	response.JSON(w, http.StatusOK, h.loadDetail(r, s))
 }
 
 // mySkip advances the next run by one cadence without creating an order.

@@ -64,3 +64,20 @@ UPDATE subscriptions SET next_run_date = $2, last_run_at = $3 WHERE id = $1;
 INSERT INTO subscription_runs (subscription_id, order_id, run_date, status, note)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
+
+-- name: UpdateSubscription :one
+UPDATE subscriptions SET name = $3, cadence = $4, po_number = $5
+WHERE organization_id = $1 AND id = $2
+RETURNING *;
+
+-- name: UpdateSubscriptionForCustomer :one
+UPDATE subscriptions SET name = $3, cadence = $4, po_number = $5
+WHERE customer_id = $1 AND id = $2
+RETURNING *;
+
+-- name: DeleteSubscriptionItems :exec
+DELETE FROM subscription_items WHERE subscription_id = $1;
+
+-- GetCustomerUserEmailByID resolves the buyer email for subscription notifications.
+-- name: GetCustomerUserEmailByID :one
+SELECT email FROM customer_users WHERE id = $1;

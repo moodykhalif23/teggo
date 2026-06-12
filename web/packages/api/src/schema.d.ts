@@ -1005,7 +1005,8 @@ export interface paths {
             cookie?: never;
         };
         get: operations["adminGetSubscription"];
-        put?: never;
+        /** Replace a subscription's cadence + items. */
+        put: operations["adminUpdateSubscription"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1077,7 +1078,8 @@ export interface paths {
             cookie?: never;
         };
         get: operations["storefrontGetSubscription"];
-        put?: never;
+        /** Edit a subscription's cadence + items. */
+        put: operations["storefrontUpdateSubscription"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1117,6 +1119,58 @@ export interface paths {
         put?: never;
         /** Skip the next delivery (advance one cadence). */
         post: operations["storefrontSkipSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/fx-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListFxRates"];
+        put?: never;
+        /** Record a current exchange rate (base→quote). */
+        post: operations["adminCreateFxRate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/fx-rates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminDeleteFxRate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storefront/currencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Display currencies available from the store's base currency. */
+        get: operations["storefrontCurrencies"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4269,6 +4323,8 @@ export interface components {
             billing_address?: components["schemas"]["OrderAddressInput"];
             shipping_address?: components["schemas"]["OrderAddressInput"];
             cost_center?: string | null;
+            /** @description Currency the buyer was quoted in; locks the FX rate onto the order. */
+            display_currency?: string | null;
         };
         CustomerBudget: {
             /** Format: int64 */
@@ -4500,6 +4556,14 @@ export interface components {
             coupon_code?: string;
             /** @description Name of the applied promotion. */
             discount_label?: string;
+            /** @description Indicative totals in a requested display currency (?currency=). */
+            display?: {
+                currency?: string;
+                rate?: string;
+                subtotal?: string;
+                discount_amount?: string;
+                grand_total?: string;
+            };
         };
         CartCouponInput: {
             code: string;
@@ -4620,6 +4684,30 @@ export interface components {
         };
         SubscriptionRunResult: {
             order_created: boolean;
+        };
+        FxRate: {
+            /** Format: int64 */
+            id: number;
+            base_currency: string;
+            quote_currency: string;
+            rate: string;
+            /** Format: date-time */
+            as_of: string;
+        };
+        FxRateInput: {
+            /** @description 3-letter code */
+            base_currency: string;
+            /** @description 3-letter code */
+            quote_currency: string;
+            /** @description Units of quote per 1 base. */
+            rate: string;
+        };
+        FxRateList: {
+            items: components["schemas"]["FxRate"][];
+        };
+        CurrencyOptions: {
+            base: string;
+            currencies: string[];
         };
         RevalidateResult: {
             changed?: {
@@ -7964,7 +8052,10 @@ export interface operations {
     };
     storefrontGetCart: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional display currency for indicative converted totals. */
+                currency?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8409,6 +8500,35 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
         };
     };
+    adminUpdateSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subscription"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
     adminSetSubscriptionStatus: {
         parameters: {
             query?: never;
@@ -8528,6 +8648,35 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
         };
     };
+    storefrontUpdateSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subscription"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
     storefrontSetSubscriptionStatus: {
         parameters: {
             query?: never;
@@ -8576,6 +8725,92 @@ export interface operations {
                 };
             };
             404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListFxRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FxRateList"];
+                };
+            };
+        };
+    };
+    adminCreateFxRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FxRateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FxRate"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminDeleteFxRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    storefrontCurrencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrencyOptions"];
+                };
+            };
         };
     };
     storefrontReorderSuggestions: {

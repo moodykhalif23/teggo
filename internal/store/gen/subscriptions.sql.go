@@ -151,6 +151,27 @@ func (q *Queries) CreateSubscriptionRun(ctx context.Context, arg CreateSubscript
 	return i, err
 }
 
+const deleteSubscriptionItems = `-- name: DeleteSubscriptionItems :exec
+DELETE FROM subscription_items WHERE subscription_id = $1
+`
+
+func (q *Queries) DeleteSubscriptionItems(ctx context.Context, subscriptionID int64) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionItems, subscriptionID)
+	return err
+}
+
+const getCustomerUserEmailByID = `-- name: GetCustomerUserEmailByID :one
+SELECT email FROM customer_users WHERE id = $1
+`
+
+// GetCustomerUserEmailByID resolves the buyer email for subscription notifications.
+func (q *Queries) GetCustomerUserEmailByID(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRow(ctx, getCustomerUserEmailByID, id)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
 const getSubscription = `-- name: GetSubscription :one
 SELECT id, public_id, organization_id, website_id, customer_id, customer_user_id, name, currency, cadence, next_run_date, status, po_number, created_by, last_run_at, created_at, updated_at FROM subscriptions WHERE organization_id = $1 AND id = $2
 `
@@ -488,6 +509,94 @@ type SetSubscriptionStatusForCustomerParams struct {
 
 func (q *Queries) SetSubscriptionStatusForCustomer(ctx context.Context, arg SetSubscriptionStatusForCustomerParams) (Subscription, error) {
 	row := q.db.QueryRow(ctx, setSubscriptionStatusForCustomer, arg.CustomerID, arg.ID, arg.Status)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.WebsiteID,
+		&i.CustomerID,
+		&i.CustomerUserID,
+		&i.Name,
+		&i.Currency,
+		&i.Cadence,
+		&i.NextRunDate,
+		&i.Status,
+		&i.PoNumber,
+		&i.CreatedBy,
+		&i.LastRunAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateSubscription = `-- name: UpdateSubscription :one
+UPDATE subscriptions SET name = $3, cadence = $4, po_number = $5
+WHERE organization_id = $1 AND id = $2
+RETURNING id, public_id, organization_id, website_id, customer_id, customer_user_id, name, currency, cadence, next_run_date, status, po_number, created_by, last_run_at, created_at, updated_at
+`
+
+type UpdateSubscriptionParams struct {
+	OrganizationID int64   `json:"organization_id"`
+	ID             int64   `json:"id"`
+	Name           *string `json:"name"`
+	Cadence        string  `json:"cadence"`
+	PoNumber       *string `json:"po_number"`
+}
+
+func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (Subscription, error) {
+	row := q.db.QueryRow(ctx, updateSubscription,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Name,
+		arg.Cadence,
+		arg.PoNumber,
+	)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.WebsiteID,
+		&i.CustomerID,
+		&i.CustomerUserID,
+		&i.Name,
+		&i.Currency,
+		&i.Cadence,
+		&i.NextRunDate,
+		&i.Status,
+		&i.PoNumber,
+		&i.CreatedBy,
+		&i.LastRunAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateSubscriptionForCustomer = `-- name: UpdateSubscriptionForCustomer :one
+UPDATE subscriptions SET name = $3, cadence = $4, po_number = $5
+WHERE customer_id = $1 AND id = $2
+RETURNING id, public_id, organization_id, website_id, customer_id, customer_user_id, name, currency, cadence, next_run_date, status, po_number, created_by, last_run_at, created_at, updated_at
+`
+
+type UpdateSubscriptionForCustomerParams struct {
+	CustomerID int64   `json:"customer_id"`
+	ID         int64   `json:"id"`
+	Name       *string `json:"name"`
+	Cadence    string  `json:"cadence"`
+	PoNumber   *string `json:"po_number"`
+}
+
+func (q *Queries) UpdateSubscriptionForCustomer(ctx context.Context, arg UpdateSubscriptionForCustomerParams) (Subscription, error) {
+	row := q.db.QueryRow(ctx, updateSubscriptionForCustomer,
+		arg.CustomerID,
+		arg.ID,
+		arg.Name,
+		arg.Cadence,
+		arg.PoNumber,
+	)
 	var i Subscription
 	err := row.Scan(
 		&i.ID,

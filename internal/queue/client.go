@@ -49,7 +49,7 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 	river.AddWorker(workers, &jobs.GenerateRenditionWorker{Pool: pool, Store: store, Proc: proc})
 	river.AddWorker(workers, &jobs.RunReportSchedulesWorker{Pool: pool, Mailer: enq})
 	river.AddWorker(workers, &jobs.ERPSyncWorker{Pool: pool})
-	river.AddWorker(workers, &jobs.MaterializeSubscriptionsWorker{Pool: pool})
+	river.AddWorker(workers, &jobs.MaterializeSubscriptionsWorker{Pool: pool, Mailer: enq})
 	// Register additional workers here as modules add jobs.
 
 	periodic := []*river.PeriodicJob{

@@ -27,6 +27,7 @@ import (
 	"b2bcommerce/internal/modules/dam"
 	erpmod "b2bcommerce/internal/modules/erp"
 	"b2bcommerce/internal/modules/field"
+	"b2bcommerce/internal/modules/fxadmin"
 	"b2bcommerce/internal/modules/health"
 	"b2bcommerce/internal/modules/integration"
 	"b2bcommerce/internal/modules/marketplace"
@@ -214,6 +215,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	settings.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	promo.New(st.Queries()).Routes(r, authMW)
+	fxadmin.New(st.Pool()).Routes(r, authMW)
 	subscription.New(st.Pool()).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)

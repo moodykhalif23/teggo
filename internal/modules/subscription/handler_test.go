@@ -143,6 +143,50 @@ func TestSubscriptionStorefrontLifecycle(t *testing.T) {
 	}
 }
 
+func TestSubscriptionEdit(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	_, tok := seedCustomer(t, pool, issuer, "Acme", "buyer@acme.test")
+	p1 := seedProduct(t, pool, "EDIT-1")
+	p2 := seedProduct(t, pool, "EDIT-2")
+
+	cr := do(t, h, http.MethodPost, "/storefront/subscriptions", tok, map[string]any{
+		"cadence": "monthly", "items": []map[string]any{{"product_id": p1, "quantity": "1"}},
+	})
+	if cr.Code != http.StatusCreated {
+		t.Fatalf("create: %d (%s)", cr.Code, cr.Body.String())
+	}
+	var sub struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(cr.Body.Bytes(), &sub)
+	idPath := "/storefront/subscriptions/" + strconv.FormatInt(sub.ID, 10)
+
+	// Edit: change cadence + replace items (qty change + add a product).
+	er := do(t, h, http.MethodPut, idPath, tok, map[string]any{
+		"cadence": "weekly",
+		"items": []map[string]any{
+			{"product_id": p1, "quantity": "5"},
+			{"product_id": p2, "quantity": "2"},
+		},
+	})
+	if er.Code != http.StatusOK {
+		t.Fatalf("edit: want 200, got %d (%s)", er.Code, er.Body.String())
+	}
+
+	gr := do(t, h, http.MethodGet, idPath, tok, nil)
+	var got struct {
+		Cadence string `json:"cadence"`
+		Items   []struct {
+			ProductID int64  `json:"product_id"`
+			Quantity  string `json:"quantity"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(gr.Body.Bytes(), &got)
+	if got.Cadence != "weekly" || len(got.Items) != 2 {
+		t.Fatalf("after edit: want weekly + 2 items, got %s + %d (%s)", got.Cadence, len(got.Items), gr.Body.String())
+	}
+}
+
 func TestSubscriptionAdminAccess(t *testing.T) {
 	h, issuer, pool := newServer(t)
 	custID, custTok := seedCustomer(t, pool, issuer, "Acme", "buyer@acme.test")

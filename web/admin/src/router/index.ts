@@ -81,6 +81,12 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'promotion.view' },
       },
       {
+        path: 'fx-rates',
+        name: 'fx-rates',
+        component: () => import('@/views/pricing/FxRatesView.vue'),
+        meta: { permission: 'fx.view' },
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('@/views/settings/SettingsView.vue'),

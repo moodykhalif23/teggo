@@ -15,9 +15,33 @@ import (
 
 	"b2bcommerce/internal/modules/marketplace"
 	"b2bcommerce/internal/money"
+	"b2bcommerce/internal/promotions"
 	"b2bcommerce/internal/store/gen"
 	"b2bcommerce/internal/tax"
 )
+
+// promoCandidates maps active promotion rows into the engine's input.
+func promoCandidates(rows []gen.Promotion) []promotions.Candidate {
+	out := make([]promotions.Candidate, len(rows))
+	for i, p := range rows {
+		var starts, ends *time.Time
+		if p.StartsAt.Valid {
+			t := p.StartsAt.Time
+			starts = &t
+		}
+		if p.EndsAt.Valid {
+			t := p.EndsAt.Time
+			ends = &t
+		}
+		out[i] = promotions.Candidate{
+			ID: p.ID, Name: p.Name, Code: p.Code, DiscountType: p.DiscountType,
+			DiscountValue: p.DiscountValue, MinSubtotal: p.MinSubtotal,
+			StartsAt: starts, EndsAt: ends,
+			MaxRedemptions: p.MaxRedemptions, TimesRedeemed: p.TimesRedeemed, Priority: p.Priority,
+		}
+	}
+	return out
+}
 
 // AdvanceDate returns the next run date for a cadence, measured from `from`.
 func AdvanceDate(cadence string, from time.Time) time.Time {
@@ -38,11 +62,17 @@ func AdvanceDate(cadence string, from time.Time) time.Time {
 func dateOf(t time.Time) pgtype.Date      { return pgtype.Date{Time: t, Valid: true} }
 func tsOf(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }
 
+// Emailer enqueues a transactional email (satisfied by *queue.Enqueuer). Optional
+// — a nil Emailer skips the buyer notification (e.g. admin "run now").
+type Emailer interface {
+	EnqueueEmail(ctx context.Context, to, template string, data map[string]any) error
+}
+
 // MaterializeDue processes every active subscription due on/before `today`,
 // creating one order each and advancing its schedule. Each is handled in its own
 // transaction so a single failure can't roll back the rest. Returns the number of
 // orders created.
-func MaterializeDue(ctx context.Context, pool *pgxpool.Pool, today time.Time) (int, error) {
+func MaterializeDue(ctx context.Context, pool *pgxpool.Pool, today time.Time, mailer Emailer) (int, error) {
 	q := gen.New(pool)
 	due, err := q.ListDueSubscriptions(ctx, dateOf(today))
 	if err != nil {
@@ -50,7 +80,7 @@ func MaterializeDue(ctx context.Context, pool *pgxpool.Pool, today time.Time) (i
 	}
 	created := 0
 	for _, sub := range due {
-		ok, err := runOne(ctx, pool, sub, today)
+		ok, err := runOne(ctx, pool, sub, today, mailer)
 		if err != nil {
 			// Infra error on one subscription — skip it, keep going.
 			continue
@@ -64,15 +94,15 @@ func MaterializeDue(ctx context.Context, pool *pgxpool.Pool, today time.Time) (i
 
 // RunNow materializes a single subscription immediately (admin "run now"),
 // regardless of its due date. Returns whether an order was created.
-func RunNow(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today time.Time) (bool, error) {
-	return runOne(ctx, pool, sub, today)
+func RunNow(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today time.Time, mailer Emailer) (bool, error) {
+	return runOne(ctx, pool, sub, today, mailer)
 }
 
 // runOne creates an order for one subscription, records a run, and advances the
 // schedule — all in a single transaction. It returns (orderCreated, error). A
 // subscription with no priceable lines records a "failed" run but still advances
 // so it doesn't get stuck, and returns (false, nil).
-func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today time.Time) (bool, error) {
+func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today time.Time, mailer Emailer) (bool, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -130,6 +160,19 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 	}
 
 	subtotal, _ := money.Sum(totals...)
+
+	// Apply the best automatic promotion (subscriptions carry no coupon code).
+	discount := "0"
+	var promoID *int64
+	if cands, e := q.ListActivePromotions(ctx, sub.OrganizationID); e == nil && len(cands) > 0 {
+		if res := promotions.Evaluate(subtotal, "", today, promoCandidates(cands)); res.Promotion != nil {
+			discount = res.Discount
+			pid := res.Promotion.ID
+			promoID = &pid
+		}
+	}
+	discountedSub, _ := money.Sub(subtotal, discount)
+
 	billing := snapshotAddr(ctx, q, sub.CustomerID, "billing")
 	shipping := snapshotAddr(ctx, q, sub.CustomerID, "shipping")
 
@@ -141,7 +184,7 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 	if terr != nil {
 		return false, terr
 	}
-	grand, _ := money.Sum(subtotal, taxTotal)
+	grand, _ := money.Sum(discountedSub, taxTotal)
 
 	order, e := q.CreateOrder(ctx, gen.CreateOrderParams{
 		OrganizationID: sub.OrganizationID, WebsiteID: sub.WebsiteID, CustomerID: sub.CustomerID,
@@ -164,6 +207,20 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 			return false, e
 		}
 	}
+	if promoID != nil {
+		if e := q.SetOrderPromotion(ctx, gen.SetOrderPromotionParams{ID: order.ID, DiscountTotal: discount, PromotionID: promoID}); e != nil {
+			return false, e
+		}
+		cid := sub.CustomerID
+		if _, e := q.CreatePromotionRedemption(ctx, gen.CreatePromotionRedemptionParams{
+			PromotionID: *promoID, OrderID: &order.ID, CustomerID: &cid, Amount: discount,
+		}); e != nil {
+			return false, e
+		}
+		if e := q.IncrementPromotionRedeemed(ctx, *promoID); e != nil {
+			return false, e
+		}
+	}
 	if e := marketplace.SplitOrder(ctx, q, sub.OrganizationID, order.ID, sub.Currency); e != nil {
 		return false, e
 	}
@@ -183,7 +240,28 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 	if e := q.AdvanceSubscription(ctx, gen.AdvanceSubscriptionParams{ID: sub.ID, NextRunDate: next, LastRunAt: tsOf(today)}); e != nil {
 		return false, e
 	}
-	return true, tx.Commit(ctx)
+
+	// Resolve the buyer email before commit (still inside the tx's view).
+	buyerEmail := ""
+	if sub.CustomerUserID != nil {
+		if em, e := q.GetCustomerUserEmailByID(ctx, *sub.CustomerUserID); e == nil {
+			buyerEmail = em
+		}
+	}
+	if e := tx.Commit(ctx); e != nil {
+		return false, e
+	}
+
+	// Best-effort buyer notification (post-commit, never blocks the order).
+	if mailer != nil && buyerEmail != "" {
+		_ = mailer.EnqueueEmail(ctx, buyerEmail, "subscription_order_placed", map[string]any{
+			"order_public_id": order.PublicID.String(),
+			"grand_total":     grand,
+			"currency":        sub.Currency,
+			"subscription_id": sub.ID,
+		})
+	}
+	return true, nil
 }
 
 // snapshotAddr returns the customer's default address of a type as a JSON snapshot.

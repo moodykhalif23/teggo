@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"b2bcommerce/internal/fx"
 	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/pricing"
 	"b2bcommerce/internal/promotions"
@@ -69,6 +70,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		sr.Post("/storefront/cart/bulk", h.addBulk)
 		sr.Post("/storefront/cart/coupon", h.applyCoupon)
 		sr.Delete("/storefront/cart/coupon", h.removeCoupon)
+		sr.Get("/storefront/currencies", h.currencies)
 		sr.Get("/storefront/products/{slug}/pricing", h.productPricing)
 
 		sr.Get("/storefront/shopping-lists", h.listLists)
@@ -240,7 +242,44 @@ func (h *Handler) renderCart(w http.ResponseWriter, r *http.Request, p principal
 	if discountLabel != "" {
 		resp["discount_label"] = discountLabel
 	}
+
+	// Optional display-currency conversion (indicative; the cart transacts in its
+	// own currency). ?currency=USD converts the totals via the latest FX rate.
+	if dc := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("currency"))); dc != "" && dc != c.Currency {
+		if rate, ok, _ := fx.NewService(h.q).Rate(r.Context(), p.orgID, c.Currency, dc); ok {
+			ds, _ := fx.Convert(subtotal, rate)
+			dd, _ := fx.Convert(discount, rate)
+			dg, _ := fx.Convert(grand, rate)
+			resp["display"] = map[string]any{
+				"currency": dc, "rate": rate, "subtotal": ds, "discount_amount": dd, "grand_total": dg,
+			}
+		}
+	}
 	response.JSON(w, http.StatusOK, resp)
+}
+
+// currencies lists the display currencies available from the org's base currency
+// (for the storefront currency selector).
+func (h *Handler) currencies(w http.ResponseWriter, r *http.Request) {
+	p, ok := actor(r)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no customer context")
+		return
+	}
+	ws, err := h.q.GetDefaultWebsite(r.Context(), p.orgID)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, "bad_request", "no website configured")
+		return
+	}
+	codes, err := h.q.ListQuoteCurrencies(r.Context(), gen.ListQuoteCurrenciesParams{OrganizationID: p.orgID, BaseCurrency: ws.DefaultCurrency})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not list currencies")
+		return
+	}
+	if codes == nil {
+		codes = []string{}
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"base": ws.DefaultCurrency, "currencies": codes})
 }
 
 // applyCoupon attaches a coupon code to the cart after validating it names an

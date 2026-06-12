@@ -479,6 +479,7 @@ components:
         billing_address: { $ref: '#/components/schemas/OrderAddressInput' }
         shipping_address: { $ref: '#/components/schemas/OrderAddressInput' }
         cost_center: { type: string, nullable: true }
+        display_currency: { type: string, nullable: true, description: 'Currency the buyer was quoted in; locks the FX rate onto the order.' }
 
     CustomerBudget:
       type: object
@@ -724,6 +725,15 @@ components:
         grand_total: { type: string, description: 'subtotal − discount (pre tax/shipping).' }
         coupon_code: { type: string, description: 'Applied coupon code, if any.' }
         discount_label: { type: string, description: 'Name of the applied promotion.' }
+        display:
+          type: object
+          description: 'Indicative totals in a requested display currency (?currency=).'
+          properties:
+            currency: { type: string }
+            rate: { type: string }
+            subtotal: { type: string }
+            discount_amount: { type: string }
+            grand_total: { type: string }
 
     CartCouponInput:
       type: object
@@ -860,6 +870,37 @@ components:
       required: [order_created]
       properties:
         order_created: { type: boolean }
+
+    FxRate:
+      type: object
+      required: [id, base_currency, quote_currency, rate, as_of]
+      properties:
+        id: { type: integer, format: int64 }
+        base_currency: { type: string }
+        quote_currency: { type: string }
+        rate: { type: string }
+        as_of: { type: string, format: date-time }
+
+    FxRateInput:
+      type: object
+      required: [base_currency, quote_currency, rate]
+      properties:
+        base_currency: { type: string, description: '3-letter code' }
+        quote_currency: { type: string, description: '3-letter code' }
+        rate: { type: string, description: 'Units of quote per 1 base.' }
+
+    FxRateList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/FxRate' } }
+
+    CurrencyOptions:
+      type: object
+      required: [base, currencies]
+      properties:
+        base: { type: string }
+        currencies: { type: array, items: { type: string } }
 
     RevalidateResult:
       type: object
@@ -3548,6 +3589,8 @@ paths:
       tags: [Cart]
       operationId: storefrontGetCart
       security: [{ storefrontAuth: [] }]
+      parameters:
+        - { name: currency, in: query, required: false, schema: { type: string }, description: 'Optional display currency for indicative converted totals.' }
       responses:
         '200':
           description: OK
@@ -3745,6 +3788,17 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Subscriptions]
+      operationId: adminUpdateSubscription
+      summary: Replace a subscription's cadence + items.
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
   /admin/subscriptions/{id}/status:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
@@ -3795,6 +3849,17 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Subscriptions]
+      operationId: storefrontUpdateSubscription
+      summary: Edit a subscription's cadence + items.
+      security: [{ storefrontAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
   /storefront/subscriptions/{id}/status:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
@@ -3818,6 +3883,42 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /admin/fx-rates:
+    get:
+      tags: [FX]
+      operationId: adminListFxRates
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/FxRateList' } } } }
+    post:
+      tags: [FX]
+      operationId: adminCreateFxRate
+      summary: Record a current exchange rate (base→quote).
+      security: [{ adminAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/FxRateInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/FxRate' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/fx-rates/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    delete:
+      tags: [FX]
+      operationId: adminDeleteFxRate
+      security: [{ adminAuth: [] }]
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /storefront/currencies:
+    get:
+      tags: [FX]
+      operationId: storefrontCurrencies
+      summary: Display currencies available from the store's base currency.
+      security: [{ storefrontAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CurrencyOptions' } } } }
 
   /storefront/account/reorder-suggestions:
     get:

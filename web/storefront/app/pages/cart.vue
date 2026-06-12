@@ -2,6 +2,7 @@
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
 import Message from 'primevue/message'
 import type { components } from '@teggo/api/schema'
 
@@ -16,14 +17,32 @@ const error = ref('')
 const notice = ref('')
 const busy = ref(false)
 
+// Display currency (indicative). Empty = the store's base currency.
+const displayCurrency = ref('')
+const currencyOptions = ref<{ label: string; value: string }[]>([])
+
+async function loadCurrencies() {
+  const { data } = await client.GET('/storefront/currencies')
+  const list = data?.currencies ?? []
+  currencyOptions.value = [
+    { label: `${data?.base ?? 'Base'} (base)`, value: '' },
+    ...list.map((c) => ({ label: c, value: c })),
+  ]
+}
+
 async function load() {
   error.value = ''
-  const { data, error: err } = await client.GET('/storefront/cart')
+  const query = displayCurrency.value ? { currency: displayCurrency.value } : {}
+  const { data, error: err } = await client.GET('/storefront/cart', { params: { query } })
   if (err || !data) {
     error.value = 'Could not load your cart.'
     return
   }
   cart.value = data
+}
+
+function onCurrencyChange() {
+  load()
 }
 
 async function updateQty(itemId: number, quantity: number) {
@@ -83,6 +102,7 @@ async function revalidate() {
 }
 
 await load()
+await loadCurrencies()
 </script>
 
 <template>
@@ -142,6 +162,23 @@ await load()
             <div class="row grand">
               <span>Total</span>
               <strong>{{ cart.grand_total ?? cart.subtotal }} {{ cart.currency }}</strong>
+            </div>
+
+            <!-- Display-currency conversion (indicative) -->
+            <div v-if="currencyOptions.length > 1" class="ccy-row">
+              <span>Show in</span>
+              <Select
+                v-model="displayCurrency"
+                :options="currencyOptions"
+                optionLabel="label"
+                optionValue="value"
+                :disabled="busy"
+                @change="onCurrencyChange"
+              />
+            </div>
+            <div v-if="cart.display" class="row display">
+              <span>≈ {{ cart.display.currency }}</span>
+              <span>{{ cart.display.grand_total }} {{ cart.display.currency }}</span>
             </div>
 
             <NuxtLink to="/checkout" class="checkout-link">
@@ -216,6 +253,9 @@ await load()
 .totals .row { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
 .totals .discount { color: var(--p-primary-color, #16a34a); }
 .totals .grand { font-size: 1.15rem; padding-top: 0.4rem; border-top: 1px solid var(--p-surface-200, #e2e8f0); }
+.ccy-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.5rem; }
+.ccy-row span { font-size: 0.85rem; color: var(--p-text-muted-color, #64748b); }
+.totals .display { color: var(--p-text-muted-color, #64748b); font-size: 0.9rem; }
 .checkout-link { margin-top: 0.5rem; display: block; }
 .checkout-link :deep(button) { width: 100%; }
 .empty { text-align: center; padding: 3rem 0; }
