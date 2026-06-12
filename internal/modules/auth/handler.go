@@ -12,6 +12,7 @@ import (
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store"
 	"b2bcommerce/internal/store/gen"
+	"b2bcommerce/internal/tenant"
 )
 
 type Handler struct {
@@ -32,6 +33,26 @@ func (h *Handler) Routes(r chi.Router, limiter func(http.Handler) http.Handler) 
 	r.With(limiter).Post("/vendor/auth/login", h.vendorLogin)
 	r.With(limiter).Get("/storefront/invites/{token}", h.getInvite)
 	r.With(limiter).Post("/storefront/invites/{token}/accept", h.acceptInvite)
+}
+
+// orgLoginAllowed enforces the org lifecycle at the credential gate: a pending
+// org hasn't verified its signup email, a suspended one is shut off. Unknown
+// status (org row missing, transient error) fails open — the queries scope by
+// org anyway. Writes the error response itself when blocking.
+func (h *Handler) orgLoginAllowed(w http.ResponseWriter, r *http.Request, orgID int64) bool {
+	org, err := h.store.Queries().GetOrganization(r.Context(), orgID)
+	if err != nil {
+		return true
+	}
+	switch org.Status {
+	case tenant.StatusPending:
+		response.Fail(w, http.StatusForbidden, "org_pending", "verify your email to activate this organization")
+		return false
+	case tenant.StatusSuspended:
+		response.Fail(w, http.StatusForbidden, "org_suspended", "this organization is suspended")
+		return false
+	}
+	return true
 }
 
 // resolveOrgFromHost maps the request host to the org of the website serving it
@@ -64,12 +85,28 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.OrgID == 0 {
-		req.OrgID = 1 // demo convenience; require explicitly in production
+		// Org-aware login: an email that exists in exactly one org resolves it
+		// implicitly (self-served tenants never know an org id). Ambiguity needs
+		// an explicit org_id; an unknown email keeps the legacy default so the
+		// failure below stays uniform "invalid credentials".
+		orgs, err := h.store.Queries().FindUserOrgsByEmail(r.Context(), req.Email)
+		switch {
+		case err == nil && len(orgs) == 1:
+			req.OrgID = orgs[0]
+		case err == nil && len(orgs) > 1:
+			response.Fail(w, http.StatusBadRequest, "org_required", "this email exists in multiple organizations; pass org_id")
+			return
+		default:
+			req.OrgID = 1
+		}
 	}
 
 	u, err := h.store.GetUserByEmail(r.Context(), req.OrgID, req.Email)
 	if err != nil || !auth.CheckPassword(u.PasswordHash, req.Password) {
 		response.Fail(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
+		return
+	}
+	if !h.orgLoginAllowed(w, r, u.OrgID) {
 		return
 	}
 
@@ -107,6 +144,9 @@ func (h *Handler) storefrontLogin(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 		return
 	}
+	if !h.orgLoginAllowed(w, r, cu.OrganizationID) {
+		return
+	}
 
 	token, err := h.issuer.IssueStorefront(cu.ID, cu.OrganizationID, cu.CustomerID)
 	if err != nil {
@@ -134,6 +174,9 @@ func (h *Handler) vendorLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil || !auth.CheckPassword(vu.PasswordHash, req.Password) {
 		response.Fail(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
+		return
+	}
+	if !h.orgLoginAllowed(w, r, vu.OrganizationID) {
 		return
 	}
 

@@ -47,6 +47,21 @@ var templates = map[string]tmpl{
 <p>Need it again? Reply or request a new quote and we'll be glad to help.</p>
 <p>— Teggo</p>`,
 	},
+	"subscription_order_placed": {
+		subject: "Your recurring order has been placed",
+		body: `<p>Hi,</p>
+<p>Your recurring order <strong>{{.order_public_id}}</strong> for <strong>{{.grand_total}} {{.currency}}</strong> has been placed automatically.</p>
+<p>Sign in to your account to review it or manage the subscription.</p>
+<p>— Teggo</p>`,
+	},
+	"signup_verify": {
+		subject: "Verify your email to activate {{.organization}}",
+		body: `<p>Hi {{.name}},</p>
+<p>You're one step away from activating <strong>{{.organization}}</strong> on Teggo.</p>
+<p><a href="{{.link}}">Verify your email address</a> (the link expires {{.expires_at}}).</p>
+<p>If you didn't sign up, you can ignore this email.</p>
+<p>— Teggo</p>`,
+	},
 	"report_ready": {
 		subject: "Your scheduled report \"{{.name}}\" is ready",
 		body: `<p>Hello,</p>

@@ -124,6 +124,7 @@ func main() {
 		server.WithRecompute(enq),
 		server.WithInvoicePDF(enq),
 		server.WithNotifier(enq),
+		server.WithPlatform(cfg.PlatformBaseDomain, cfg.SignupVerifyURL),
 		server.WithPaymentGateway(gw),
 		server.WithLogger(logger),
 		server.WithMedia(mediaStore, imageproc.GoProcessor{}),

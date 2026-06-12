@@ -64,6 +64,12 @@ type Config struct {
 	AIChatAPIKey  string
 	AIChatModel   string
 
+	// Tenant signup (SAAS.md #1). PlatformBaseDomain is the suffix tenant
+	// storefronts hang off (subdomain.<base>); SignupVerifyURL is the page the
+	// verification email links to (the token rides as ?token=).
+	PlatformBaseDomain string
+	SignupVerifyURL    string
+
 	// CORSAllowedOrigins lists browser origins permitted to call the API
 	// cross-origin (the SSR storefront's client-side calls). Comma-separated in
 	// CORS_ALLOWED_ORIGINS; defaults to the local dev frontends. Set to "*" to
@@ -112,6 +118,9 @@ func Load() (Config, error) {
 		AIChatBaseURL: getenv("AI_CHAT_BASE_URL", "https://api.groq.com/openai/v1"),
 		AIChatAPIKey:  getenv("AI_CHAT_API_KEY", ""),
 		AIChatModel:   getenv("AI_CHAT_MODEL", "llama-3.3-70b-versatile"),
+
+		PlatformBaseDomain: getenv("PLATFORM_BASE_DOMAIN", "teggo.local"),
+		SignupVerifyURL:    getenv("SIGNUP_VERIFY_URL", "http://localhost:5173/verify-signup"),
 
 		CORSAllowedOrigins: splitList(getenv("CORS_ALLOWED_ORIGINS",
 			"http://localhost:3000,http://localhost:5173,http://localhost:5174")),

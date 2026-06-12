@@ -38,6 +38,7 @@ type Querier interface {
 	AdvanceSubscription(ctx context.Context, arg AdvanceSubscriptionParams) error
 	AssignAttributeToFamily(ctx context.Context, arg AssignAttributeToFamilyParams) error
 	AssignProductToCategory(ctx context.Context, arg AssignProductToCategoryParams) error
+	AssignUserRole(ctx context.Context, arg AssignUserRoleParams) error
 	// AttachOrdersToPayout settles every delivered, not-yet-paid vendor_order of a
 	// vendor into a payout (same predicate used to total the payout, run in the same
 	// tx so the set is consistent). Returns the number of orders attached.
@@ -47,6 +48,7 @@ type Querier interface {
 	// CategoryDescendantIDs returns the category and all of its descendants
 	// (subtree, Pack 1 §12.3). $1 root id, $2 organization_id.
 	CategoryDescendantIDs(ctx context.Context, arg CategoryDescendantIDsParams) ([]int64, error)
+	ConsumeSignupVerification(ctx context.Context, id int64) (int64, error)
 	CountActiveProducts(ctx context.Context, organizationID int64) (int64, error)
 	CountAutomationExecutions(ctx context.Context, ruleID int64) (int64, error)
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
@@ -121,6 +123,8 @@ type Querier interface {
 	CreateOptionGroup(ctx context.Context, arg CreateOptionGroupParams) (ProductOptionGroup, error)
 	// ===== Order ===============================================================
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	// Tenant provisioning + platform-operator queries (SAAS.md #1).
+	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
 	// CMS queries — Pack 2 §2.
 	// ===== Pages ===============================================================
 	CreatePage(ctx context.Context, arg CreatePageParams) (ContentPage, error)
@@ -174,6 +178,7 @@ type Querier interface {
 	CreateReportSchedule(ctx context.Context, arg CreateReportScheduleParams) (ReportSchedule, error)
 	// Returns / RMA + credit notes (migration 0038).
 	CreateReturn(ctx context.Context, arg CreateReturnParams) (Return, error)
+	CreateRole(ctx context.Context, arg CreateRoleParams) (Role, error)
 	// ===== Login state (CSRF/replay) ===========================================
 	CreateSSOState(ctx context.Context, arg CreateSSOStateParams) (SsoState, error)
 	// Order-to-cash queries — Implementation Pack 1 §7.
@@ -181,6 +186,7 @@ type Querier interface {
 	CreateShipment(ctx context.Context, arg CreateShipmentParams) (Shipment, error)
 	// ===== Shopping lists ======================================================
 	CreateShoppingList(ctx context.Context, arg CreateShoppingListParams) (ShoppingList, error)
+	CreateSignupVerification(ctx context.Context, arg CreateSignupVerificationParams) (SignupVerification, error)
 	// Subscriptions / recurring orders (Roadmap Tier 2 #4).
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	CreateSubscriptionItem(ctx context.Context, arg CreateSubscriptionItemParams) (SubscriptionItem, error)
@@ -257,6 +263,9 @@ type Querier interface {
 	// backed by idx_products_attrs_gin (Pack 1 §12.5). $2 is a JSONB object like
 	// {"color":"red","voltage":"24"}.
 	FilterActiveProductsByAttributes(ctx context.Context, arg FilterActiveProductsByAttributesParams) ([]Product, error)
+	// FindUserOrgsByEmail powers org-aware admin login: an email that exists in
+	// exactly one org resolves it implicitly.
+	FindUserOrgsByEmail(ctx context.Context, email string) ([]int64, error)
 	FinishReportRun(ctx context.Context, arg FinishReportRunParams) (FinishReportRunRow, error)
 	// FirstStage returns the lowest-sort_order stage of a pipeline (the entry stage).
 	FirstStage(ctx context.Context, pipelineID int64) (PipelineStage, error)
@@ -409,6 +418,7 @@ type Querier interface {
 	// the destination address for label region resolution.
 	GetShipmentWithOrg(ctx context.Context, arg GetShipmentWithOrgParams) (GetShipmentWithOrgRow, error)
 	GetShoppingList(ctx context.Context, arg GetShoppingListParams) (ShoppingList, error)
+	GetSignupVerification(ctx context.Context, token uuid.UUID) (SignupVerification, error)
 	GetStage(ctx context.Context, id int64) (PipelineStage, error)
 	GetSubscription(ctx context.Context, arg GetSubscriptionParams) (Subscription, error)
 	GetSubscriptionForCustomer(ctx context.Context, arg GetSubscriptionForCustomerParams) (Subscription, error)
@@ -564,6 +574,8 @@ type Querier interface {
 	ListOrdersForCustomerByStatus(ctx context.Context, arg ListOrdersForCustomerByStatusParams) ([]Order, error)
 	// ===== Outbound work lists (idempotent: skip already-synced) ================
 	ListOrdersToSync(ctx context.Context, arg ListOrdersToSyncParams) ([]Order, error)
+	// ListOrganizationsWithCounts is the platform-operator overview.
+	ListOrganizationsWithCounts(ctx context.Context) ([]ListOrganizationsWithCountsRow, error)
 	// ListPagesAdmin lists all pages for the org's websites.
 	ListPagesAdmin(ctx context.Context, organizationID int64) ([]ContentPage, error)
 	ListPaymentsForInvoice(ctx context.Context, invoiceID *int64) ([]Payment, error)
@@ -733,6 +745,11 @@ type Querier interface {
 	// idiom: $2 keyword (FTS), $3 attribute JSONB (@>), $4 category-id array (subtree
 	// resolved in Go). $5 sort: 'relevance' | 'newest' | else name.
 	SearchProductsFaceted(ctx context.Context, arg SearchProductsFacetedParams) ([]SearchProductsFacetedRow, error)
+	// SeedRolePermissionsFromTemplate copies the canonical permission matrix — org
+	// 1's admin role, which every permission migration appends to — onto a freshly
+	// provisioned role. platform.* is excluded (operator-only); pattern narrows the
+	// copy for lesser roles ('' = everything, '%.view' = read-only, …).
+	SeedRolePermissionsFromTemplate(ctx context.Context, arg SeedRolePermissionsFromTemplateParams) (int64, error)
 	// SendQuote moves the quote to 'sent' and bumps the version; the caller writes
 	// the matching quote_revisions snapshot in the same transaction.
 	SendQuote(ctx context.Context, arg SendQuoteParams) (Quote, error)
@@ -756,6 +773,7 @@ type Querier interface {
 	// already set (to the discounted value) at order creation, so it's untouched here.
 	SetOrderPromotion(ctx context.Context, arg SetOrderPromotionParams) error
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
+	SetOrganizationStatus(ctx context.Context, arg SetOrganizationStatusParams) (Organization, error)
 	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
 	SetProductApproval(ctx context.Context, arg SetProductApprovalParams) (SetProductApprovalRow, error)

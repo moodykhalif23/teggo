@@ -619,6 +619,7 @@ type Organization struct {
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Status    string    `json:"status"`
 }
 
 type Payment struct {
@@ -1062,6 +1063,16 @@ type ShoppingListItem struct {
 	ProductID      int64  `json:"product_id"`
 	Quantity       string `json:"quantity"`
 	Unit           string `json:"unit"`
+}
+
+type SignupVerification struct {
+	ID             int64              `json:"id"`
+	Token          uuid.UUID          `json:"token"`
+	OrganizationID int64              `json:"organization_id"`
+	UserID         int64              `json:"user_id"`
+	ExpiresAt      time.Time          `json:"expires_at"`
+	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt      time.Time          `json:"created_at"`
 }
 
 type SsoState struct {

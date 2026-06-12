@@ -34,6 +34,7 @@ import (
 	"b2bcommerce/internal/modules/merch"
 	"b2bcommerce/internal/modules/notifications"
 	"b2bcommerce/internal/modules/otc"
+	platformmod "b2bcommerce/internal/modules/platform"
 	"b2bcommerce/internal/modules/pricing"
 	"b2bcommerce/internal/modules/promo"
 	"b2bcommerce/internal/modules/rebate"
@@ -51,6 +52,7 @@ import (
 	mw "b2bcommerce/internal/server/middleware"
 	shippingeng "b2bcommerce/internal/shipping"
 	"b2bcommerce/internal/store"
+	"b2bcommerce/internal/tenant"
 )
 
 type notifier interface {
@@ -79,6 +81,8 @@ type options struct {
 	rtAuthorizer   notify.Authorizer
 	rtKey          string
 	rtCluster      string
+	platformDomain string
+	signupVerify   string
 }
 
 // Option configures optional server dependencies.
@@ -166,6 +170,12 @@ func WithRealtime(authz notify.Authorizer, key, cluster string) Option {
 	return func(o *options) { o.rtAuthorizer = authz; o.rtKey = key; o.rtCluster = cluster }
 }
 
+// WithPlatform configures tenant signup: the base domain tenant storefronts
+// hang off (subdomain.<base>) and the page the verification email links to.
+func WithPlatform(baseDomain, verifyURL string) Option {
+	return func(o *options) { o.platformDomain = baseDomain; o.signupVerify = verifyURL }
+}
+
 // New builds the fully-wired HTTP handler.
 func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	var o options
@@ -200,21 +210,31 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	r.Use(mw.MaxBytes(o.maxBodyBytes))
 	r.Use(chimw.Timeout(30 * time.Second))
 
-	authMW := mw.Authenticator(issuer)
+	// Every authenticated request passes the org lifecycle gate: a suspended (or
+	// still-pending) tenant is shut off across admin, storefront and vendor
+	// surfaces within the cache TTL. Composed under the authenticators so claims
+	// are in context; public routes pass through untouched.
+	statuses := tenant.NewStatusCache(st.Queries(), 30*time.Second)
+	orgGate := mw.RequireOrgActive(statuses.Status)
+	authn := mw.Authenticator(issuer)
+	optAuthn := mw.OptionalAuthenticator(issuer)
+	authMW := func(next http.Handler) http.Handler { return authn(orgGate(next)) }
+	optAuthMW := func(next http.Handler) http.Handler { return optAuthn(orgGate(next)) }
 	// Throttle credential endpoints to blunt brute-force / credential stuffing.
 	loginLimit := mw.RateLimit(10, time.Minute)
 
 	// Modules mount their own routes. Add new modules here as they land.
 	health.New(st).Routes(r)
 	authmod.New(st, issuer).Routes(r, loginLimit)
-	catalog.New(st.Queries()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))
+	platformmod.New(st.Pool(), o.notifier, statuses, o.platformDomain, o.signupVerify).Routes(r, authMW, loginLimit)
+	catalog.New(st.Queries()).RoutesWithOptionalAuth(r, authMW, optAuthMW)
 	customers.New(st.Queries()).Routes(r, authMW)
 	account.New(st.Queries()).Routes(r, authMW)
 	mp := marketplace.New(st.Pool())
 	mp.Routes(r, authMW)
 	mp.RoutesVendor(r, authMW)
 	assistant.New(st.Queries(), o.aiProvider).Routes(r, authMW)
-	settings.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, mw.OptionalAuthenticator(issuer))
+	settings.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, optAuthMW)
 	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
 	promo.New(st.Queries()).Routes(r, authMW)
 	fxadmin.New(st.Pool()).Routes(r, authMW)

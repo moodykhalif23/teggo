@@ -15,7 +15,9 @@ const route = useRoute()
 
 const email = ref('admin@demo.test')
 const password = ref('')
-const orgId = ref(1)
+// Only revealed when the API says the email exists in several organizations.
+const needOrg = ref(false)
+const orgId = ref<number | null>(null)
 const loading = ref(false)
 const error = ref('')
 
@@ -23,11 +25,13 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
-    await auth.login(email.value, password.value, orgId.value)
+    await auth.login(email.value, password.value, needOrg.value ? (orgId.value ?? undefined) : undefined)
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Login failed'
+    const msg = e instanceof Error ? e.message : 'Login failed'
+    if (msg.includes('multiple organizations')) needOrg.value = true
+    error.value = msg
   } finally {
     loading.value = false
   }
@@ -58,11 +62,15 @@ async function submit() {
               fluid
             />
           </div>
-          <div class="field">
+          <div v-if="needOrg" class="field">
             <label for="org">Organization ID</label>
             <InputNumber id="org" v-model="orgId" :useGrouping="false" fluid />
           </div>
           <Button type="submit" label="Sign in" :loading="loading" fluid />
+          <p class="signup-hint">
+            New to Teggo?
+            <RouterLink to="/signup">Create your organization</RouterLink>
+          </p>
         </form>
       </template>
     </Card>
@@ -99,5 +107,11 @@ async function submit() {
 .field label {
   font-size: 0.85rem;
   font-weight: 600;
+}
+.signup-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--p-text-muted-color, #64748b);
 }
 </style>

@@ -20,26 +20,35 @@ Legend — **Impact**: how much it unblocks a real SaaS launch. **Effort**: roug
 
 ---
 
-## 1. Tenant provisioning  ·  Impact: Critical (the biggest code gap) · Effort: M–L
-There's no signup. Org 1 is seeded by migrations, and every permission seed is
-`WHERE organization_id = 1` — a freshly created org would have **no roles, no
-permissions, no website**. Until this exists, "SaaS" means onboarding tenants by
-hand in SQL.
-- **Data**: a `permission_templates` notion — either re-derive role/permission seeds
-  from a code-level template at org creation, or restructure seeds so they apply per-org.
-  Org gains `status` (trial/active/suspended) + `created_at` provenance.
-- **Engine**: a single transactional `ProvisionOrganization(name, adminEmail, domain)`:
-  create org → seed roles (admin/staff/viewer) + the full permission matrix from the
-  template → create default website (domain) → create the first admin user + invite
-  email → seed org defaults (currency, tax zone, locale).
-- **Surfaces**: a public `/signup` flow (org name, admin email, subdomain) with email
-  verification; a platform-operator screen to list/suspend orgs. Admin login becomes
-  org-aware (resolve org by email or subdomain).
-- **Touches**: migrations seeding strategy (the `WHERE organization_id=1` pattern),
-  auth, websites/tenancy, email worker.
-- **Tests**: provision a fresh org in an integration test, then assert a full
-  golden-path (login → create product → storefront order) works inside it AND that
-  org 1's data is invisible to it.
+## 1. Tenant provisioning  ·  ✅ Done · Impact: Critical (was the biggest code gap) · Effort: M–L
+Self-serve signup is live: a new org provisions itself, verifies by email, and
+signs in with a fully-seeded permission set — no SQL onboarding.
+- **Data** (`0051`): `organizations.status` (pending/trial/active/suspended) +
+  `signup_verifications` (single-use UUID tokens, expiring). `platform.view`/
+  `platform.manage` granted ONLY to org 1 (the platform owner).
+- **Engine** (`internal/tenant`): transactional `Provision` — org ('pending') →
+  roles admin/staff/viewer seeded from the canonical template (org 1's admin role,
+  which every permission migration appends to; `platform.*` excluded; staff =
+  view+edit, viewer = view) → default website at `<subdomain>.<PLATFORM_BASE_DOMAIN>`
+  → first admin user → verification token. Fails loudly if the template is empty.
+- **Surfaces**: public `POST /signup` + `POST /signup/verify` (rate-limited) with a
+  `signup_verify` email; admin SPA `/signup` + `/verify-signup` pages; operator
+  "Platform" screen (list orgs, suspend/reactivate — org 1 untouchable). Admin login
+  is org-aware (unique email resolves its org; ambiguity asks for org_id) and every
+  login checks org status.
+- **Enforcement**: an org-status gate composed under both authenticators — a
+  suspended tenant's existing tokens die within the 30s cache TTL (instantly on the
+  node that suspended); login refused for pending/suspended across admin, storefront
+  and vendor audiences.
+- **Tests**: golden path (signup → pending blocks login → verify → org-aware login →
+  create product → tenant isolation vs org 1 → operator suspends → live token blocked
+  → reactivate); validation + subdomain collision (409); single-use token; operator
+  guards. Unit tests for validation rules.
+- **Deferred (future):** verification-email resend; per-tenant tax-zone defaults at
+  signup; storefront-wide gate for *unauthenticated* reads of suspended tenants'
+  catalogs (sign-ins and authed calls are blocked today); new-permission migrations
+  should now grant to **every** org's admin role, not just org 1 (new convention —
+  provisioned orgs only inherit the template at creation time).
 
 ## 2. Platform billing & metering  ·  Impact: Critical · Effort: L
 Teggo bills its *buyers* (invoices, AR); nothing bills its *tenants*.
@@ -113,8 +122,8 @@ their own merchants of record.
 ---
 
 ## Suggested sequence
-1. **Security pre-flight** (#0) — hours, removes standing risk.
-2. **Tenant provisioning** (#1) — everything else assumes orgs can exist.
+1. ~~Security pre-flight (#0)~~ — done (secrets rotated, .env untracked).
+2. ~~Tenant provisioning (#1)~~ — ✅ shipped.
 3. **Per-tenant config** (#4) — makes a second real tenant actually usable.
 4. **Platform billing & metering** (#2) — monetize once tenants can self-serve.
 5. **Isolation hardening** (#3) — land RLS before opening signup to strangers.

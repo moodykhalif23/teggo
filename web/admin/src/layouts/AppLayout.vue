@@ -139,6 +139,7 @@ const groups: NavGroup[] = [
     label: 'Settings',
     icon: 'pi pi-cog',
     items: [
+      { label: 'Platform', icon: 'pi pi-building-columns', routeName: 'platform-orgs', permission: 'platform.view' },
       { label: 'Websites', icon: 'pi pi-globe', routeName: 'websites', permission: 'tenant.view' },
       { label: 'Configuration', icon: 'pi pi-cog', routeName: 'settings', permission: 'settings.view' },
       { label: 'Integrations', icon: 'pi pi-sync', routeName: 'integrations', permission: 'integration.view' },

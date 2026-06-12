@@ -12,6 +12,18 @@ const routes: RouteRecordRaw[] = [
     meta: { public: true },
   },
   {
+    path: '/signup',
+    name: 'signup',
+    component: () => import('@/views/platform/SignupView.vue'),
+    meta: { public: true },
+  },
+  {
+    path: '/verify-signup',
+    name: 'verify-signup',
+    component: () => import('@/views/platform/VerifySignupView.vue'),
+    meta: { public: true },
+  },
+  {
     path: '/',
     component: AppLayout,
     children: [
@@ -97,6 +109,12 @@ const routes: RouteRecordRaw[] = [
         name: 'settings',
         component: () => import('@/views/settings/SettingsView.vue'),
         meta: { permission: 'settings.view' },
+      },
+      {
+        path: 'platform/organizations',
+        name: 'platform-orgs',
+        component: () => import('@/views/platform/OrganizationsView.vue'),
+        meta: { permission: 'platform.view' },
       },
       {
         path: 'rfqs',

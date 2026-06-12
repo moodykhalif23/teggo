@@ -21,6 +21,7 @@ tags:
   - { name: Marketplace }
   - { name: VendorPortal }
   - { name: Assistant }
+  - { name: Platform }
 
 components:
   securitySchemes:
@@ -2969,6 +2970,56 @@ components:
         text: { type: string }
         tool: { type: string, description: 'The tool the assistant invoked, if any.' }
         data: { type: object, additionalProperties: true, description: 'Structured result from the tool, for rich rendering.' }
+
+    # ===== Tenant signup & platform operation (SAAS.md #1) =================
+    SignupRequest:
+      type: object
+      required: [organization, full_name, email, password, subdomain]
+      properties:
+        organization: { type: string, description: 'Company / organization display name.' }
+        full_name: { type: string, description: "The first admin user's name." }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        subdomain: { type: string, description: 'Lowercase letters, digits, hyphens (3-63 chars). The storefront lives at <subdomain>.<platform base domain>.' }
+        currency: { type: string, description: 'ISO 4217; defaults to USD.' }
+        locale: { type: string, description: 'Defaults to en.' }
+    SignupResponse:
+      type: object
+      properties:
+        domain: { type: string, description: 'The storefront domain that was provisioned.' }
+        message: { type: string }
+    SignupVerifyRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, format: uuid }
+    MessageResponse:
+      type: object
+      properties:
+        message: { type: string }
+    PlatformOrganization:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        status: { type: string, enum: [pending, trial, active, suspended] }
+        user_count: { type: integer, format: int64 }
+        website_count: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+    ListWrapperPlatformOrganization:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PlatformOrganization' } }
+    OrgStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [trial, active, suspended] }
+    OrgStatusResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        status: { type: string }
 
   responses:
     ErrorResponse:
@@ -6283,3 +6334,53 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/AssistantRequest' } } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantReply' } } } }
+
+  # ===== Tenant signup & platform operation (SAAS.md #1) ====================
+  /signup:
+    post:
+      tags: [Platform]
+      operationId: signup
+      summary: Self-serve tenant signup — provisions a pending organization and emails a verification link.
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignupRequest' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/SignupResponse' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+  /signup/verify:
+    post:
+      tags: [Platform]
+      operationId: signupVerify
+      summary: Consume an emailed verification token; the organization moves to trial and can sign in.
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignupVerifyRequest' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MessageResponse' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/platform/organizations:
+    get:
+      tags: [Platform]
+      operationId: platformListOrganizations
+      summary: Platform-operator overview of every tenant organization.
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperPlatformOrganization' } } } }
+  /admin/platform/organizations/{id}/status:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [Platform]
+      operationId: platformSetOrganizationStatus
+      summary: Suspend, reactivate, or change a tenant organization's lifecycle status.
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OrgStatusRequest' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrgStatusResponse' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }

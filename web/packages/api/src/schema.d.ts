@@ -4210,6 +4210,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Self-serve tenant signup — provisions a pending organization and emails a verification link. */
+        post: operations["signup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/signup/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Consume an emailed verification token; the organization moves to trial and can sign in. */
+        post: operations["signupVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/platform/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Platform-operator overview of every tenant organization. */
+        get: operations["platformListOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/platform/organizations/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspend, reactivate, or change a tenant organization's lifecycle status. */
+        post: operations["platformSetOrganizationStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6939,6 +7009,58 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             };
+        };
+        SignupRequest: {
+            /** @description Company / organization display name. */
+            organization: string;
+            /** @description The first admin user's name. */
+            full_name: string;
+            /** Format: email */
+            email: string;
+            password: string;
+            /** @description Lowercase letters, digits, hyphens (3-63 chars). The storefront lives at <subdomain>.<platform base domain>. */
+            subdomain: string;
+            /** @description ISO 4217; defaults to USD. */
+            currency?: string;
+            /** @description Defaults to en. */
+            locale?: string;
+        };
+        SignupResponse: {
+            /** @description The storefront domain that was provisioned. */
+            domain?: string;
+            message?: string;
+        };
+        SignupVerifyRequest: {
+            /** Format: uuid */
+            token: string;
+        };
+        MessageResponse: {
+            message?: string;
+        };
+        PlatformOrganization: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            /** @enum {string} */
+            status?: "pending" | "trial" | "active" | "suspended";
+            /** Format: int64 */
+            user_count?: number;
+            /** Format: int64 */
+            website_count?: number;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        ListWrapperPlatformOrganization: {
+            items?: components["schemas"]["PlatformOrganization"][];
+        };
+        OrgStatusRequest: {
+            /** @enum {string} */
+            status: "trial" | "active" | "suspended";
+        };
+        OrgStatusResponse: {
+            /** Format: int64 */
+            id?: number;
+            status?: string;
         };
     };
     responses: {
@@ -14602,6 +14724,105 @@ export interface operations {
                     "application/json": components["schemas"]["AssistantReply"];
                 };
             };
+        };
+    };
+    signup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+        };
+    };
+    signupVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    platformListOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperPlatformOrganization"];
+                };
+            };
+        };
+    };
+    platformSetOrganizationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgStatusResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
         };
     };
 }

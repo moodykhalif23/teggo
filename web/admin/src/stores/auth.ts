@@ -67,9 +67,11 @@ export const useAuthStore = defineStore('auth', {
       if (email) localStorage.setItem(EMAIL_KEY, email)
       else localStorage.removeItem(EMAIL_KEY)
     },
-    async login(email: string, password: string, orgId = 1) {
+    // orgId is optional: the API resolves an email that exists in exactly one
+    // organization by itself; only ambiguous emails need an explicit org.
+    async login(email: string, password: string, orgId?: number) {
       const { data, error } = await api.POST('/admin/auth/login', {
-        body: { email, password, org_id: orgId },
+        body: { email, password, ...(orgId ? { org_id: orgId } : {}) },
       })
       if (error || !data) throw new Error(errMessage(error, 'Invalid credentials'))
       this.setToken(data.token)
