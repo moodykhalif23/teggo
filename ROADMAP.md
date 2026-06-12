@@ -58,12 +58,16 @@ The dashboard wants an **org-wide low-stock list** but inventory is per-product
 
 ## Tier 2 — strong value, medium effort
 
-### 4. Subscriptions / recurring & standing orders  ·  Impact: High · Effort: L
+### 4. Subscriptions / recurring & standing orders  ·  ✅ Done · Impact: High · Effort: L
 Auto-replenishment is core to B2B repeat buying; today only manual reorder + lists.
-- **Data**: `subscriptions` (customer, cadence, next_run, line items, status), `subscription_runs`.
-- **Engine**: a river job that materializes due subscriptions into orders on schedule.
-- **Surfaces**: storefront “subscribe / set up recurring” on a list or past order; admin
-  management + skip/pause/cancel.
+- **Data**: `subscriptions` (customer, cadence, next_run, status) + `subscription_items` + `subscription_runs`. Migration `0047`.
+- **Engine**: a daily River periodic job (`materialize_due_subscriptions`) turns due subscriptions
+  into orders, priced from the customer's combined prices at run time, taxed + marketplace-split;
+  records a run and advances the schedule (engine in `internal/subscriptions`, run per-subscription tx).
+- **Surfaces**: storefront “Set up recurring” on a past order + an account → Recurring page
+  (pause/skip/cancel); admin Subscriptions screen (list/detail/status/**run now**).
+- **Deferred (future):** edit a subscription's items/cadence after creation; per-line price lock;
+  buyer-facing “next delivery” email; promotions applied to subscription orders.
 
 ### 5. Multi-currency display & FX  ·  Impact: Med · Effort: M
 Currency columns exist per price-list, but there's no presentation/FX layer.
