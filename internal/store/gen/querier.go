@@ -364,6 +364,8 @@ type Querier interface {
 	GetOrderByID(ctx context.Context, arg GetOrderByIDParams) (Order, error)
 	GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (Order, error)
 	GetOrderItem(ctx context.Context, arg GetOrderItemParams) (OrderItem, error)
+	// GetOrgEntitlements joins the org's plan subscription onto its plan.
+	GetOrgEntitlements(ctx context.Context, organizationID int64) (GetOrgEntitlementsRow, error)
 	// Per-tenant payment gateway config (SAAS.md #4).
 	GetOrgPaymentConfig(ctx context.Context, organizationID int64) (OrgPaymentConfig, error)
 	GetOrganization(ctx context.Context, id int64) (Organization, error)
@@ -371,6 +373,7 @@ type Querier interface {
 	GetPageAdmin(ctx context.Context, arg GetPageAdminParams) (ContentPage, error)
 	GetPayment(ctx context.Context, id int64) (Payment, error)
 	GetPipeline(ctx context.Context, arg GetPipelineParams) (Pipeline, error)
+	GetPlanByCode(ctx context.Context, code string) (Plan, error)
 	GetPreset(ctx context.Context, arg GetPresetParams) (TransformationPreset, error)
 	GetPriceList(ctx context.Context, arg GetPriceListParams) (PriceList, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
@@ -434,6 +437,7 @@ type Querier interface {
 	// from_state is the current state (or null = from any). Specific from-states
 	// win over wildcard ones.
 	GetTransitionToState(ctx context.Context, arg GetTransitionToStateParams) (WorkflowTransition, error)
+	GetUsageValue(ctx context.Context, arg GetUsageValueParams) (int64, error)
 	GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) (GetUserByEmailRow, error)
 	GetUserPermissions(ctx context.Context, userID int64) ([]string, error)
 	GetVendor(ctx context.Context, arg GetVendorParams) (Vendor, error)
@@ -463,6 +467,7 @@ type Querier interface {
 	HiddenProductIDsForCustomer(ctx context.Context, arg HiddenProductIDsForCustomerParams) ([]int64, error)
 	IncrementInviteUse(ctx context.Context, id int64) error
 	IncrementPromotionRedeemed(ctx context.Context, id int64) error
+	IncrementUsage(ctx context.Context, arg IncrementUsageParams) (int64, error)
 	// ListAbandonedCarts returns active carts with items that have gone idle past
 	// the cutoff and weren't reminded since their last change. $1 = idle cutoff.
 	ListAbandonedCarts(ctx context.Context, updatedAt time.Time) ([]ListAbandonedCartsRow, error)
@@ -583,6 +588,8 @@ type Querier interface {
 	ListPaymentsForInvoice(ctx context.Context, invoiceID *int64) ([]Payment, error)
 	ListPendingProducts(ctx context.Context, organizationID int64) ([]ListPendingProductsRow, error)
 	ListPipelineStages(ctx context.Context, pipelineID int64) ([]PipelineStage, error)
+	// Platform billing & metering queries (SAAS.md #2).
+	ListPlans(ctx context.Context) ([]Plan, error)
 	// ===== Presets =============================================================
 	ListPresets(ctx context.Context, organizationID int64) ([]TransformationPreset, error)
 	ListPriceAdjustmentRules(ctx context.Context, organizationID int64) ([]PriceAdjustmentRule, error)
@@ -656,6 +663,9 @@ type Querier interface {
 	// ListTaxRatesByCountry feeds the local VAT provider for a destination.
 	ListTaxRatesByCountry(ctx context.Context, arg ListTaxRatesByCountryParams) ([]ListTaxRatesByCountryRow, error)
 	ListTradingPartners(ctx context.Context, organizationID int64) ([]TradingPartner, error)
+	// ListUsageForPeriods returns an org's counters for the metering screen
+	// (the current month plus lifetime gauges).
+	ListUsageForPeriods(ctx context.Context, arg ListUsageForPeriodsParams) ([]ListUsageForPeriodsRow, error)
 	ListVendorOrderItems(ctx context.Context, arg ListVendorOrderItemsParams) ([]ListVendorOrderItemsRow, error)
 	ListVendorOrdersForOrder(ctx context.Context, orderID int64) ([]VendorOrder, error)
 	ListVendorOrdersForVendor(ctx context.Context, vendorID int64) ([]ListVendorOrdersForVendorRow, error)
@@ -775,6 +785,7 @@ type Querier interface {
 	// already set (to the discounted value) at order creation, so it's untouched here.
 	SetOrderPromotion(ctx context.Context, arg SetOrderPromotionParams) error
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
+	SetOrgPlan(ctx context.Context, arg SetOrgPlanParams) (OrgSubscription, error)
 	SetOrganizationStatus(ctx context.Context, arg SetOrganizationStatusParams) (Organization, error)
 	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
@@ -827,6 +838,7 @@ type Querier interface {
 	UpdateIntegrationConnection(ctx context.Context, arg UpdateIntegrationConnectionParams) (IntegrationConnection, error)
 	UpdateMediaMeta(ctx context.Context, arg UpdateMediaMetaParams) (MediaAsset, error)
 	UpdatePage(ctx context.Context, arg UpdatePageParams) (ContentPage, error)
+	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	UpdatePriceList(ctx context.Context, arg UpdatePriceListParams) (PriceList, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdatePromotion(ctx context.Context, arg UpdatePromotionParams) (Promotion, error)

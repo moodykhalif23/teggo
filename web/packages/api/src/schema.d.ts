@@ -4315,6 +4315,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in org's plan, feature flags, limits and current usage. */
+        get: operations["getBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/platform/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Platform-operator list of plan tiers. */
+        get: operations["platformListPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/platform/plans/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a plan's price, features or limits (applies to every org on it). */
+        put: operations["platformUpdatePlan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/platform/organizations/{id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assign a plan to a tenant organization. */
+        post: operations["platformSetOrganizationPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7078,6 +7150,7 @@ export interface components {
             name?: string;
             /** @enum {string} */
             status?: "pending" | "trial" | "active" | "suspended";
+            plan_code?: string;
             /** Format: int64 */
             user_count?: number;
             /** Format: int64 */
@@ -7115,6 +7188,43 @@ export interface components {
             store_name?: string;
             brand_color?: string;
             logo_url?: string;
+        };
+        Plan: {
+            code?: string;
+            name?: string;
+            price?: string;
+            currency?: string;
+            features?: string[];
+            limits?: {
+                [key: string]: number;
+            };
+            position?: number;
+        };
+        ListWrapperPlan: {
+            items?: components["schemas"]["Plan"][];
+        };
+        PlanUpdate: {
+            name?: string;
+            price?: string;
+            currency?: string;
+            features?: string[];
+            limits?: {
+                [key: string]: number;
+            };
+        };
+        OrgPlanRequest: {
+            plan_code: string;
+        };
+        BillingView: {
+            plan?: components["schemas"]["Plan"];
+            status?: string;
+            features?: string[];
+            limits?: {
+                [key: string]: number;
+            };
+            usage?: {
+                [key: string]: number;
+            };
         };
     };
     responses: {
@@ -14945,6 +15055,104 @@ export interface operations {
                     "application/json": components["schemas"]["StorefrontBranding"];
                 };
             };
+        };
+    };
+    getBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingView"];
+                };
+            };
+        };
+    };
+    platformListPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListWrapperPlan"];
+                };
+            };
+        };
+    };
+    platformUpdatePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    platformSetOrganizationPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        organization_id?: number;
+                        plan_code?: string;
+                    };
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
         };
     };
 }

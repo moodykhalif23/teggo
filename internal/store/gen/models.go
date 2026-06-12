@@ -620,6 +620,14 @@ type OrgPaymentConfig struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+type OrgSubscription struct {
+	OrganizationID     int64     `json:"organization_id"`
+	PlanID             int64     `json:"plan_id"`
+	Status             string    `json:"status"`
+	CurrentPeriodStart time.Time `json:"current_period_start"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
 type Organization struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
@@ -662,6 +670,21 @@ type PipelineStage struct {
 	IsWon       bool   `json:"is_won"`
 	IsLost      bool   `json:"is_lost"`
 	SortOrder   int32  `json:"sort_order"`
+}
+
+type Plan struct {
+	ID        int64     `json:"id"`
+	Code      string    `json:"code"`
+	Name      string    `json:"name"`
+	Price     string    `json:"price"`
+	Currency  string    `json:"currency"`
+	Period    string    `json:"period"`
+	Features  []byte    `json:"features"`
+	Limits    []byte    `json:"limits"`
+	IsActive  bool      `json:"is_active"`
+	Position  int32     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Price struct {
@@ -1191,6 +1214,14 @@ type TransformationPreset struct {
 	Format         string    `json:"format"`
 	Quality        int32     `json:"quality"`
 	CreatedAt      time.Time `json:"created_at"`
+}
+
+type UsageCounter struct {
+	OrganizationID int64     `json:"organization_id"`
+	Metric         string    `json:"metric"`
+	PeriodKey      string    `json:"period_key"`
+	Value          int64     `json:"value"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type User struct {

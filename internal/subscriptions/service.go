@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	metering "b2bcommerce/internal/billing"
 	"b2bcommerce/internal/modules/marketplace"
 	"b2bcommerce/internal/money"
 	"b2bcommerce/internal/promotions"
@@ -252,6 +253,13 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 	if e := tx.Commit(ctx); e != nil {
 		return false, e
 	}
+
+	// Meter the materialized order (count-only — a recurring order is never
+	// blocked by quota; the tenant sees the overage on their billing screen).
+	_, _ = q.IncrementUsage(ctx, gen.IncrementUsageParams{
+		OrganizationID: sub.OrganizationID, Metric: metering.MetricOrders,
+		PeriodKey: metering.PeriodKeyFor(metering.MetricOrders, time.Now()), Value: 1,
+	})
 
 	// Best-effort buyer notification (post-commit, never blocks the order).
 	if mailer != nil && buyerEmail != "" {

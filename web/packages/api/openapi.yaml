@@ -3003,6 +3003,7 @@ components:
         id: { type: integer, format: int64 }
         name: { type: string }
         status: { type: string, enum: [pending, trial, active, suspended] }
+        plan_code: { type: string }
         user_count: { type: integer, format: int64 }
         website_count: { type: integer, format: int64 }
         created_at: { type: string, format: date-time }
@@ -3038,6 +3039,41 @@ components:
         store_name: { type: string }
         brand_color: { type: string }
         logo_url: { type: string }
+    Plan:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        price: { type: string }
+        currency: { type: string }
+        features: { type: array, items: { type: string } }
+        limits: { type: object, additionalProperties: { type: integer, format: int64 } }
+        position: { type: integer }
+    ListWrapperPlan:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Plan' } }
+    PlanUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        price: { type: string }
+        currency: { type: string }
+        features: { type: array, items: { type: string } }
+        limits: { type: object, additionalProperties: { type: integer, format: int64 } }
+    OrgPlanRequest:
+      type: object
+      required: [plan_code]
+      properties:
+        plan_code: { type: string }
+    BillingView:
+      type: object
+      properties:
+        plan: { $ref: '#/components/schemas/Plan' }
+        status: { type: string }
+        features: { type: array, items: { type: string } }
+        limits: { type: object, additionalProperties: { type: integer, format: int64 } }
+        usage: { type: object, additionalProperties: { type: integer, format: int64 } }
 
   responses:
     ErrorResponse:
@@ -6432,3 +6468,49 @@ paths:
       security: []
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StorefrontBranding' } } } }
+
+  # ===== Billing & metering (SAAS.md #2) ====================================
+  /admin/billing:
+    get:
+      tags: [Platform]
+      operationId: getBilling
+      summary: The signed-in org's plan, feature flags, limits and current usage.
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/BillingView' } } } }
+  /admin/platform/plans:
+    get:
+      tags: [Platform]
+      operationId: platformListPlans
+      summary: Platform-operator list of plan tiers.
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListWrapperPlan' } } } }
+  /admin/platform/plans/{code}:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [Platform]
+      operationId: platformUpdatePlan
+      summary: Edit a plan's price, features or limits (applies to every org on it).
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PlanUpdate' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Plan' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /admin/platform/organizations/{id}/plan:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [Platform]
+      operationId: platformSetOrganizationPlan
+      summary: Assign a plan to a tenant organization.
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OrgPlanRequest' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { organization_id: { type: integer, format: int64 }, plan_code: { type: string } } } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }

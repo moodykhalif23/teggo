@@ -2,6 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useBillingStore } from '@/stores/billing'
 import { useNotificationsStore } from '@/stores/notifications'
 import Avatar from 'primevue/avatar'
 import Popover from 'primevue/popover'
@@ -9,10 +10,13 @@ import Button from 'primevue/button'
 import NotificationBell from '@/components/NotificationBell.vue'
 
 const auth = useAuthStore()
+const billing = useBillingStore()
 const notifications = useNotificationsStore()
 
 // The layout only renders for an authenticated session, so start the feed on
-// mount and tear it down on sign-out.
+// mount and tear it down on sign-out. Plan entitlements load once so the
+// sidebar mirrors what the API would allow anyway.
+onMounted(() => billing.load())
 onMounted(() => notifications.start())
 onBeforeUnmount(() => notifications.stop())
 const router = useRouter()
@@ -31,6 +35,9 @@ interface NavLeaf {
   icon: string
   routeName: string
   permission?: string
+  // Premium plan feature gating the leaf (SAAS.md #2); hidden when the org's
+  // plan lacks it — the server enforces regardless.
+  feature?: string
 }
 interface NavGroup {
   label: string
@@ -43,7 +50,7 @@ const groups: NavGroup[] = [
     label: '',
     items: [
       { label: 'Dashboard', icon: 'pi pi-home', routeName: 'dashboard' },
-      { label: 'Assistant', icon: 'pi pi-sparkles', routeName: 'assistant' },
+      { label: 'Assistant', icon: 'pi pi-sparkles', routeName: 'assistant', feature: 'assistant' },
     ],
   },
   {
@@ -54,7 +61,7 @@ const groups: NavGroup[] = [
       { label: 'Categories', icon: 'pi pi-sitemap', routeName: 'categories', permission: 'category.view' },
       { label: 'Attributes', icon: 'pi pi-tags', routeName: 'attributes', permission: 'attribute.view' },
       { label: 'Configurator', icon: 'pi pi-sliders-h', routeName: 'configurator', permission: 'product.view' },
-      { label: 'Search merchandising', icon: 'pi pi-search-plus', routeName: 'merchandising', permission: 'merchandising.view' },
+      { label: 'Search merchandising', icon: 'pi pi-search-plus', routeName: 'merchandising', permission: 'merchandising.view', feature: 'merchandising' },
     ],
   },
   {
@@ -64,7 +71,7 @@ const groups: NavGroup[] = [
       { label: 'Price lists', icon: 'pi pi-dollar', routeName: 'pricing', permission: 'price_list.view' },
       { label: 'Price rules', icon: 'pi pi-sliders-h', routeName: 'price-rules', permission: 'price_list.view' },
       { label: 'Promotions', icon: 'pi pi-tag', routeName: 'promotions', permission: 'promotion.view' },
-      { label: 'Exchange rates', icon: 'pi pi-money-bill', routeName: 'fx-rates', permission: 'fx.view' },
+      { label: 'Exchange rates', icon: 'pi pi-money-bill', routeName: 'fx-rates', permission: 'fx.view', feature: 'fx' },
       { label: 'Tax & shipping', icon: 'pi pi-percentage', routeName: 'tax-shipping', permission: 'tax.view' },
     ],
   },
@@ -75,8 +82,8 @@ const groups: NavGroup[] = [
       { label: 'RFQs', icon: 'pi pi-inbox', routeName: 'rfqs', permission: 'rfq.view' },
       { label: 'Quotes', icon: 'pi pi-file-edit', routeName: 'quotes', permission: 'quote.view' },
       { label: 'Orders', icon: 'pi pi-shopping-cart', routeName: 'orders', permission: 'order.view' },
-      { label: 'Subscriptions', icon: 'pi pi-sync', routeName: 'subscriptions', permission: 'subscription.view' },
-      { label: 'Rebates', icon: 'pi pi-percentage', routeName: 'rebates', permission: 'rebate.view' },
+      { label: 'Subscriptions', icon: 'pi pi-sync', routeName: 'subscriptions', permission: 'subscription.view', feature: 'subscriptions' },
+      { label: 'Rebates', icon: 'pi pi-percentage', routeName: 'rebates', permission: 'rebate.view', feature: 'rebates' },
       { label: 'Invoices', icon: 'pi pi-receipt', routeName: 'invoices', permission: 'invoice.view' },
       { label: 'AR aging', icon: 'pi pi-chart-line', routeName: 'ar-aging', permission: 'invoice.view' },
       { label: 'Returns', icon: 'pi pi-replay', routeName: 'returns', permission: 'return.view' },
@@ -140,6 +147,7 @@ const groups: NavGroup[] = [
     icon: 'pi pi-cog',
     items: [
       { label: 'Platform', icon: 'pi pi-building-columns', routeName: 'platform-orgs', permission: 'platform.view' },
+      { label: 'Billing & usage', icon: 'pi pi-credit-card', routeName: 'billing' },
       { label: 'Websites', icon: 'pi pi-globe', routeName: 'websites', permission: 'tenant.view' },
       { label: 'Configuration', icon: 'pi pi-cog', routeName: 'settings', permission: 'settings.view' },
       { label: 'Integrations', icon: 'pi pi-sync', routeName: 'integrations', permission: 'integration.view' },
@@ -150,10 +158,16 @@ const groups: NavGroup[] = [
 ]
 
 // Static menu (Verona-style): always-visible section labels + flat item links.
-// Drop leaves the user lacks permission for, then drop any emptied group.
+// Drop leaves the user lacks permission for or the org's plan doesn't include,
+// then drop any emptied group.
 const visibleGroups = computed(() =>
   groups
-    .map((g) => ({ ...g, items: g.items.filter((i) => !i.permission || auth.can(i.permission)) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        (i) => (!i.permission || auth.can(i.permission)) && (!i.feature || billing.allows(i.feature)),
+      ),
+    }))
     .filter((g) => g.items.length),
 )
 

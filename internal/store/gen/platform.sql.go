@@ -164,8 +164,11 @@ func (q *Queries) GetSignupVerification(ctx context.Context, token uuid.UUID) (S
 const listOrganizationsWithCounts = `-- name: ListOrganizationsWithCounts :many
 SELECT o.id, o.name, o.is_active, o.created_at, o.updated_at, o.status,
   (SELECT count(*) FROM users u    WHERE u.organization_id = o.id) AS user_count,
-  (SELECT count(*) FROM websites w WHERE w.organization_id = o.id) AS website_count
+  (SELECT count(*) FROM websites w WHERE w.organization_id = o.id) AS website_count,
+  COALESCE(p.code, '') AS plan_code
 FROM organizations o
+LEFT JOIN org_subscriptions s ON s.organization_id = o.id
+LEFT JOIN plans p ON p.id = s.plan_id
 ORDER BY o.id
 `
 
@@ -178,6 +181,7 @@ type ListOrganizationsWithCountsRow struct {
 	Status       string    `json:"status"`
 	UserCount    int64     `json:"user_count"`
 	WebsiteCount int64     `json:"website_count"`
+	PlanCode     string    `json:"plan_code"`
 }
 
 // ListOrganizationsWithCounts is the platform-operator overview.
@@ -199,6 +203,7 @@ func (q *Queries) ListOrganizationsWithCounts(ctx context.Context) ([]ListOrgani
 			&i.Status,
 			&i.UserCount,
 			&i.WebsiteCount,
+			&i.PlanCode,
 		); err != nil {
 			return nil, err
 		}

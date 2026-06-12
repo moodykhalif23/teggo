@@ -117,6 +117,11 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'platform.view' },
       },
       {
+        path: 'billing',
+        name: 'billing',
+        component: () => import('@/views/platform/BillingView.vue'),
+      },
+      {
         path: 'rfqs',
         name: 'rfqs',
         component: () => import('@/views/sales/RfqListView.vue'),

@@ -50,24 +50,34 @@ signs in with a fully-seeded permission set — no SQL onboarding.
   should now grant to **every** org's admin role, not just org 1 (new convention —
   provisioned orgs only inherit the template at creation time).
 
-## 2. Platform billing & metering  ·  Impact: Critical · Effort: L
-Teggo bills its *buyers* (invoices, AR); nothing bills its *tenants*.
-- **Data**: `plans` (name, price, currency, limits JSONB, features JSONB),
-  `org_subscriptions` (org, plan, status, period), `usage_counters`
-  (org, metric, period, value) — metrics: orders/month, storage bytes, AI calls,
-  admin seats.
-- **Engine**: plan-based **feature flags** (e.g. rebates/subscriptions/AI on higher
-  tiers) checked server-side (middleware or per-module guard, mirrored in the admin
-  nav); **quota enforcement** at the write path (order create, media upload, assistant
-  call) with soft-warn → hard-block; a River periodic job to roll up usage and close
-  billing periods.
-- **Payments**: Stripe Billing (or local equivalent — M-Pesa for KES markets) for the
-  platform subscription itself; webhooks → `org_subscriptions.status`; dunning =
-  org suspended, data retained.
-- **Surfaces**: platform-operator plan management; tenant-facing "Billing & usage"
-  screen in admin (current plan, usage meters, upgrade).
-- **Tests**: quota exceeded → 403 with a clear code; feature off-plan → hidden in nav
-  AND blocked at the API.
+## 2. Platform billing & metering  ·  ✅ Done · Impact: Critical · Effort: L
+Plans, feature flags and usage quotas are live; tenants are metered, operators
+manage tiers.
+- **Data** (`0053`): `plans` (price, features JSONB, limits JSONB — seeded
+  free/growth/scale), `org_subscriptions` (one per org; existing orgs landed on
+  scale so nothing went dark), `usage_counters` (org × metric × period —
+  orders + ai_calls monthly, storage_bytes lifetime).
+- **Engine** (`internal/billing`): cached per-org **entitlements** + one
+  path-rule **Gate middleware** under the authenticators — premium modules
+  (subscriptions, rebates, fx, merchandising, assistant) 403 `feature_not_in_plan`
+  off-plan; metered writes (order create ×3 paths, media upload by bytes,
+  assistant calls) 403 `quota_exceeded` at the cap, recording usage only on 2xx
+  so failed requests never burn quota. Recurring orders are counted but never
+  blocked. Orgs without a plan row are unmetered by design (the platform org on
+  legacy DBs); provisioning always assigns `free`.
+- **Surfaces**: tenant **Billing & usage** screen (plan card, usage meters,
+  feature list); the sidebar hides off-plan modules (server enforces regardless);
+  operator plan list/edit (`PUT /admin/platform/plans/{code}` — applies to every
+  org on the plan) and per-org plan assignment on the Platform screen.
+- **Tests**: free tenant 403-blocked from all four premium modules while core
+  commerce works; operator upgrade opens access without re-login; order cap of 1
+  → second order 403 `quota_exceeded`; `/admin/billing` reflects plan, limits
+  and consumption.
+- **Deferred (future):** Stripe/M-Pesa collection for the platform subscription
+  (webhooks → `org_subscriptions.status`, dunning → org suspension — the status
+  fields exist); admin-seat metering; period close-out/invoice job; storage
+  decrement on media delete (no delete endpoint exists yet); soft-warn
+  thresholds before the hard block.
 
 ## 3. Isolation hardening  ·  Impact: High (risk reduction) · Effort: M
 Shared-schema isolation rests on every query remembering its `org_id` filter; one
@@ -130,7 +140,7 @@ Payments, email identity and branding are org-scoped settings, not env vars.
 1. ~~Security pre-flight (#0)~~ — done (secrets rotated, .env untracked).
 2. ~~Tenant provisioning (#1)~~ — ✅ shipped.
 3. ~~Per-tenant config (#4)~~ — ✅ shipped.
-4. **Platform billing & metering** (#2) — monetize once tenants can self-serve.
+4. ~~Platform billing & metering (#2)~~ — ✅ shipped (payment collection deferred).
 5. **Isolation hardening** (#3) — land RLS before opening signup to strangers.
 6. **Infra swaps** (#5) — opportunistically; object storage + TLS first.
 

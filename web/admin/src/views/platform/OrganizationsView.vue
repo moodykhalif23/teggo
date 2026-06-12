@@ -5,6 +5,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
+import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import { api, errMessage } from '@/lib/client'
@@ -28,6 +29,8 @@ const severities: Record<string, string> = {
   suspended: 'danger',
 }
 
+const planCodes = ref<string[]>([])
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -38,6 +41,23 @@ async function load() {
     return
   }
   orgs.value = data.items ?? []
+  if (!planCodes.value.length) {
+    const { data: plans } = await api.GET('/admin/platform/plans')
+    planCodes.value = (plans?.items ?? []).map((p) => p.code ?? '').filter(Boolean)
+  }
+}
+
+async function setPlan(org: Org, code: string) {
+  const { error: err } = await api.POST('/admin/platform/organizations/{id}/plan', {
+    params: { path: { id: org.id! } },
+    body: { plan_code: code },
+  })
+  if (err) {
+    toast.add({ severity: 'error', summary: errMessage(err, 'Plan change failed'), life: 4000 })
+    return
+  }
+  toast.add({ severity: 'success', summary: `${org.name} moved to ${code}`, life: 2500 })
+  load()
 }
 
 async function setStatus(org: Org, status: 'active' | 'suspended') {
@@ -80,6 +100,19 @@ onMounted(load)
       <Column header="Status" style="width: 9rem">
         <template #body="{ data: o }">
           <Tag :value="o.status" :severity="severities[o.status] ?? 'secondary'" />
+        </template>
+      </Column>
+      <Column header="Plan" style="width: 9rem">
+        <template #body="{ data: o }">
+          <Select
+            v-if="o.id !== auth.orgId && planCodes.length"
+            :modelValue="o.plan_code || null"
+            :options="planCodes"
+            size="small"
+            placeholder="—"
+            @update:modelValue="(code: string) => setPlan(o, code)"
+          />
+          <span v-else>{{ o.plan_code || '—' }}</span>
         </template>
       </Column>
       <Column field="user_count" header="Users" style="width: 6rem" />

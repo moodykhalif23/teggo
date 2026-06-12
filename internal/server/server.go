@@ -12,6 +12,7 @@ import (
 
 	"b2bcommerce/internal/ai"
 	"b2bcommerce/internal/auth"
+	"b2bcommerce/internal/billing"
 	"b2bcommerce/internal/blob"
 	"b2bcommerce/internal/imageproc"
 	"b2bcommerce/internal/inventory"
@@ -227,17 +228,21 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	// are in context; public routes pass through untouched.
 	statuses := tenant.NewStatusCache(st.Queries(), 30*time.Second)
 	orgGate := mw.RequireOrgActive(statuses.Status)
+	// The plan gate enforces feature flags + usage quotas (SAAS.md #2) right
+	// after the org gate — same claims, same fail-open posture.
+	billingSvc := billing.NewService(st.Queries(), 30*time.Second)
+	planGate := billing.Gate(billingSvc)
 	authn := mw.Authenticator(issuer)
 	optAuthn := mw.OptionalAuthenticator(issuer)
-	authMW := func(next http.Handler) http.Handler { return authn(orgGate(next)) }
-	optAuthMW := func(next http.Handler) http.Handler { return optAuthn(orgGate(next)) }
+	authMW := func(next http.Handler) http.Handler { return authn(orgGate(planGate(next))) }
+	optAuthMW := func(next http.Handler) http.Handler { return optAuthn(orgGate(planGate(next))) }
 	// Throttle credential endpoints to blunt brute-force / credential stuffing.
 	loginLimit := mw.RateLimit(10, time.Minute)
 
 	// Modules mount their own routes. Add new modules here as they land.
 	health.New(st).Routes(r)
 	authmod.New(st, issuer).Routes(r, loginLimit)
-	platformmod.New(st.Pool(), o.notifier, statuses, o.platformDomain, o.signupVerify).Routes(r, authMW, loginLimit)
+	platformmod.New(st.Pool(), o.notifier, statuses, o.platformDomain, o.signupVerify).WithBilling(billingSvc).Routes(r, authMW, loginLimit)
 	catalog.New(st.Queries()).RoutesWithOptionalAuth(r, authMW, optAuthMW)
 	customers.New(st.Queries()).Routes(r, authMW)
 	account.New(st.Queries()).Routes(r, authMW)

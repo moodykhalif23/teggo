@@ -10,8 +10,11 @@ UPDATE organizations SET status = $2 WHERE id = $1 RETURNING *;
 -- name: ListOrganizationsWithCounts :many
 SELECT o.*,
   (SELECT count(*) FROM users u    WHERE u.organization_id = o.id) AS user_count,
-  (SELECT count(*) FROM websites w WHERE w.organization_id = o.id) AS website_count
+  (SELECT count(*) FROM websites w WHERE w.organization_id = o.id) AS website_count,
+  COALESCE(p.code, '') AS plan_code
 FROM organizations o
+LEFT JOIN org_subscriptions s ON s.organization_id = o.id
+LEFT JOIN plans p ON p.id = s.plan_id
 ORDER BY o.id;
 
 -- name: CreateRole :one

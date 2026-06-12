@@ -198,6 +198,14 @@ func Provision(ctx context.Context, pool *pgxpool.Pool, in Input) (Result, error
 		return Result{}, fmt.Errorf("assign admin role: %w", err)
 	}
 
+	// New tenants start on the free plan (SAAS.md #2) — operators upgrade them.
+	// A database without seeded plans provisions unmetered rather than failing.
+	if plan, err := q.GetPlanByCode(ctx, "free"); err == nil {
+		if _, err := q.SetOrgPlan(ctx, gen.SetOrgPlanParams{OrganizationID: org.ID, PlanID: plan.ID}); err != nil {
+			return Result{}, fmt.Errorf("assign free plan: %w", err)
+		}
+	}
+
 	ver, err := q.CreateSignupVerification(ctx, gen.CreateSignupVerificationParams{
 		OrganizationID: org.ID,
 		UserID:         user.ID,

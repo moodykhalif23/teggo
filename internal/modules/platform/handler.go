@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"b2bcommerce/internal/billing"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
@@ -33,6 +34,7 @@ type Handler struct {
 	q          *gen.Queries
 	mailer     Emailer
 	statuses   *tenant.StatusCache
+	billing    *billing.Service
 	baseDomain string
 	verifyURL  string // page the email links to; the token rides as ?token=
 }
@@ -59,6 +61,10 @@ func (h *Handler) Routes(r chi.Router, authMW, limiter func(http.Handler) http.H
 		ar.With(mw.RequirePermission("platform.view")).Get("/admin/platform/organizations", h.listOrgs)
 		ar.With(mw.RequirePermission("platform.manage")).Post("/admin/platform/organizations/{id}/status", h.setOrgStatus)
 	})
+
+	if h.billing != nil {
+		h.billingRoutes(r, authMW)
+	}
 }
 
 // ---- Public signup ---------------------------------------------------------
@@ -157,6 +163,7 @@ type orgDTO struct {
 	ID           int64     `json:"id"`
 	Name         string    `json:"name"`
 	Status       string    `json:"status"`
+	PlanCode     string    `json:"plan_code"`
 	UserCount    int64     `json:"user_count"`
 	WebsiteCount int64     `json:"website_count"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -171,7 +178,7 @@ func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 	items := make([]orgDTO, 0, len(rows))
 	for _, o := range rows {
 		items = append(items, orgDTO{
-			ID: o.ID, Name: o.Name, Status: o.Status,
+			ID: o.ID, Name: o.Name, Status: o.Status, PlanCode: o.PlanCode,
 			UserCount: o.UserCount, WebsiteCount: o.WebsiteCount, CreatedAt: o.CreatedAt,
 		})
 	}
