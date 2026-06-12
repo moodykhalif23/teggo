@@ -30,7 +30,10 @@ func NewClaudeProvider(apiKey, model string) *ClaudeProvider {
 
 func (ClaudeProvider) Name() string { return "claude" }
 
-const claudeSystem = "You are the Teggo B2B commerce assistant. You help the signed-in user with " +
+// assistantSystem is the shared system prompt for every language-model provider
+// (Claude and OpenAI-compatible alike) — the tool catalog, not the prompt, is
+// what bounds capability.
+const assistantSystem = "You are the Teggo B2B commerce assistant. You help the signed-in user with " +
 	"their orders, invoices, quotes and accounts, and for staff also across the organization: " +
 	"the product catalog, customer accounts, inventory/stock, receivables and account health. " +
 	"Only act through the provided tools — never invent data. Be concise and factual."
@@ -56,7 +59,7 @@ func (c *ClaudeProvider) Decide(ctx context.Context, msg string, history []Turn,
 	resp, err := c.post(ctx, map[string]any{
 		"model":      c.model,
 		"max_tokens": 1024,
-		"system":     claudeSystem,
+		"system":     assistantSystem,
 		"tools":      toolDefs,
 		"messages":   buildMessages(history, msg),
 	})
@@ -79,7 +82,7 @@ func (c *ClaudeProvider) Compose(ctx context.Context, msg string, tool Tool, res
 	resp, err := c.post(ctx, map[string]any{
 		"model":      c.model,
 		"max_tokens": 1024,
-		"system":     claudeSystem,
+		"system":     assistantSystem,
 		"messages":   []map[string]any{{"role": "user", "content": prompt}},
 	})
 	if err != nil {

@@ -50,11 +50,19 @@ type Config struct {
 
 	// AI assistant. AIProvider selects the decision engine for the copilot:
 	// "deterministic" (default — a local intent/slot engine, fully reproducible,
-	// no external calls) or "claude" (the Anthropic Messages API, used only when
-	// AnthropicAPIKey is set). The deterministic engine is always the fallback.
+	// no external calls), "claude" (the Anthropic Messages API, used only when
+	// AnthropicAPIKey is set), or "openai" (any OpenAI-compatible chat endpoint —
+	// Groq, Together, Ollama, vLLM — used only when AIChatAPIKey is set). The
+	// deterministic engine is always the fallback.
 	AIProvider      string
 	AnthropicAPIKey string
 	AIModel         string
+
+	// OpenAI-compatible chat endpoint for AIProvider=openai. BaseURL is the API
+	// root up to /chat/completions (default: Groq).
+	AIChatBaseURL string
+	AIChatAPIKey  string
+	AIChatModel   string
 
 	// CORSAllowedOrigins lists browser origins permitted to call the API
 	// cross-origin (the SSR storefront's client-side calls). Comma-separated in
@@ -100,6 +108,10 @@ func Load() (Config, error) {
 		AIProvider:      getenv("AI_PROVIDER", "deterministic"),
 		AnthropicAPIKey: getenv("ANTHROPIC_API_KEY", ""),
 		AIModel:         getenv("AI_MODEL", "claude-opus-4-8"),
+
+		AIChatBaseURL: getenv("AI_CHAT_BASE_URL", "https://api.groq.com/openai/v1"),
+		AIChatAPIKey:  getenv("AI_CHAT_API_KEY", ""),
+		AIChatModel:   getenv("AI_CHAT_MODEL", "llama-3.3-70b-versatile"),
 
 		CORSAllowedOrigins: splitList(getenv("CORS_ALLOWED_ORIGINS",
 			"http://localhost:3000,http://localhost:5173,http://localhost:5174")),

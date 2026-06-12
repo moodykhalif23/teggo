@@ -84,18 +84,27 @@ func main() {
 	}
 
 	// AI assistant decision engine. The deterministic local engine is the default;
-	// the Claude adapter is used only when explicitly selected AND an API key is
-	// present (otherwise we fall back to deterministic with a warning).
+	// a language-model adapter is used only when explicitly selected AND an API
+	// key is present (otherwise we fall back to deterministic with a warning).
 	var aiProvider ai.Provider = ai.NewDeterministicProvider()
 	// The storefront page designer follows the same split: deterministic template
-	// engine by default, Claude when explicitly selected with a key present.
+	// engine by default, Claude when explicitly selected with a key present (the
+	// OpenAI-compatible chat provider does not drive the page designer).
 	var pageDesigner ai.PageDesigner = ai.NewDeterministicPageDesigner()
-	if cfg.AIProvider == "claude" {
+	switch cfg.AIProvider {
+	case "claude":
 		if cfg.AnthropicAPIKey != "" {
 			aiProvider = ai.NewClaudeProvider(cfg.AnthropicAPIKey, cfg.AIModel)
 			pageDesigner = ai.NewClaudePageDesigner(cfg.AnthropicAPIKey, cfg.AIModel)
 		} else {
 			logger.Warn("AI_PROVIDER=claude but ANTHROPIC_API_KEY is empty; using deterministic engine")
+		}
+	case "openai":
+		if cfg.AIChatAPIKey != "" {
+			aiProvider = ai.NewOpenAIProvider(cfg.AIChatBaseURL, cfg.AIChatAPIKey, cfg.AIChatModel)
+			logger.Info("assistant using openai-compatible provider", "base_url", cfg.AIChatBaseURL, "model", cfg.AIChatModel)
+		} else {
+			logger.Warn("AI_PROVIDER=openai but AI_CHAT_API_KEY is empty; using deterministic engine")
 		}
 	}
 
