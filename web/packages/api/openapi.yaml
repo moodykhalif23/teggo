@@ -2280,6 +2280,35 @@ components:
         scheduled: { type: boolean }
         digest: { $ref: '#/components/schemas/InsightDigest' }
 
+    # ----- Audit trail -----
+    AuditEntry:
+      type: object
+      required: [id, created_at, actor_audience, action, entity_type, method, path, status_code]
+      properties:
+        id: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+        actor_user_id: { type: integer, format: int64 }
+        actor_audience: { type: string }
+        action: { type: string }
+        entity_type: { type: string }
+        entity_id: { type: integer, format: int64 }
+        method: { type: string }
+        path: { type: string }
+        status_code: { type: integer }
+        ip: { type: string }
+        user_agent: { type: string }
+        request_id: { type: string }
+        summary: { type: string }
+        metadata: { type: object, additionalProperties: true }
+    AuditLogList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+        total: { type: integer, format: int64 }
+        limit: { type: integer }
+        offset: { type: integer }
+
     # ----- Custom report builder (Pack 3 §1) -----
     ReportMeasure:
       type: object
@@ -5705,6 +5734,51 @@ paths:
       security: [{ adminAuth: [] }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/InsightDigest' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  # ----- Audit trail -----
+  /admin/audit:
+    get:
+      tags: [Audit]
+      operationId: adminListAudit
+      summary: Filterable, paginated audit trail of staff actions
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: actor, in: query, schema: { type: integer, format: int64 } }
+        - { name: audience, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: entity_id, in: query, schema: { type: integer, format: int64 } }
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuditLogList' } } } }
+  /admin/audit/export:
+    get:
+      tags: [Audit]
+      operationId: adminExportAudit
+      summary: Export the filtered audit trail as CSV
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { name: actor, in: query, schema: { type: integer, format: int64 } }
+        - { name: audience, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: entity_id, in: query, schema: { type: integer, format: int64 } }
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+  /admin/audit/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Audit]
+      operationId: adminGetAudit
+      security: [{ adminAuth: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuditEntry' } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
   # ----- Custom report builder (Pack 3 §1) -----
   /admin/reports/entities:

@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"b2bcommerce/internal/ai"
+	"b2bcommerce/internal/audit"
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/billing"
 	"b2bcommerce/internal/blob"
@@ -29,6 +30,7 @@ import (
 	erpmod "b2bcommerce/internal/modules/erp"
 	"b2bcommerce/internal/modules/field"
 	"b2bcommerce/internal/modules/fxadmin"
+	auditmod "b2bcommerce/internal/modules/audit"
 	"b2bcommerce/internal/modules/health"
 	insightsmod "b2bcommerce/internal/modules/insights"
 	"b2bcommerce/internal/modules/integration"
@@ -251,7 +253,11 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	planGate := billing.Gate(billingSvc)
 	authn := mw.Authenticator(issuer)
 	optAuthn := mw.OptionalAuthenticator(issuer)
-	authMW := func(next http.Handler) http.Handler { return authn(orgGate(planGate(next))) }
+	// Audit middleware records every state-changing admin/vendor request. It sits
+	// innermost (after claims are set) so it can attribute the actor and read any
+	// handler enrichment; reads (GET/HEAD) and buyer traffic pass through untouched.
+	auditMW := audit.NewRecorder(st.Pool(), o.logger).Middleware
+	authMW := func(next http.Handler) http.Handler { return authn(orgGate(planGate(auditMW(next)))) }
 	optAuthMW := func(next http.Handler) http.Handler { return optAuthn(orgGate(planGate(next))) }
 	// Throttle credential endpoints to blunt brute-force / credential stuffing.
 	loginLimit := mw.RateLimit(10, time.Minute)
@@ -286,6 +292,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	cms.New(st.Pool(), issuer, o.pageDesigner).Routes(r, authMW)
 	reporting.New(st.Pool()).Routes(r, authMW)
 	insightsmod.New(st.Pool()).WithNarrator(o.insightsNarr).WithEnqueuer(o.insightDigest).Routes(r, authMW)
+	auditmod.New(st.Pool()).Routes(r, authMW)
 	tenancy.New(st.Pool()).Routes(r, authMW)
 	if o.blobStore != nil {
 		proc := o.imageProc

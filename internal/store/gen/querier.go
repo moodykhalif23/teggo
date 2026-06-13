@@ -51,6 +51,7 @@ type Querier interface {
 	CategoryDescendantIDs(ctx context.Context, arg CategoryDescendantIDsParams) ([]int64, error)
 	ConsumeSignupVerification(ctx context.Context, id int64) (int64, error)
 	CountActiveProducts(ctx context.Context, organizationID int64) (int64, error)
+	CountAuditLog(ctx context.Context, arg CountAuditLogParams) (int64, error)
 	CountAutomationExecutions(ctx context.Context, ruleID int64) (int64, error)
 	CountCustomers(ctx context.Context, organizationID int64) (int64, error)
 	// CountLowStock is the org-wide count of low-stock lines (dashboard badge).
@@ -69,6 +70,10 @@ type Querier interface {
 	// ===== Attributes & families ==============================================
 	CreateAttribute(ctx context.Context, arg CreateAttributeParams) (Attribute, error)
 	CreateAttributeFamily(ctx context.Context, arg CreateAttributeFamilyParams) (AttributeFamily, error)
+	// Audit trail: append-only writes + a filterable, paginated viewer. The list /
+	// count / export queries share one optional-filter shape (every filter is a
+	// nullable arg; a NULL arg means "don't filter on this").
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error)
 	// Procurement budgets (migration 0039).
 	CreateBudget(ctx context.Context, arg CreateBudgetParams) (CustomerBudget, error)
@@ -259,6 +264,8 @@ type Querier interface {
 	DistinctTranslationLocales(ctx context.Context, organizationID int64) ([]string, error)
 	// ===== Levels ==============================================================
 	EnsureInventoryLevel(ctx context.Context, arg EnsureInventoryLevelParams) error
+	// ExportAuditLog is the list query without pagination, capped, for CSV export.
+	ExportAuditLog(ctx context.Context, arg ExportAuditLogParams) ([]AuditLog, error)
 	// ExportProductsAdmin streams the full (non-deleted) catalog for CSV export.
 	ExportProductsAdmin(ctx context.Context, organizationID int64) ([]ExportProductsAdminRow, error)
 	// FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
@@ -278,6 +285,7 @@ type Querier interface {
 	GetActiveCart(ctx context.Context, arg GetActiveCartParams) (Cart, error)
 	// ===== Activity get/update (writable on device) ============================
 	GetActivity(ctx context.Context, arg GetActivityParams) (Activity, error)
+	GetAuditLog(ctx context.Context, arg GetAuditLogParams) (AuditLog, error)
 	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
 	// GetBuyableProductIDByPublicID resolves a product id only when the product is
 	// buyable from the storefront: approved (operator products default approved;
@@ -503,6 +511,7 @@ type Querier interface {
 	ListAssignmentsForList(ctx context.Context, priceListID int64) ([]PriceListAssignment, error)
 	ListAttributeFamilies(ctx context.Context, organizationID int64) ([]AttributeFamily, error)
 	ListAttributes(ctx context.Context, organizationID int64) ([]Attribute, error)
+	ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]AuditLog, error)
 	ListAutomationRules(ctx context.Context, organizationID int64) ([]AutomationRule, error)
 	// Automation engine queries — Pack 2 §3.
 	// ListAutomationRulesByEvent returns active rules for a trigger event, across

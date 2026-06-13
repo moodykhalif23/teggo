@@ -3148,6 +3148,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Filterable, paginated audit trail of staff actions */
+        get: operations["adminListAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export the filtered audit trail as CSV */
+        get: operations["adminExportAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/reports/entities": {
         parameters: {
             query?: never;
@@ -6529,6 +6581,36 @@ export interface components {
         GenerateInsightResult: {
             scheduled: boolean;
             digest?: components["schemas"]["InsightDigest"];
+        };
+        AuditEntry: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            actor_user_id?: number;
+            actor_audience: string;
+            action: string;
+            entity_type: string;
+            /** Format: int64 */
+            entity_id?: number;
+            method: string;
+            path: string;
+            status_code: number;
+            ip?: string;
+            user_agent?: string;
+            request_id?: string;
+            summary?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        AuditLogList: {
+            items: components["schemas"]["AuditEntry"][];
+            /** Format: int64 */
+            total?: number;
+            limit?: number;
+            offset?: number;
         };
         ReportMeasure: {
             field?: string;
@@ -13028,6 +13110,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InsightDigest"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+        };
+    };
+    adminListAudit: {
+        parameters: {
+            query?: {
+                actor?: number;
+                audience?: string;
+                action?: string;
+                entity_type?: string;
+                entity_id?: number;
+                from?: string;
+                to?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogList"];
+                };
+            };
+        };
+    };
+    adminExportAudit: {
+        parameters: {
+            query?: {
+                actor?: number;
+                audience?: string;
+                action?: string;
+                entity_type?: string;
+                entity_id?: number;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    adminGetAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEntry"];
                 };
             };
             404: components["responses"]["ErrorResponse"];

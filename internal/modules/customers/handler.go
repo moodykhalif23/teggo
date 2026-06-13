@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
+	"b2bcommerce/internal/audit"
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/changelog"
 	mw "b2bcommerce/internal/server/middleware"
@@ -193,6 +194,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	// Record for field-sync: visible to the assigned rep's device.
 	changelog.Record(r.Context(), h.q, org, c.AssignedSalesRepID, "customer", c.ID, "upsert", toCustomerDTO(c))
+	audit.SetEntity(r.Context(), "customers", c.ID)
+	audit.SetSummary(r.Context(), "Created customer "+c.Name)
+	audit.SetChange(r.Context(), nil, toCustomerDTO(c))
 	response.JSON(w, http.StatusCreated, toCustomerDTO(c))
 }
 
@@ -260,6 +264,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Snapshot the prior state for the audit before/after (best-effort; the
+	// update below is the source of truth for not-found).
+	before, _ := h.q.GetCustomer(r.Context(), gen.GetCustomerParams{OrganizationID: org, ID: id})
+
 	c, err := h.q.UpdateCustomer(r.Context(), gen.UpdateCustomerParams{
 		OrganizationID:     org,
 		ID:                 id,
@@ -281,6 +289,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	changelog.Record(r.Context(), h.q, org, c.AssignedSalesRepID, "customer", c.ID, "upsert", toCustomerDTO(c))
+	audit.SetEntity(r.Context(), "customers", c.ID)
+	audit.SetSummary(r.Context(), "Updated customer "+c.Name)
+	var beforeDTO any
+	if before.ID != 0 {
+		beforeDTO = toCustomerDTO(before)
+	}
+	audit.SetChange(r.Context(), beforeDTO, toCustomerDTO(c))
 	response.JSON(w, http.StatusOK, toCustomerDTO(c))
 }
 

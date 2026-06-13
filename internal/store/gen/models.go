@@ -63,6 +63,25 @@ type AttributeFamilyAttribute struct {
 	SortOrder   int32 `json:"sort_order"`
 }
 
+type AuditLog struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	ActorUserID    *int64    `json:"actor_user_id"`
+	ActorAudience  string    `json:"actor_audience"`
+	Action         string    `json:"action"`
+	EntityType     string    `json:"entity_type"`
+	EntityID       *int64    `json:"entity_id"`
+	Method         string    `json:"method"`
+	Path           string    `json:"path"`
+	StatusCode     int32     `json:"status_code"`
+	Ip             string    `json:"ip"`
+	UserAgent      string    `json:"user_agent"`
+	RequestID      string    `json:"request_id"`
+	Summary        string    `json:"summary"`
+	Metadata       []byte    `json:"metadata"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type AutomationExecution struct {
 	ID           int64     `json:"id"`
 	RuleID       int64     `json:"rule_id"`
