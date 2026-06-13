@@ -365,10 +365,8 @@ func TestToyokaSimulation(t *testing.T) {
 	_ = seedPool.QueryRow(ctx, `SELECT count(*) FROM invoices i JOIN orders o ON o.id=i.order_id WHERE o.organization_id=$1`, orgID).Scan(&totalInvoices)
 	rep.logf("totals: orders=%d order_items=%d invoices=%d", totalOrders, totalItems, totalInvoices)
 
-	// Dump the findings to stdout AND a file the report step can read.
-	out := rep.b.String()
-	t.Log("\n" + out)
-	_ = os.WriteFile("toyoka_sim_result.txt", []byte(out), 0o644)
+	// Findings go to the test log (and are summarized in TOYOKA_SIMULATION.md).
+	t.Log("\n" + rep.b.String())
 }
 
 // ---- seeding (raw SQL for speed) -------------------------------------------
