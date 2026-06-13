@@ -793,23 +793,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/pricing/recompute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["adminRecomputePricing"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/customers/{id}/combined-prices": {
+    "/admin/customers/{id}/resolved-prices": {
         parameters: {
             query?: never;
             header?: never;
@@ -818,7 +802,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get: operations["adminCustomerCombinedPrices"];
+        /** A customer's contract prices, resolved live (no cache) over a keyset page of products. */
+        get: operations["adminCustomerResolvedPrices"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4945,24 +4930,22 @@ export interface components {
             source_price_list_id?: number;
             currency?: string;
         };
-        CombinedPrice: {
-            /** Format: int64 */
-            customer_id?: number;
+        ResolvedPrice: {
             /** Format: int64 */
             product_id?: number;
             unit?: string;
             min_quantity?: string;
-            currency?: string;
             value?: string;
             /** Format: int64 */
-            source_price_list_id?: number | null;
+            source_price_list_id?: number;
         };
-        RecomputeInput: {
-            /** Format: int64 */
-            customer_id: number;
-            /** Format: int64 */
-            website_id?: number | null;
-            currency?: string;
+        ResolvedPricePage: {
+            items?: components["schemas"]["ResolvedPrice"][];
+            /**
+             * Format: int64
+             * @description Keyset cursor for the next page, or null at the end.
+             */
+            next_after?: number | null;
         };
         ListWrapperPriceList: {
             items?: components["schemas"]["PriceList"][];
@@ -5028,9 +5011,6 @@ export interface components {
         };
         ListWrapperAssignment: {
             items?: components["schemas"]["PriceListAssignment"][];
-        };
-        ListWrapperCombinedPrice: {
-            items?: components["schemas"]["CombinedPrice"][];
         };
         CartItem: {
             /** Format: int64 */
@@ -5323,9 +5303,12 @@ export interface components {
         };
         RebateSettleResult: {
             period_key: string;
-            settled: number;
-            skipped: number;
-            total_rebate: string;
+            /** @description true when settlement was queued as a background job (large programs); the settled/skipped/total fields are then absent — poll the settlements list. */
+            scheduled?: boolean;
+            /** @description Present only when settled inline (small/single-customer programs). */
+            settled?: number;
+            skipped?: number;
+            total_rebate?: string;
         };
         RebateSettlement: {
             /** Format: int64 */
@@ -5954,6 +5937,13 @@ export interface components {
         };
         LowStockList: {
             items: components["schemas"]["LowStockItem"][];
+            /**
+             * Format: int64
+             * @description Total low-stock lines org-wide, for paging the full reorder worklist.
+             */
+            total?: number;
+            limit?: number;
+            offset?: number;
         };
         ListWrapperInventoryMovement: {
             items?: components["schemas"]["InventoryMovement"][];
@@ -8852,36 +8842,13 @@ export interface operations {
             };
         };
     };
-    adminRecomputePricing: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RecomputeInput"];
-            };
-        };
-        responses: {
-            /** @description Accepted */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        enqueued?: boolean;
-                    };
-                };
-            };
-        };
-    };
-    adminCustomerCombinedPrices: {
+    adminCustomerResolvedPrices: {
         parameters: {
             query: {
                 currency: string;
+                /** @description Keyset cursor — pass the previous page's next_after. */
+                after?: number;
+                limit?: number;
             };
             header?: never;
             path: {
@@ -8897,7 +8864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListWrapperCombinedPrice"];
+                    "application/json": components["schemas"]["ResolvedPricePage"];
                 };
             };
         };
@@ -11826,6 +11793,8 @@ export interface operations {
             query?: {
                 /** @description Max rows (1–500). */
                 limit?: number;
+                /** @description Row offset for paging the full worklist. */
+                offset?: number;
             };
             header?: never;
             path?: never;

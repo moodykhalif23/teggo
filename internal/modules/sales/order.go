@@ -121,10 +121,12 @@ func (h *Handler) acceptQuote(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return e
 		}
+		batch := make([]orderLineInput, len(items))
 		for i, it := range items {
-			if e := h.addOrderItemSnapshot(r.Context(), q, quote.OrganizationID, order.ID, it.ProductID, it.Quantity, it.Unit, it.UnitPrice, it.RowTotal, perLineTax[i]); e != nil {
-				return e
-			}
+			batch[i] = orderLineInput{ProductID: it.ProductID, Qty: it.Quantity, Unit: it.Unit, UnitPrice: it.UnitPrice, Total: it.RowTotal, TaxAmount: perLineTax[i]}
+		}
+		if e := h.addOrderItemsBatch(r.Context(), q, quote.OrganizationID, order.ID, batch); e != nil {
+			return e
 		}
 		// Fan the order into per-vendor sub-orders + commission (no-op when all
 		// lines are operator-owned).
@@ -330,13 +332,12 @@ func (h *Handler) placeOrderFromCart(w http.ResponseWriter, r *http.Request) {
 				return e
 			}
 		}
+		batch := make([]orderLineInput, len(lines))
 		for i, ln := range lines {
-			if _, e := q.AddOrderItem(r.Context(), gen.AddOrderItemParams{
-				OrderID: order.ID, ProductID: ln.pid, Sku: ln.sku, Name: ln.name,
-				Quantity: ln.qty, Unit: ln.unit, UnitPrice: ln.price, TaxAmount: perLineTax[i], RowTotal: ln.total,
-			}); e != nil {
-				return e
-			}
+			batch[i] = orderLineInput{ProductID: ln.pid, Qty: ln.qty, Unit: ln.unit, UnitPrice: ln.price, Total: ln.total, TaxAmount: perLineTax[i]}
+		}
+		if e := h.addOrderItemsBatch(r.Context(), q, cc.orgID, order.ID, batch); e != nil {
+			return e
 		}
 		// Fan the order into per-vendor sub-orders + commission (no-op when all
 		// lines are operator-owned).
@@ -485,10 +486,12 @@ func (h *Handler) createOrderOnBehalf(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return e
 		}
+		batch := make([]orderLineInput, len(lines))
 		for i, ln := range lines {
-			if e := h.addOrderItemSnapshot(r.Context(), q, a.orgID, order.ID, ln.pid, ln.qty, ln.unit, ln.price, ln.rt, perLineTax[i]); e != nil {
-				return e
-			}
+			batch[i] = orderLineInput{ProductID: ln.pid, Qty: ln.qty, Unit: ln.unit, UnitPrice: ln.price, Total: ln.rt, TaxAmount: perLineTax[i]}
+		}
+		if e := h.addOrderItemsBatch(r.Context(), q, a.orgID, order.ID, batch); e != nil {
+			return e
 		}
 		// Fan the order into per-vendor sub-orders + commission (no-op when all
 		// lines are operator-owned).
@@ -707,22 +710,61 @@ func (h *Handler) snapshotAddress(ctx context.Context, q *gen.Queries, customerI
 	return b
 }
 
-// addOrderItemSnapshot copies the product's current sku/name onto the order line
-// (orders are immutable records, not live joins).
-func (h *Handler) addOrderItemSnapshot(ctx context.Context, q *gen.Queries, orgID, orderID, productID int64, qty, unit, unitPrice, rowTotal, taxAmount string) error {
-	p, err := q.GetProductByID(ctx, gen.GetProductByIDParams{OrganizationID: orgID, ID: productID})
-	sku, name := "", ""
-	if err == nil {
-		sku, name = p.Sku, p.Name
+// orderLineInput is one line to snapshot onto an order (product + amounts).
+type orderLineInput struct {
+	ProductID                   int64
+	Qty, Unit, UnitPrice, Total string
+	TaxAmount                   string
+}
+
+func (h *Handler) addOrderItemsBatch(ctx context.Context, q *gen.Queries, orgID, orderID int64, lines []orderLineInput) error {
+	if len(lines) == 0 {
+		return nil
 	}
-	if taxAmount == "" {
-		taxAmount = "0"
+	ids := make([]int64, 0, len(lines))
+	seen := make(map[int64]bool, len(lines))
+	for _, ln := range lines {
+		if !seen[ln.ProductID] {
+			seen[ln.ProductID] = true
+			ids = append(ids, ln.ProductID)
+		}
 	}
-	_, err = q.AddOrderItem(ctx, gen.AddOrderItemParams{
-		OrderID: orderID, ProductID: productID, Sku: sku, Name: name,
-		Quantity: qty, Unit: unit, UnitPrice: unitPrice, TaxAmount: taxAmount, RowTotal: rowTotal,
-	})
-	return err
+	prods, err := q.GetProductsByIDs(ctx, gen.GetProductsByIDsParams{OrganizationID: orgID, Column2: ids})
+	if err != nil {
+		return err
+	}
+	type sn struct{ sku, name string }
+	byID := make(map[int64]sn, len(prods))
+	for _, p := range prods {
+		byID[p.ID] = sn{p.Sku, p.Name}
+	}
+	type row struct {
+		ProductID int64  `json:"product_id"`
+		Sku       string `json:"sku"`
+		Name      string `json:"name"`
+		Quantity  string `json:"quantity"`
+		Unit      string `json:"unit"`
+		UnitPrice string `json:"unit_price"`
+		TaxAmount string `json:"tax_amount"`
+		RowTotal  string `json:"row_total"`
+	}
+	out := make([]row, len(lines))
+	for i, ln := range lines {
+		s := byID[ln.ProductID]
+		tax := ln.TaxAmount
+		if tax == "" {
+			tax = "0"
+		}
+		out[i] = row{
+			ProductID: ln.ProductID, Sku: s.sku, Name: s.name,
+			Quantity: ln.Qty, Unit: ln.Unit, UnitPrice: ln.UnitPrice, TaxAmount: tax, RowTotal: ln.Total,
+		}
+	}
+	payload, err := json.Marshal(out)
+	if err != nil {
+		return err
+	}
+	return q.AddOrderItemsBatch(ctx, gen.AddOrderItemsBatchParams{OrderID: orderID, Lines: payload})
 }
 
 func (h *Handler) renderOrder(w http.ResponseWriter, r *http.Request, order gen.Order) {

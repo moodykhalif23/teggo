@@ -204,6 +204,32 @@ func (q *Queries) GetRebateProgram(ctx context.Context, arg GetRebateProgramPara
 	return i, err
 }
 
+const getRebateProgramByID = `-- name: GetRebateProgramByID :one
+SELECT id, public_id, organization_id, name, description, customer_id, period, basis, currency, is_active, created_at, updated_at FROM rebate_programs WHERE id = $1
+`
+
+// GetRebateProgramByID loads a program without org scoping, for the trusted
+// background settlement worker (the enqueue was already org-authorized).
+func (q *Queries) GetRebateProgramByID(ctx context.Context, id int64) (RebateProgram, error) {
+	row := q.db.QueryRow(ctx, getRebateProgramByID, id)
+	var i RebateProgram
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.CustomerID,
+		&i.Period,
+		&i.Basis,
+		&i.Currency,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listActiveRebateProgramsForCustomer = `-- name: ListActiveRebateProgramsForCustomer :many
 SELECT id, public_id, organization_id, name, description, customer_id, period, basis, currency, is_active, created_at, updated_at FROM rebate_programs
 WHERE organization_id = $1 AND is_active AND (customer_id IS NULL OR customer_id = $2)

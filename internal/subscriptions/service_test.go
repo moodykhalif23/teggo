@@ -59,12 +59,7 @@ func TestMaterializeDue(t *testing.T) {
 	if _, err := q.CreatePriceListAssignment(ctx, gen.CreatePriceListAssignmentParams{PriceListID: list.ID, CustomerID: &cust.ID}); err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	wid := int64(1)
-	if err := q.RecomputeCombinedPricesForCustomer(ctx, gen.RecomputeCombinedPricesForCustomerParams{
-		CustomerID: cust.ID, WebsiteID: &wid, Currency: "USD", ComputedAt: time.Now(),
-	}); err != nil {
-		t.Fatalf("recompute: %v", err)
-	}
+	// Price resolves live at run time — no cache to prime.
 
 	today := time.Now().UTC()
 	sub, err := q.CreateSubscription(ctx, gen.CreateSubscriptionParams{
@@ -129,8 +124,6 @@ func TestMaterializeAppliesPromotion(t *testing.T) {
 	list, _ := q.CreatePriceList(ctx, gen.CreatePriceListParams{OrganizationID: 1, Name: "L", Currency: "USD", IsActive: true})
 	_, _ = q.UpsertPrice(ctx, gen.UpsertPriceParams{PriceListID: list.ID, ProductID: prod.ID, Unit: "each", MinQuantity: "1", Value: "10.0000"})
 	_, _ = q.CreatePriceListAssignment(ctx, gen.CreatePriceListAssignmentParams{PriceListID: list.ID, CustomerID: &cust.ID})
-	wid := int64(1)
-	_ = q.RecomputeCombinedPricesForCustomer(ctx, gen.RecomputeCombinedPricesForCustomerParams{CustomerID: cust.ID, WebsiteID: &wid, Currency: "USD", ComputedAt: time.Now()})
 
 	// Automatic 10%-off promotion.
 	if _, err := q.CreatePromotion(ctx, gen.CreatePromotionParams{OrganizationID: 1, Name: "10% off", DiscountType: "percent", DiscountValue: "10", IsActive: true}); err != nil {

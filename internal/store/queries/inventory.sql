@@ -64,8 +64,8 @@ WHERE p.organization_id = $1
   AND p.deleted_at IS NULL
   AND il.reorder_threshold IS NOT NULL
   AND (il.quantity_on_hand - il.quantity_reserved) <= il.reorder_threshold
-ORDER BY (il.quantity_on_hand - il.quantity_reserved) - il.reorder_threshold ASC, p.name
-LIMIT $2;
+ORDER BY (il.quantity_on_hand - il.quantity_reserved) - il.reorder_threshold ASC, p.name, p.id
+LIMIT $2 OFFSET $3;
 
 -- CountLowStock is the org-wide count of low-stock lines (dashboard badge).
 -- name: CountLowStock :one

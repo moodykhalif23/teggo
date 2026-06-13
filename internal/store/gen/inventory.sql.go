@@ -352,13 +352,14 @@ WHERE p.organization_id = $1
   AND p.deleted_at IS NULL
   AND il.reorder_threshold IS NOT NULL
   AND (il.quantity_on_hand - il.quantity_reserved) <= il.reorder_threshold
-ORDER BY (il.quantity_on_hand - il.quantity_reserved) - il.reorder_threshold ASC, p.name
-LIMIT $2
+ORDER BY (il.quantity_on_hand - il.quantity_reserved) - il.reorder_threshold ASC, p.name, p.id
+LIMIT $2 OFFSET $3
 `
 
 type ListLowStockParams struct {
 	OrganizationID int64 `json:"organization_id"`
 	Limit          int32 `json:"limit"`
+	Offset         int32 `json:"offset"`
 }
 
 type ListLowStockRow struct {
@@ -377,7 +378,7 @@ type ListLowStockRow struct {
 // org-scoped, worst (largest shortfall) first. Lines with no threshold configured
 // are excluded — there's no signal to compare available stock against.
 func (q *Queries) ListLowStock(ctx context.Context, arg ListLowStockParams) ([]ListLowStockRow, error) {
-	rows, err := q.db.Query(ctx, listLowStock, arg.OrganizationID, arg.Limit)
+	rows, err := q.db.Query(ctx, listLowStock, arg.OrganizationID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

@@ -150,12 +150,17 @@ async function settle() {
     toast.add({ severity: 'error', summary: errMessage(err, 'Settle failed'), life: 4000 })
     return
   }
-  toast.add({
-    severity: 'success',
-    summary: `Settled ${data?.settled ?? 0} · ${data?.total_rebate ?? 0} ${detail.value.currency}`,
-    detail: data?.skipped ? `${data.skipped} already settled or below threshold` : undefined,
-    life: 4000,
-  })
+  if (data?.scheduled) {
+    // Large programs settle as a background job — results appear once it runs.
+    toast.add({ severity: 'info', summary: 'Settlement scheduled', detail: 'Issuing credit notes in the background; refresh shortly.', life: 4000 })
+  } else {
+    toast.add({
+      severity: 'success',
+      summary: `Settled ${data?.settled ?? 0} · ${data?.total_rebate ?? 0} ${detail.value.currency}`,
+      detail: data?.skipped ? `${data.skipped} already settled or below threshold` : undefined,
+      life: 4000,
+    })
+  }
   refreshSettlements()
 }
 

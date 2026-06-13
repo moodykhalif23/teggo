@@ -106,6 +106,18 @@ INSERT INTO order_items (order_id, product_id, sku, name, quantity, unit, unit_p
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
+-- name: AddOrderItemsBatch :exec
+INSERT INTO order_items (order_id, product_id, sku, name, quantity, unit, unit_price, tax_amount, row_total)
+SELECT sqlc.arg(order_id)::bigint, t.product_id, t.sku, t.name,
+       t.quantity::numeric, t.unit, t.unit_price::numeric, t.tax_amount::numeric, t.row_total::numeric
+FROM jsonb_to_recordset(sqlc.arg(lines)::jsonb) AS t(
+  product_id bigint, sku text, name text, quantity text, unit text,
+  unit_price text, tax_amount text, row_total text
+);
+
+-- name: GetProductsByIDs :many
+SELECT id, sku, name FROM products WHERE organization_id = $1 AND id = ANY($2::bigint[]);
+
 -- name: GetOrderByID :one
 SELECT * FROM orders WHERE organization_id = $1 AND id = $2;
 

@@ -135,17 +135,6 @@ type ChangeLog struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-type CombinedPrice struct {
-	CustomerID        int64     `json:"customer_id"`
-	ProductID         int64     `json:"product_id"`
-	Unit              string    `json:"unit"`
-	MinQuantity       string    `json:"min_quantity"`
-	Currency          string    `json:"currency"`
-	Value             string    `json:"value"`
-	SourcePriceListID *int64    `json:"source_price_list_id"`
-	ComputedAt        time.Time `json:"computed_at"`
-}
-
 type ConfigRule struct {
 	ID              int64  `json:"id"`
 	ProductID       int64  `json:"product_id"`

@@ -117,6 +117,14 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 		return false, err
 	}
 
+	// Website for the price-resolution fallback level (the org default; a
+	// subscription isn't tied to a specific website). A missing website just
+	// drops the level-1 fallback — customer/group lists still resolve.
+	var subWebsiteID *int64
+	if ws, e := q.GetDefaultWebsite(ctx, sub.OrganizationID); e == nil {
+		subWebsiteID = &ws.ID
+	}
+
 	type line struct {
 		pid                  int64
 		qty, unit, price, rt string
@@ -125,8 +133,9 @@ func runOne(ctx context.Context, pool *pgxpool.Pool, sub gen.Subscription, today
 	var totals []string
 	var problem string
 	for _, it := range items {
-		price, perr := q.GetCombinedPrice(ctx, gen.GetCombinedPriceParams{
-			CustomerID: sub.CustomerID, ProductID: it.ProductID, Unit: it.Unit, Column4: it.Quantity, Currency: sub.Currency,
+		price, perr := q.ResolvePriceTier(ctx, gen.ResolvePriceTierParams{
+			ID: sub.CustomerID, ProductID: it.ProductID, Unit: it.Unit, Column4: it.Quantity,
+			Currency: sub.Currency, WebsiteID: subWebsiteID, ValidFrom: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		})
 		if perr != nil {
 			problem = "no current price for " + it.Sku

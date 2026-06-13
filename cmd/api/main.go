@@ -65,8 +65,6 @@ func main() {
 	st := store.New(pool)
 	issuer := auth.NewIssuer(cfg.JWTSecret, cfg.JWTTTL)
 
-	// Insert-only river client so the API can enqueue background work
-	// (e.g. combined_prices recompute). The worker process runs the jobs.
 	enq, err := queue.NewEnqueuer(pool)
 	if err != nil {
 		logger.Error("queue init failed", "err", err)
@@ -129,9 +127,9 @@ func main() {
 	}
 
 	handler := server.New(st, issuer,
-		server.WithRecompute(enq),
 		server.WithInvoicePDF(enq),
 		server.WithNotifier(enq),
+		server.WithRebateSettle(enq),
 		server.WithPlatform(cfg.PlatformBaseDomain, cfg.SignupVerifyURL),
 		server.WithSecrets(secrets),
 		server.WithPaymentGateway(gw),

@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/auth"
-	"b2bcommerce/internal/queue/jobs"
 	"b2bcommerce/internal/server"
 	"b2bcommerce/internal/store"
 	"b2bcommerce/internal/store/gen"
@@ -25,23 +24,22 @@ import (
 
 const testSecret = "test-secret-please-change"
 
-// syncEnqueuer runs the recompute job inline (no worker loop) so HTTP tests can
-// assert combined_prices deterministically. It implements pricing.Enqueuer.
-type syncEnqueuer struct{ pool *pgxpool.Pool }
-
-func (s syncEnqueuer) EnqueueRecompute(ctx context.Context, customerID int64, websiteID *int64, currency string) error {
-	return jobs.RecomputeForCustomer(ctx, s.pool, jobs.RecomputeCombinedPricesArgs{
-		CustomerID: customerID, WebsiteID: websiteID, Currency: currency,
-	})
-}
-
 func newServer(t *testing.T) (http.Handler, *auth.Issuer, *pgxpool.Pool) {
 	t.Helper()
 	pool := testsupport.NewDB(t)
 	st := store.New(pool)
 	issuer := auth.NewIssuer(testSecret, time.Hour)
-	h := server.New(st, issuer, server.WithRecompute(syncEnqueuer{pool: pool}))
+	h := server.New(st, issuer)
 	return h, issuer, pool
+}
+
+// resolveTier is the read-time price resolution helper the tests assert against
+// (replaces the old combined_prices cache reads).
+func resolveTier(ctx context.Context, q *gen.Queries, cust, prod int64, qty string) (gen.ResolvePriceTierRow, error) {
+	return q.ResolvePriceTier(ctx, gen.ResolvePriceTierParams{
+		ID: cust, ProductID: prod, Unit: "each", Column4: qty, Currency: "USD",
+		WebsiteID: ptr(int64(1)), ValidFrom: nowTs(),
+	})
 }
 
 func token(t *testing.T, issuer *auth.Issuer, perms ...string) string {
@@ -218,9 +216,9 @@ func TestResolvePrice_GroupLevel(t *testing.T) {
 	}
 }
 
-// ---- Recompute job: combined_prices flattening ---------------------------
+// ---- Read-time resolution: winning list + tiers + website fallback --------
 
-func TestRecompute_FlattensWinningList(t *testing.T) {
+func TestResolvePriceTier_WinningListAndTiers(t *testing.T) {
 	pool := testsupport.NewDB(t)
 	q := gen.New(pool)
 	ctx := context.Background()
@@ -246,46 +244,39 @@ func TestRecompute_FlattensWinningList(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := jobs.RecomputeForCustomer(ctx, pool, jobs.RecomputeCombinedPricesArgs{
-		CustomerID: cust, WebsiteID: ptr(website), Currency: "USD",
-	}); err != nil {
-		t.Fatalf("recompute: %v", err)
+	// Resolved live: A → customer list (tiered); B → website fallback. No cache,
+	// no recompute — the prices above are in effect immediately.
+	if r, err := resolveTier(ctx, q, cust, prodA, "1"); err != nil || r.Value != "80.0000" {
+		t.Errorf("A@1: want 80.0000, got %q err=%v", r.Value, err)
+	}
+	if r, err := resolveTier(ctx, q, cust, prodA, "10"); err != nil || r.Value != "75.0000" {
+		t.Errorf("A@10 (tier): want 75.0000, got %q err=%v", r.Value, err)
+	}
+	if r, err := resolveTier(ctx, q, cust, prodB, "1"); err != nil || r.Value != "200.0000" {
+		t.Errorf("B@1 (website fallback): want 200.0000, got %q err=%v", r.Value, err)
 	}
 
-	// A resolves to the customer list (2 tiers); B falls back to the website list.
-	getCombined := func(prod int64, qty string) gen.GetCombinedPriceRow {
-		row, err := q.GetCombinedPrice(ctx, gen.GetCombinedPriceParams{
-			CustomerID: cust, ProductID: prod, Unit: "each", Column4: qty, Currency: "USD",
-		})
-		if err != nil {
-			t.Fatalf("combined %d@%s: %v", prod, qty, err)
-		}
-		return row
+	// The tiers-for-slug read returns the winning list's full tier ladder for A.
+	tiers, err := q.ResolvePriceTiersForSlug(ctx, gen.ResolvePriceTiersForSlugParams{
+		ID: cust, Slug: "a-1", OrganizationID: 1, Currency: "USD", WebsiteID: ptr(website), ValidFrom: nowTs(),
+	})
+	if err != nil {
+		t.Fatalf("tiers: %v", err)
 	}
-	if r := getCombined(prodA, "1"); r.Value != "80.0000" {
-		t.Errorf("A@1: want 80.0000, got %q", r.Value)
-	}
-	if r := getCombined(prodA, "10"); r.Value != "75.0000" {
-		t.Errorf("A@10 (tier): want 75.0000, got %q", r.Value)
-	}
-	if r := getCombined(prodB, "1"); r.Value != "200.0000" {
-		t.Errorf("B@1 (website fallback): want 200.0000, got %q", r.Value)
+	if len(tiers) != 2 || tiers[0].Value != "80.0000" || tiers[1].Value != "75.0000" {
+		t.Errorf("A tiers: want [80,75], got %+v", tiers)
 	}
 
-	// Recompute is idempotent: running again yields the same row count.
-	before, _ := q.ListCombinedPricesForCustomer(ctx, gen.ListCombinedPricesForCustomerParams{CustomerID: cust, Currency: "USD"})
-	if err := jobs.RecomputeForCustomer(ctx, pool, jobs.RecomputeCombinedPricesArgs{CustomerID: cust, WebsiteID: ptr(website), Currency: "USD"}); err != nil {
-		t.Fatal(err)
-	}
-	after, _ := q.ListCombinedPricesForCustomer(ctx, gen.ListCombinedPricesForCustomerParams{CustomerID: cust, Currency: "USD"})
-	if len(before) != len(after) || len(after) != 3 {
-		t.Errorf("idempotent recompute: want 3 rows both times, got before=%d after=%d", len(before), len(after))
+	// A price change is live on the very next read — no fan-out, no staleness.
+	addPrice(t, q, custList.ID, prodA, "1", "60.0000", nil)
+	if r, err := resolveTier(ctx, q, cust, prodA, "1"); err != nil || r.Value != "60.0000" {
+		t.Errorf("A@1 after edit: want 60.0000 immediately, got %q err=%v", r.Value, err)
 	}
 }
 
-// ---- HTTP: auth gate + recompute endpoint --------------------------------
+// ---- HTTP: auth gate + live read-time resolution -------------------------
 
-func TestPricing_AuthGateAndRecomputeEndpoint(t *testing.T) {
+func TestPricing_AuthGateAndLiveResolution(t *testing.T) {
 	h, issuer, pool := newServer(t)
 	q := gen.New(pool)
 	ctx := context.Background()
@@ -324,23 +315,12 @@ func TestPricing_AuthGateAndRecomputeEndpoint(t *testing.T) {
 		t.Fatalf("upsert price: %d (%s)", rr.Code, rr.Body.String())
 	}
 
-	// The auto-enqueue (sync) should already have populated combined_prices.
-	got, err := q.GetCombinedPrice(ctx, gen.GetCombinedPriceParams{
-		CustomerID: cust, ProductID: prod, Unit: "each", Column4: "1", Currency: "USD",
-	})
-	if err != nil {
-		t.Fatalf("expected combined price after auto-recompute: %v", err)
-	}
-	if got.Value != "42.0000" {
-		t.Errorf("combined value: want 42.0000, got %q", got.Value)
+	// No recompute, no cache: read-time resolution reflects the price immediately.
+	if got, err := resolveTier(ctx, q, cust, prod, "1"); err != nil || got.Value != "42.0000" {
+		t.Fatalf("live resolve: want 42.0000, got %q err=%v", got.Value, err)
 	}
 
-	// Explicit recompute endpoint returns 202.
-	if rr := do(t, h, http.MethodPost, "/admin/pricing/recompute", tok, map[string]any{"customer_id": cust}); rr.Code != http.StatusAccepted {
-		t.Fatalf("recompute endpoint: want 202, got %d (%s)", rr.Code, rr.Body.String())
-	}
-
-	// resolve endpoint reflects the price.
+	// resolve endpoint reflects the price too.
 	rr := do(t, h, http.MethodGet, "/admin/pricing/resolve?customer_id="+strconv.FormatInt(cust, 10)+"&product_id="+strconv.FormatInt(prod, 10)+"&quantity=1&currency=USD", tok, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("resolve: %d (%s)", rr.Code, rr.Body.String())
@@ -352,6 +332,22 @@ func TestPricing_AuthGateAndRecomputeEndpoint(t *testing.T) {
 	_ = json.Unmarshal(rr.Body.Bytes(), &res)
 	if res.PriceOnRequest || res.Value != "42.0000" {
 		t.Errorf("resolve result: want value 42.0000, got %+v", res)
+	}
+
+	// The resolved-prices admin page returns this customer's live prices.
+	pr := do(t, h, http.MethodGet, "/admin/customers/"+strconv.FormatInt(cust, 10)+"/resolved-prices?currency=USD", tok, nil)
+	if pr.Code != http.StatusOK {
+		t.Fatalf("resolved-prices: %d (%s)", pr.Code, pr.Body.String())
+	}
+	var page struct {
+		Items []struct {
+			ProductID int64  `json:"product_id"`
+			Value     string `json:"value"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(pr.Body.Bytes(), &page)
+	if len(page.Items) != 1 || page.Items[0].Value != "42.0000" {
+		t.Errorf("resolved-prices page: want [42.0000], got %+v", page.Items)
 	}
 }
 
@@ -424,19 +420,14 @@ func TestResolvePrice_InheritsFromAncestor(t *testing.T) {
 		t.Fatalf("own price beats inherited: want 30.0000, got %q err=%v", row.Value, err)
 	}
 
-	// Inheritance also flows through the precomputed combined_prices path: a
-	// fresh customer whose only price source is its parent's list (42).
+	// Inheritance also flows through the read-time tier resolver: a fresh
+	// customer whose only price source is its parent's list (42).
 	niece := mkCustomer(t, q, 1, "Niece Co", nil)
 	if _, err := pool.Exec(ctx, `UPDATE customers SET parent_id=$1 WHERE id=$2`, parent, niece); err != nil {
 		t.Fatalf("set niece parent: %v", err)
 	}
-	if err := q.RecomputeCombinedPricesForCustomer(ctx, gen.RecomputeCombinedPricesForCustomerParams{
-		CustomerID: niece, WebsiteID: ptr(int64(website)), Currency: "USD", ComputedAt: time.Now(),
-	}); err != nil {
-		t.Fatalf("recompute niece: %v", err)
-	}
-	cp, err := q.GetCombinedPrice(ctx, gen.GetCombinedPriceParams{CustomerID: niece, ProductID: prod, Unit: "each", Currency: "USD", Column4: "1"})
+	cp, err := resolveTier(ctx, q, niece, prod, "1")
 	if err != nil || cp.Value != "42.0000" {
-		t.Fatalf("niece inherits parent price via combined_prices: want 42.0000, got %q err=%v", cp.Value, err)
+		t.Fatalf("niece inherits parent price via read-time resolution: want 42.0000, got %q err=%v", cp.Value, err)
 	}
 }

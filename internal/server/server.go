@@ -66,9 +66,9 @@ type notifier interface {
 
 // options holds optional dependencies wired in by the caller.
 type options struct {
-	recompute      pricing.Enqueuer
 	pdf            otc.PDFEnqueuer
 	notifier       notifier
+	rebateSettle   rebate.SettleEnqueuer
 	gateway        gateway.Gateway
 	logger         *slog.Logger
 	maxBodyBytes   int64
@@ -128,8 +128,10 @@ func WithShippingProvider(p shippingeng.Adapter) Option {
 	return func(o *options) { o.shipProvider = p }
 }
 
-func WithRecompute(e pricing.Enqueuer) Option {
-	return func(o *options) { o.recompute = e }
+// WithRebateSettle wires the async rebate-settlement enqueuer. Without it,
+// settlement runs inline on the request (fine at small scale / in tests).
+func WithRebateSettle(e rebate.SettleEnqueuer) Option {
+	return func(o *options) { o.rebateSettle = e }
 }
 
 // WithInvoicePDF wires the invoice-PDF enqueuer into the order-to-cash module.
@@ -251,11 +253,11 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	mp.RoutesVendor(r, authMW)
 	assistant.New(st.Queries(), o.aiProvider).Routes(r, authMW)
 	settings.NewWithSecrets(st.Pool(), o.secrets).RoutesWithOptionalAuth(r, authMW, optAuthMW)
-	pricing.New(st.Queries(), o.recompute).Routes(r, authMW)
+	pricing.New(st.Queries()).Routes(r, authMW)
 	promo.New(st.Queries()).Routes(r, authMW)
 	fxadmin.New(st.Pool()).Routes(r, authMW)
 	merch.New(st.Pool()).Routes(r, authMW)
-	rebate.New(st.Pool()).Routes(r, authMW)
+	rebate.New(st.Pool()).WithSettle(o.rebateSettle).Routes(r, authMW)
 	subscription.New(st.Pool()).Routes(r, authMW)
 	cart.New(st.Queries()).Routes(r, authMW)
 	sales.New(st.Pool(), o.notifier).Routes(r, authMW)

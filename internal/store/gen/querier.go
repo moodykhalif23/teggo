@@ -26,6 +26,7 @@ type Querier interface {
 	AddMenuItem(ctx context.Context, arg AddMenuItemParams) (MenuItem, error)
 	AddOpportunityStageHistory(ctx context.Context, arg AddOpportunityStageHistoryParams) error
 	AddOrderItem(ctx context.Context, arg AddOrderItemParams) (OrderItem, error)
+	AddOrderItemsBatch(ctx context.Context, arg AddOrderItemsBatchParams) error
 	AddOrderStatusHistory(ctx context.Context, arg AddOrderStatusHistoryParams) error
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
 	AddRFQItem(ctx context.Context, arg AddRFQItemParams) (RfqItem, error)
@@ -216,10 +217,6 @@ type Querier interface {
 	// CustomerTimeline aggregates activities linked to a customer directly, via its
 	// contacts, or via its opportunities (Pack 2 §1.4), newest first.
 	CustomerTimeline(ctx context.Context, arg CustomerTimelineParams) ([]Activity, error)
-	// CustomersAffectedByPriceList returns every customer whose resolved price may
-	// change when this price list changes (direct, via group, or via any website
-	// assignment of the list). Used to fan out recompute jobs.
-	CustomersAffectedByPriceList(ctx context.Context, id int64) ([]int64, error)
 	// Reporting queries — Pack 3 §1. All read from the precomputed materialized
 	// views, org-scoped.
 	// DailySales returns the daily revenue/order series within a date range
@@ -230,7 +227,6 @@ type Querier interface {
 	DeleteBudget(ctx context.Context, arg DeleteBudgetParams) (int64, error)
 	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteCatalogVisibility(ctx context.Context, arg DeleteCatalogVisibilityParams) (int64, error)
-	DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error
 	DeleteConfigSetting(ctx context.Context, arg DeleteConfigSettingParams) (int64, error)
 	DeleteFxRate(ctx context.Context, arg DeleteFxRateParams) (int64, error)
 	DeleteMediaTags(ctx context.Context, mediaAssetID int64) error
@@ -285,10 +281,6 @@ type Querier interface {
 	GetCartItem(ctx context.Context, arg GetCartItemParams) (CartItem, error)
 	GetCategory(ctx context.Context, arg GetCategoryParams) (Category, error)
 	GetCategoryBySlug(ctx context.Context, arg GetCategoryBySlugParams) (Category, error)
-	// ===== combined_prices (precomputed read path) =============================
-	// GetCombinedPrice is the O(1) storefront read: the resolved tier for a qty.
-	// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency
-	GetCombinedPrice(ctx context.Context, arg GetCombinedPriceParams) (GetCombinedPriceRow, error)
 	GetContact(ctx context.Context, arg GetContactParams) (Contact, error)
 	// GetCpqProduct authorizes a product-scoped operation against the caller's org.
 	GetCpqProduct(ctx context.Context, arg GetCpqProductParams) (int64, error)
@@ -394,6 +386,7 @@ type Querier interface {
 	// GetProductVendorBySlug returns the marketplace vendor name for a product, when
 	// it is vendor-owned (no row for operator/house products). Storefront "sold by".
 	GetProductVendorBySlug(ctx context.Context, arg GetProductVendorBySlugParams) (string, error)
+	GetProductsByIDs(ctx context.Context, arg GetProductsByIDsParams) ([]GetProductsByIDsRow, error)
 	GetPromotion(ctx context.Context, arg GetPromotionParams) (Promotion, error)
 	// GetPublishedPage resolves a published page by website + locale + slug (the
 	// storefront read path).
@@ -406,6 +399,9 @@ type Querier interface {
 	GetRFQByID(ctx context.Context, arg GetRFQByIDParams) (Rfq, error)
 	GetRFQByPublicID(ctx context.Context, arg GetRFQByPublicIDParams) (Rfq, error)
 	GetRebateProgram(ctx context.Context, arg GetRebateProgramParams) (RebateProgram, error)
+	// GetRebateProgramByID loads a program without org scoping, for the trusted
+	// background settlement worker (the enqueue was already org-authorized).
+	GetRebateProgramByID(ctx context.Context, id int64) (RebateProgram, error)
 	// Media queries moved to dam.sql (Pack 3 §2 — Digital Asset Management).
 	// ===== Redirects ===========================================================
 	GetRedirect(ctx context.Context, arg GetRedirectParams) (Redirect, error)
@@ -507,7 +503,6 @@ type Querier interface {
 	// scoped via the product join so admins can't read across tenants).
 	ListCatalogVisibilityForProduct(ctx context.Context, arg ListCatalogVisibilityForProductParams) ([]CatalogVisibility, error)
 	ListCategories(ctx context.Context, organizationID int64) ([]Category, error)
-	ListCombinedPricesForCustomer(ctx context.Context, arg ListCombinedPricesForCustomerParams) ([]CombinedPrice, error)
 	ListConfigRules(ctx context.Context, productID int64) ([]ConfigRule, error)
 	// Hierarchical config settings (migration 0036).
 	ListConfigSettings(ctx context.Context, organizationID int64) ([]ConfigSetting, error)
@@ -516,10 +511,6 @@ type Querier interface {
 	ListCreditNotesForReturn(ctx context.Context, returnID *int64) ([]CreditNote, error)
 	ListCustomerAddresses(ctx context.Context, customerID int64) ([]CustomerAddress, error)
 	ListCustomerGroups(ctx context.Context, organizationID int64) ([]CustomerGroup, error)
-	// ListCustomerPriceTiersForSlug returns every volume tier (min_quantity break)
-	// resolved for a customer on a product, so the storefront can show the buyer
-	// their contract pricing ("buy 100+ at X").
-	ListCustomerPriceTiersForSlug(ctx context.Context, arg ListCustomerPriceTiersForSlugParams) ([]ListCustomerPriceTiersForSlugRow, error)
 	ListCustomerUsers(ctx context.Context, customerID int64) ([]ListCustomerUsersRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error)
 	ListCustomersByGroup(ctx context.Context, arg ListCustomersByGroupParams) ([]Customer, error)
@@ -631,6 +622,12 @@ type Querier interface {
 	ListReportDefinitions(ctx context.Context, organizationID int64) ([]ReportDefinition, error)
 	ListReportRuns(ctx context.Context, reportDefinitionID int64) ([]ListReportRunsRow, error)
 	ListReportSchedules(ctx context.Context, reportDefinitionID int64) ([]ReportSchedule, error)
+	// ListResolvedPricesForCustomer resolves the winning price per product for a
+	// customer over a KEYSET page of products (id > $6, limit $7). Replaces the
+	// admin ListCombinedPricesForCustomer read; paginated so it never resolves the
+	// whole catalog at once.
+	// params: $1 customer_id, $2 website_id, $3 currency, $4 at, $5 organization_id, $6 after_product_id, $7 limit
+	ListResolvedPricesForCustomer(ctx context.Context, arg ListResolvedPricesForCustomerParams) ([]ListResolvedPricesForCustomerRow, error)
 	ListReturnItems(ctx context.Context, returnID int64) ([]ListReturnItemsRow, error)
 	ListReturnsAdmin(ctx context.Context, arg ListReturnsAdminParams) ([]Return, error)
 	ListReturnsForCustomer(ctx context.Context, customerID int64) ([]Return, error)
@@ -714,13 +711,6 @@ type Querier interface {
 	// RebateQualifyingTotals sums qualifying (non-cancelled) order subtotal per
 	// customer for a program's currency within a period window. Optional customer scope.
 	RebateQualifyingTotals(ctx context.Context, arg RebateQualifyingTotalsParams) ([]RebateQualifyingTotalsRow, error)
-	// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
-	// currency: for each product it picks the winning candidate list (highest
-	// level, then priority) that has a valid price, and flattens that list's tiers.
-	// Run after DeleteCombinedPricesForCustomerCurrency inside one tx.
-	// params: $1 customer_id, $2 website_id, $3 currency, $4 at
-	// Same precedence as ResolvePrice: customer (4) > ancestor (3) > group (2) > website (1).
-	RecomputeCombinedPricesForCustomer(ctx context.Context, arg RecomputeCombinedPricesForCustomerParams) error
 	RecordAutomationExecution(ctx context.Context, arg RecordAutomationExecutionParams) error
 	RemoveProductFromCategory(ctx context.Context, arg RemoveProductFromCategoryParams) error
 	RenameShoppingList(ctx context.Context, arg RenameShoppingListParams) (ShoppingList, error)
@@ -741,6 +731,23 @@ type Querier interface {
 	// website (1). Account-hierarchy inheritance (PRD §5.1): a child with no list of
 	// its own falls back to the nearest ancestor's assignment.
 	ResolvePrice(ctx context.Context, arg ResolvePriceParams) (ResolvePriceRow, error)
+	// ===== Read-time resolution (replaces the combined_prices cache) ===========
+	// These resolve the winning price live from prices + assignments on every read.
+	// The recursive ancestor walk is shallow and the per-product lookups ride
+	// idx_prices_product + idx_pla_* indexes, so a single resolve is sub-millisecond
+	// — the same path the catalog proved fast at scale. No per-customer fan-out, no
+	// materialized rows, no recompute storm: a price change is live immediately.
+	// ResolvePriceTier is the storefront/cart unit-price read: the winning unit
+	// price, its source list, and the matched volume tier for a given quantity.
+	// Replaces GetCombinedPrice. Precedence: customer (4) > ancestor (3) > group (2)
+	// > website (1); within a level, higher priority then the most specific tier.
+	// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency, $6 website_id, $7 at
+	ResolvePriceTier(ctx context.Context, arg ResolvePriceTierParams) (ResolvePriceTierRow, error)
+	// ResolvePriceTiersForSlug returns every volume tier of the WINNING list for a
+	// customer on a product (by slug), so the storefront can show contract pricing
+	// ("buy 100+ at X"). Replaces ListCustomerPriceTiersForSlug.
+	// params: $1 customer_id, $2 slug, $3 organization_id, $4 currency, $5 website_id, $6 at
+	ResolvePriceTiersForSlug(ctx context.Context, arg ResolvePriceTiersForSlugParams) ([]ResolvePriceTiersForSlugRow, error)
 	RevokeCustomerInvite(ctx context.Context, arg RevokeCustomerInviteParams) (int64, error)
 	// SalesSummary is the headline KPI rollup since a date.
 	SalesSummary(ctx context.Context, arg SalesSummaryParams) (SalesSummaryRow, error)

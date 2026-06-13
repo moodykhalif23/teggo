@@ -7,7 +7,6 @@ package gen
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -91,41 +90,6 @@ func (q *Queries) CreatePriceListAssignment(ctx context.Context, arg CreatePrice
 	return i, err
 }
 
-const customersAffectedByPriceList = `-- name: CustomersAffectedByPriceList :many
-SELECT DISTINCT c.id AS customer_id
-FROM customers c
-WHERE c.deleted_at IS NULL
-  AND c.organization_id = (SELECT pl.organization_id FROM price_lists pl WHERE pl.id = $1)
-  AND (
-    EXISTS (SELECT 1 FROM price_list_assignments a WHERE a.price_list_id = $1 AND a.customer_id = c.id)
-    OR EXISTS (SELECT 1 FROM price_list_assignments a WHERE a.price_list_id = $1 AND a.customer_group_id = c.customer_group_id)
-    OR EXISTS (SELECT 1 FROM price_list_assignments a WHERE a.price_list_id = $1 AND a.website_id IS NOT NULL)
-  )
-`
-
-// CustomersAffectedByPriceList returns every customer whose resolved price may
-// change when this price list changes (direct, via group, or via any website
-// assignment of the list). Used to fan out recompute jobs.
-func (q *Queries) CustomersAffectedByPriceList(ctx context.Context, id int64) ([]int64, error) {
-	rows, err := q.db.Query(ctx, customersAffectedByPriceList, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int64
-	for rows.Next() {
-		var customer_id int64
-		if err := rows.Scan(&customer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, customer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const deleteAssignment = `-- name: DeleteAssignment :execrows
 DELETE FROM price_list_assignments WHERE id = $1
 `
@@ -136,60 +100,6 @@ func (q *Queries) DeleteAssignment(ctx context.Context, id int64) (int64, error)
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const deleteCombinedPricesForCustomerCurrency = `-- name: DeleteCombinedPricesForCustomerCurrency :exec
-DELETE FROM combined_prices WHERE customer_id = $1 AND currency = $2
-`
-
-type DeleteCombinedPricesForCustomerCurrencyParams struct {
-	CustomerID int64  `json:"customer_id"`
-	Currency   string `json:"currency"`
-}
-
-func (q *Queries) DeleteCombinedPricesForCustomerCurrency(ctx context.Context, arg DeleteCombinedPricesForCustomerCurrencyParams) error {
-	_, err := q.db.Exec(ctx, deleteCombinedPricesForCustomerCurrency, arg.CustomerID, arg.Currency)
-	return err
-}
-
-const getCombinedPrice = `-- name: GetCombinedPrice :one
-
-SELECT cp.value, cp.source_price_list_id, cp.min_quantity
-FROM combined_prices cp
-WHERE cp.customer_id = $1 AND cp.product_id = $2 AND cp.unit = $3
-  AND cp.currency = $5 AND cp.min_quantity <= $4::numeric
-ORDER BY cp.min_quantity DESC
-LIMIT 1
-`
-
-type GetCombinedPriceParams struct {
-	CustomerID int64  `json:"customer_id"`
-	ProductID  int64  `json:"product_id"`
-	Unit       string `json:"unit"`
-	Column4    string `json:"column_4"`
-	Currency   string `json:"currency"`
-}
-
-type GetCombinedPriceRow struct {
-	Value             string `json:"value"`
-	SourcePriceListID *int64 `json:"source_price_list_id"`
-	MinQuantity       string `json:"min_quantity"`
-}
-
-// ===== combined_prices (precomputed read path) =============================
-// GetCombinedPrice is the O(1) storefront read: the resolved tier for a qty.
-// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency
-func (q *Queries) GetCombinedPrice(ctx context.Context, arg GetCombinedPriceParams) (GetCombinedPriceRow, error) {
-	row := q.db.QueryRow(ctx, getCombinedPrice,
-		arg.CustomerID,
-		arg.ProductID,
-		arg.Unit,
-		arg.Column4,
-		arg.Currency,
-	)
-	var i GetCombinedPriceRow
-	err := row.Scan(&i.Value, &i.SourcePriceListID, &i.MinQuantity)
-	return i, err
 }
 
 const getDefaultWebsite = `-- name: GetDefaultWebsite :one
@@ -258,94 +168,6 @@ func (q *Queries) ListAssignmentsForList(ctx context.Context, priceListID int64)
 			&i.WebsiteID,
 			&i.Priority,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCombinedPricesForCustomer = `-- name: ListCombinedPricesForCustomer :many
-SELECT customer_id, product_id, unit, min_quantity, currency, value, source_price_list_id, computed_at FROM combined_prices WHERE customer_id = $1 AND currency = $2
-ORDER BY product_id, min_quantity
-`
-
-type ListCombinedPricesForCustomerParams struct {
-	CustomerID int64  `json:"customer_id"`
-	Currency   string `json:"currency"`
-}
-
-func (q *Queries) ListCombinedPricesForCustomer(ctx context.Context, arg ListCombinedPricesForCustomerParams) ([]CombinedPrice, error) {
-	rows, err := q.db.Query(ctx, listCombinedPricesForCustomer, arg.CustomerID, arg.Currency)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CombinedPrice
-	for rows.Next() {
-		var i CombinedPrice
-		if err := rows.Scan(
-			&i.CustomerID,
-			&i.ProductID,
-			&i.Unit,
-			&i.MinQuantity,
-			&i.Currency,
-			&i.Value,
-			&i.SourcePriceListID,
-			&i.ComputedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCustomerPriceTiersForSlug = `-- name: ListCustomerPriceTiersForSlug :many
-SELECT cp.unit, cp.min_quantity, cp.value
-FROM combined_prices cp
-JOIN products p ON p.id = cp.product_id
-WHERE cp.customer_id = $1 AND p.slug = $2 AND p.organization_id = $3 AND cp.currency = $4
-ORDER BY cp.unit, cp.min_quantity
-`
-
-type ListCustomerPriceTiersForSlugParams struct {
-	CustomerID     int64  `json:"customer_id"`
-	Slug           string `json:"slug"`
-	OrganizationID int64  `json:"organization_id"`
-	Currency       string `json:"currency"`
-}
-
-type ListCustomerPriceTiersForSlugRow struct {
-	Unit        string `json:"unit"`
-	MinQuantity string `json:"min_quantity"`
-	Value       string `json:"value"`
-}
-
-// ListCustomerPriceTiersForSlug returns every volume tier (min_quantity break)
-// resolved for a customer on a product, so the storefront can show the buyer
-// their contract pricing ("buy 100+ at X").
-func (q *Queries) ListCustomerPriceTiersForSlug(ctx context.Context, arg ListCustomerPriceTiersForSlugParams) ([]ListCustomerPriceTiersForSlugRow, error) {
-	rows, err := q.db.Query(ctx, listCustomerPriceTiersForSlug,
-		arg.CustomerID,
-		arg.Slug,
-		arg.OrganizationID,
-		arg.Currency,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCustomerPriceTiersForSlugRow
-	for rows.Next() {
-		var i ListCustomerPriceTiersForSlugRow
-		if err := rows.Scan(&i.Unit, &i.MinQuantity, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -428,77 +250,104 @@ func (q *Queries) ListPricesForList(ctx context.Context, priceListID int64) ([]P
 	return items, nil
 }
 
-const recomputeCombinedPricesForCustomer = `-- name: RecomputeCombinedPricesForCustomer :exec
+const listResolvedPricesForCustomer = `-- name: ListResolvedPricesForCustomer :many
 WITH RECURSIVE ancestors AS (
-  SELECT c0.id, c0.parent_id, 0 AS depth
-    FROM customers c0 WHERE c0.id = $1
+  SELECT c0.id, c0.parent_id, 0 AS depth FROM customers c0 WHERE c0.id = $1
   UNION ALL
   SELECT p.id, p.parent_id, ancestors.depth + 1
     FROM customers p JOIN ancestors ON p.id = ancestors.parent_id
 ),
-cust AS (
-  SELECT customers.id, customers.customer_group_id FROM customers WHERE customers.id = $1
+cust AS (SELECT customers.id, customers.customer_group_id FROM customers WHERE customers.id = $1),
+page AS (
+  SELECT pp.id FROM products pp
+   WHERE pp.organization_id = $5 AND pp.deleted_at IS NULL AND pp.id > $6
+   ORDER BY pp.id LIMIT $7
 ),
 candidate_lists AS (
-  SELECT pla.price_list_id, 4 AS level, pla.priority
-    FROM price_list_assignments pla WHERE pla.customer_id = $1
+  SELECT pla.price_list_id, 4 AS level, pla.priority FROM price_list_assignments pla WHERE pla.customer_id = $1
   UNION ALL
-  SELECT pla.price_list_id, 3, pla.priority
-    FROM price_list_assignments pla
+  SELECT pla.price_list_id, 3, pla.priority FROM price_list_assignments pla
     JOIN ancestors a ON a.id = pla.customer_id AND a.depth > 0
   UNION ALL
-  SELECT pla.price_list_id, 2, pla.priority
-    FROM price_list_assignments pla
+  SELECT pla.price_list_id, 2, pla.priority FROM price_list_assignments pla
     JOIN cust ON cust.customer_group_id = pla.customer_group_id
   UNION ALL
-  SELECT pla.price_list_id, 1, pla.priority
-    FROM price_list_assignments pla WHERE pla.website_id = $2
+  SELECT pla.price_list_id, 1, pla.priority FROM price_list_assignments pla WHERE pla.website_id = $2
 ),
 valid_prices AS (
-  SELECT pr.product_id, pr.unit, pr.min_quantity, pr.value,
-         pr.price_list_id, cl.level, cl.priority
+  SELECT pr.product_id, pr.unit, pr.min_quantity, pr.value, pr.price_list_id, cl.level, cl.priority
     FROM prices pr
     JOIN candidate_lists cl ON cl.price_list_id = pr.price_list_id
     JOIN price_lists pl ON pl.id = pr.price_list_id
+    JOIN page ON page.id = pr.product_id
    WHERE pl.currency = $3
      AND pl.is_active
      AND ($4 BETWEEN COALESCE(pr.valid_from, '-infinity') AND COALESCE(pr.valid_to, 'infinity'))
 ),
 winners AS (
-  SELECT DISTINCT ON (valid_prices.product_id)
-         valid_prices.product_id, valid_prices.price_list_id
-    FROM valid_prices
-   ORDER BY valid_prices.product_id, valid_prices.level DESC, valid_prices.priority DESC
+  SELECT DISTINCT ON (product_id) product_id, price_list_id
+    FROM valid_prices ORDER BY product_id, level DESC, priority DESC
 )
-INSERT INTO combined_prices (customer_id, product_id, unit, min_quantity, currency, value, source_price_list_id, computed_at)
-SELECT $1, vp.product_id, vp.unit, vp.min_quantity, $3, vp.value, vp.price_list_id, $4
-  FROM valid_prices vp
-  JOIN winners w ON w.product_id = vp.product_id AND w.price_list_id = vp.price_list_id
-ON CONFLICT (customer_id, product_id, unit, min_quantity, currency)
-DO UPDATE SET value = EXCLUDED.value, source_price_list_id = EXCLUDED.source_price_list_id, computed_at = EXCLUDED.computed_at
+SELECT vp.product_id, vp.unit, vp.min_quantity, vp.value, vp.price_list_id AS source_price_list_id
+  FROM valid_prices vp JOIN winners w ON w.product_id = vp.product_id AND w.price_list_id = vp.price_list_id
+ ORDER BY vp.product_id, vp.unit, vp.min_quantity
 `
 
-type RecomputeCombinedPricesForCustomerParams struct {
-	CustomerID int64     `json:"customer_id"`
-	WebsiteID  *int64    `json:"website_id"`
-	Currency   string    `json:"currency"`
-	ComputedAt time.Time `json:"computed_at"`
+type ListResolvedPricesForCustomerParams struct {
+	ID             int64              `json:"id"`
+	WebsiteID      *int64             `json:"website_id"`
+	Currency       string             `json:"currency"`
+	ValidFrom      pgtype.Timestamptz `json:"valid_from"`
+	OrganizationID int64              `json:"organization_id"`
+	ID_2           int64              `json:"id_2"`
+	Limit          int32              `json:"limit"`
 }
 
-// RecomputeCombinedPricesForCustomer rebuilds the cache for one customer in one
-// currency: for each product it picks the winning candidate list (highest
-// level, then priority) that has a valid price, and flattens that list's tiers.
-// Run after DeleteCombinedPricesForCustomerCurrency inside one tx.
-// params: $1 customer_id, $2 website_id, $3 currency, $4 at
-// Same precedence as ResolvePrice: customer (4) > ancestor (3) > group (2) > website (1).
-func (q *Queries) RecomputeCombinedPricesForCustomer(ctx context.Context, arg RecomputeCombinedPricesForCustomerParams) error {
-	_, err := q.db.Exec(ctx, recomputeCombinedPricesForCustomer,
-		arg.CustomerID,
+type ListResolvedPricesForCustomerRow struct {
+	ProductID         int64  `json:"product_id"`
+	Unit              string `json:"unit"`
+	MinQuantity       string `json:"min_quantity"`
+	Value             string `json:"value"`
+	SourcePriceListID int64  `json:"source_price_list_id"`
+}
+
+// ListResolvedPricesForCustomer resolves the winning price per product for a
+// customer over a KEYSET page of products (id > $6, limit $7). Replaces the
+// admin ListCombinedPricesForCustomer read; paginated so it never resolves the
+// whole catalog at once.
+// params: $1 customer_id, $2 website_id, $3 currency, $4 at, $5 organization_id, $6 after_product_id, $7 limit
+func (q *Queries) ListResolvedPricesForCustomer(ctx context.Context, arg ListResolvedPricesForCustomerParams) ([]ListResolvedPricesForCustomerRow, error) {
+	rows, err := q.db.Query(ctx, listResolvedPricesForCustomer,
+		arg.ID,
 		arg.WebsiteID,
 		arg.Currency,
-		arg.ComputedAt,
+		arg.ValidFrom,
+		arg.OrganizationID,
+		arg.ID_2,
+		arg.Limit,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListResolvedPricesForCustomerRow
+	for rows.Next() {
+		var i ListResolvedPricesForCustomerRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Unit,
+			&i.MinQuantity,
+			&i.Value,
+			&i.SourcePriceListID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolvePrice = `-- name: ResolvePrice :one
@@ -580,6 +429,171 @@ func (q *Queries) ResolvePrice(ctx context.Context, arg ResolvePriceParams) (Res
 	var i ResolvePriceRow
 	err := row.Scan(&i.Value, &i.PriceListID)
 	return i, err
+}
+
+const resolvePriceTier = `-- name: ResolvePriceTier :one
+
+WITH RECURSIVE ancestors AS (
+  SELECT c0.id, c0.parent_id, 0 AS depth FROM customers c0 WHERE c0.id = $1
+  UNION ALL
+  SELECT p.id, p.parent_id, ancestors.depth + 1
+    FROM customers p JOIN ancestors ON p.id = ancestors.parent_id
+),
+cust AS (SELECT customers.id, customers.customer_group_id FROM customers WHERE customers.id = $1),
+candidate_lists AS (
+  SELECT pla.price_list_id, 4 AS level, pla.priority FROM price_list_assignments pla WHERE pla.customer_id = $1
+  UNION ALL
+  SELECT pla.price_list_id, 3, pla.priority FROM price_list_assignments pla
+    JOIN ancestors a ON a.id = pla.customer_id AND a.depth > 0
+  UNION ALL
+  SELECT pla.price_list_id, 2, pla.priority FROM price_list_assignments pla
+    JOIN cust ON cust.customer_group_id = pla.customer_group_id
+  UNION ALL
+  SELECT pla.price_list_id, 1, pla.priority FROM price_list_assignments pla WHERE pla.website_id = $6
+),
+priced AS (
+  SELECT pr.value, pr.min_quantity, pr.price_list_id, cl.level, cl.priority
+    FROM prices pr
+    JOIN candidate_lists cl ON cl.price_list_id = pr.price_list_id
+    JOIN price_lists pl ON pl.id = pr.price_list_id
+   WHERE pr.product_id = $2
+     AND pr.unit = $3
+     AND pl.currency = $5
+     AND pl.is_active
+     AND pr.min_quantity <= $4::numeric
+     AND ($7 BETWEEN COALESCE(pr.valid_from, '-infinity') AND COALESCE(pr.valid_to, 'infinity'))
+)
+SELECT priced.value, priced.price_list_id AS source_price_list_id, priced.min_quantity
+  FROM priced
+ ORDER BY priced.level DESC, priced.priority DESC, priced.min_quantity DESC
+ LIMIT 1
+`
+
+type ResolvePriceTierParams struct {
+	ID        int64              `json:"id"`
+	ProductID int64              `json:"product_id"`
+	Unit      string             `json:"unit"`
+	Column4   string             `json:"column_4"`
+	Currency  string             `json:"currency"`
+	WebsiteID *int64             `json:"website_id"`
+	ValidFrom pgtype.Timestamptz `json:"valid_from"`
+}
+
+type ResolvePriceTierRow struct {
+	Value             string `json:"value"`
+	SourcePriceListID int64  `json:"source_price_list_id"`
+	MinQuantity       string `json:"min_quantity"`
+}
+
+// ===== Read-time resolution (replaces the combined_prices cache) ===========
+// These resolve the winning price live from prices + assignments on every read.
+// The recursive ancestor walk is shallow and the per-product lookups ride
+// idx_prices_product + idx_pla_* indexes, so a single resolve is sub-millisecond
+// — the same path the catalog proved fast at scale. No per-customer fan-out, no
+// materialized rows, no recompute storm: a price change is live immediately.
+// ResolvePriceTier is the storefront/cart unit-price read: the winning unit
+// price, its source list, and the matched volume tier for a given quantity.
+// Replaces GetCombinedPrice. Precedence: customer (4) > ancestor (3) > group (2)
+// > website (1); within a level, higher priority then the most specific tier.
+// params: $1 customer_id, $2 product_id, $3 unit, $4 quantity, $5 currency, $6 website_id, $7 at
+func (q *Queries) ResolvePriceTier(ctx context.Context, arg ResolvePriceTierParams) (ResolvePriceTierRow, error) {
+	row := q.db.QueryRow(ctx, resolvePriceTier,
+		arg.ID,
+		arg.ProductID,
+		arg.Unit,
+		arg.Column4,
+		arg.Currency,
+		arg.WebsiteID,
+		arg.ValidFrom,
+	)
+	var i ResolvePriceTierRow
+	err := row.Scan(&i.Value, &i.SourcePriceListID, &i.MinQuantity)
+	return i, err
+}
+
+const resolvePriceTiersForSlug = `-- name: ResolvePriceTiersForSlug :many
+WITH RECURSIVE ancestors AS (
+  SELECT c0.id, c0.parent_id, 0 AS depth FROM customers c0 WHERE c0.id = $1
+  UNION ALL
+  SELECT p.id, p.parent_id, ancestors.depth + 1
+    FROM customers p JOIN ancestors ON p.id = ancestors.parent_id
+),
+cust AS (SELECT customers.id, customers.customer_group_id FROM customers WHERE customers.id = $1),
+prod AS (SELECT pp.id FROM products pp WHERE pp.slug = $2 AND pp.organization_id = $3 AND pp.deleted_at IS NULL),
+candidate_lists AS (
+  SELECT pla.price_list_id, 4 AS level, pla.priority FROM price_list_assignments pla WHERE pla.customer_id = $1
+  UNION ALL
+  SELECT pla.price_list_id, 3, pla.priority FROM price_list_assignments pla
+    JOIN ancestors a ON a.id = pla.customer_id AND a.depth > 0
+  UNION ALL
+  SELECT pla.price_list_id, 2, pla.priority FROM price_list_assignments pla
+    JOIN cust ON cust.customer_group_id = pla.customer_group_id
+  UNION ALL
+  SELECT pla.price_list_id, 1, pla.priority FROM price_list_assignments pla WHERE pla.website_id = $5
+),
+valid_prices AS (
+  SELECT pr.unit, pr.min_quantity, pr.value, pr.price_list_id, cl.level, cl.priority
+    FROM prices pr
+    JOIN candidate_lists cl ON cl.price_list_id = pr.price_list_id
+    JOIN price_lists pl ON pl.id = pr.price_list_id
+    JOIN prod ON prod.id = pr.product_id
+   WHERE pl.currency = $4
+     AND pl.is_active
+     AND ($6 BETWEEN COALESCE(pr.valid_from, '-infinity') AND COALESCE(pr.valid_to, 'infinity'))
+),
+winner AS (
+  SELECT DISTINCT ON (unit) unit, price_list_id
+    FROM valid_prices ORDER BY unit, level DESC, priority DESC
+)
+SELECT vp.unit, vp.min_quantity, vp.value
+  FROM valid_prices vp JOIN winner w ON w.unit = vp.unit AND w.price_list_id = vp.price_list_id
+ ORDER BY vp.unit, vp.min_quantity
+`
+
+type ResolvePriceTiersForSlugParams struct {
+	ID             int64              `json:"id"`
+	Slug           string             `json:"slug"`
+	OrganizationID int64              `json:"organization_id"`
+	Currency       string             `json:"currency"`
+	WebsiteID      *int64             `json:"website_id"`
+	ValidFrom      pgtype.Timestamptz `json:"valid_from"`
+}
+
+type ResolvePriceTiersForSlugRow struct {
+	Unit        string `json:"unit"`
+	MinQuantity string `json:"min_quantity"`
+	Value       string `json:"value"`
+}
+
+// ResolvePriceTiersForSlug returns every volume tier of the WINNING list for a
+// customer on a product (by slug), so the storefront can show contract pricing
+// ("buy 100+ at X"). Replaces ListCustomerPriceTiersForSlug.
+// params: $1 customer_id, $2 slug, $3 organization_id, $4 currency, $5 website_id, $6 at
+func (q *Queries) ResolvePriceTiersForSlug(ctx context.Context, arg ResolvePriceTiersForSlugParams) ([]ResolvePriceTiersForSlugRow, error) {
+	rows, err := q.db.Query(ctx, resolvePriceTiersForSlug,
+		arg.ID,
+		arg.Slug,
+		arg.OrganizationID,
+		arg.Currency,
+		arg.WebsiteID,
+		arg.ValidFrom,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolvePriceTiersForSlugRow
+	for rows.Next() {
+		var i ResolvePriceTiersForSlugRow
+		if err := rows.Scan(&i.Unit, &i.MinQuantity, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updatePriceList = `-- name: UpdatePriceList :one

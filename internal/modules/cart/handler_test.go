@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/auth"
-	"b2bcommerce/internal/queue/jobs"
 	"b2bcommerce/internal/server"
 	"b2bcommerce/internal/store"
 	"b2bcommerce/internal/store/gen"
@@ -100,10 +99,6 @@ func seedCustomer(t *testing.T, pool *pgxpool.Pool, name, email string) seed {
 	}
 	if _, err := q.CreatePriceListAssignment(ctx, gen.CreatePriceListAssignmentParams{PriceListID: list.ID, CustomerID: &cust.ID}); err != nil {
 		t.Fatalf("assign: %v", err)
-	}
-	wid := int64(1)
-	if err := jobs.RecomputeForCustomer(ctx, pool, jobs.RecomputeCombinedPricesArgs{CustomerID: cust.ID, WebsiteID: &wid, Currency: "USD"}); err != nil {
-		t.Fatalf("recompute: %v", err)
 	}
 
 	return seed{
@@ -265,10 +260,6 @@ func TestCartRevalidateOnPriceChange(t *testing.T) {
 	if _, err := q.UpsertPrice(ctx, gen.UpsertPriceParams{PriceListID: listID, ProductID: s.productPriced, Unit: "each", MinQuantity: "1", Value: "8.0000"}); err != nil {
 		t.Fatalf("reprice: %v", err)
 	}
-	wid := int64(1)
-	if err := jobs.RecomputeForCustomer(ctx, pool, jobs.RecomputeCombinedPricesArgs{CustomerID: s.customerID, WebsiteID: &wid, Currency: "USD"}); err != nil {
-		t.Fatalf("recompute: %v", err)
-	}
 
 	// Revalidate picks up the drift.
 	rr := do(t, h, http.MethodPost, "/storefront/cart/revalidate", tok, nil)
@@ -358,10 +349,6 @@ func TestProductPricingTiers(t *testing.T) {
 	}
 	if _, err := q.UpsertPrice(ctx, gen.UpsertPriceParams{PriceListID: listID, ProductID: s.productPriced, Unit: "each", MinQuantity: "10", Value: "8.0000"}); err != nil {
 		t.Fatalf("tier price: %v", err)
-	}
-	wid := int64(1)
-	if err := jobs.RecomputeForCustomer(ctx, pool, jobs.RecomputeCombinedPricesArgs{CustomerID: s.customerID, WebsiteID: &wid, Currency: "USD"}); err != nil {
-		t.Fatalf("recompute: %v", err)
 	}
 
 	tok := login(t, h, s.email)

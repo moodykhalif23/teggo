@@ -1,0 +1,22 @@
+# Toyoka simulation — 2026-06-13T20:35:24+03:00
+config: parts=30000 customers=1400 orders=1000 searches=500 concurrency=32
+seed: org=2 admin_user=2 parts=30000 customers=1400 in 26.729s
+[A] catalog.search               n=500   errs=0    p50=4.76ms   p95=6.367ms  max=30.815ms mean=4.775ms   209 ops/s
+[B] order.create.seq             n=1000  errs=0    p50=18.541ms p95=22.697ms max=74.1ms   mean=18.901ms  53 ops/s
+[B2] order.create.mega200         n=10    errs=0    p50=84.637ms p95=89.514ms max=92.625ms mean=85.475ms  12 ops/s
+[C] order.create.concurrent      n=256   errs=0    p50=140.556ms p95=389.923ms max=662.613ms mean=173.629ms  180 ops/s (concurrency=32)
+[D] quote.create                 n=100   errs=0    p50=12.432ms p95=22.907ms max=69.989ms mean=14.013ms  45 ops/s
+[D] quote.send                   n=100   errs=0    p50=6.017ms  p95=10.17ms  max=88.674ms mean=7.997ms   45 ops/s
+[E] invoice.issue                n=200   errs=0    p50=18.878ms p95=29.311ms max=59.71ms  mean=19.58ms   49 ops/s
+[F] report /admin/reports/summary?days=90 n=20    errs=0    p50=535µs    p95=1.085ms  max=3.149ms  mean=829µs     1206 ops/s
+[F] report /admin/reports/sales?days=90 n=20    errs=0    p50=533µs    p95=1.422ms  max=2.11ms   mean=805µs     1242 ops/s
+[F] report /admin/reports/top-products?days=90&limit=20 n=20    errs=0    p50=553µs    p95=2.075ms  max=4.532ms  mean=959µs     1043 ops/s
+    low-stock first page bytes=9526 code=200
+[G] inventory.low-stock          n=20    errs=0    p50=76.665ms p95=91.368ms max=93.956ms mean=78.066ms  13 ops/s
+[H] pricing.resolve/line         n=2000  errs=0    p50=802µs    p95=1.365ms  max=5.786ms  mean=839µs     1176 ops/s
+    (read-time resolution — no combined_prices cache, no recompute storm)
+[I] rebate.report code=200 latency=11ms bytes=93989
+[I] rebate.settle code=200 latency=768ms {"period_key":"2026","settled":549,"skipped":294,"total_rebate":"3988311.9300"}
+
+[J] foreign-org leak check: catalog items=0 orders items=0 (want 0/0)
+totals: orders=1266 order_items=27060 invoices=200

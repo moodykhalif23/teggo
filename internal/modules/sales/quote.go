@@ -68,8 +68,9 @@ func (h *Handler) quoteFromRFQ(w http.ResponseWriter, r *http.Request) {
 		var totals []string
 		for _, it := range rfqItems {
 			price := "0.0000"
-			cp, perr := q.GetCombinedPrice(r.Context(), gen.GetCombinedPriceParams{
-				CustomerID: rfq.CustomerID, ProductID: it.ProductID, Unit: it.Unit, Column4: it.Quantity, Currency: ws.DefaultCurrency,
+			cp, perr := q.ResolvePriceTier(r.Context(), gen.ResolvePriceTierParams{
+				ID: rfq.CustomerID, ProductID: it.ProductID, Unit: it.Unit, Column4: it.Quantity,
+				Currency: ws.DefaultCurrency, WebsiteID: &ws.ID, ValidFrom: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 			})
 			if perr == nil {
 				price = cp.Value

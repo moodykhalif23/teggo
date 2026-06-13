@@ -1,4 +1,4 @@
--- Rebates / volume incentives (Roadmap Tier 3 #7).
+-- Rebates / volume incentives .
 
 -- ===== Programs ============================================================
 
@@ -15,6 +15,11 @@ RETURNING *;
 
 -- name: GetRebateProgram :one
 SELECT * FROM rebate_programs WHERE organization_id = $1 AND id = $2;
+
+-- GetRebateProgramByID loads a program without org scoping, for the trusted
+-- background settlement worker (the enqueue was already org-authorized).
+-- name: GetRebateProgramByID :one
+SELECT * FROM rebate_programs WHERE id = $1;
 
 -- name: ListRebatePrograms :many
 SELECT * FROM rebate_programs WHERE organization_id = $1

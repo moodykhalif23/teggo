@@ -61,6 +61,26 @@ func (q *Queries) AddOrderItem(ctx context.Context, arg AddOrderItemParams) (Ord
 	return i, err
 }
 
+const addOrderItemsBatch = `-- name: AddOrderItemsBatch :exec
+INSERT INTO order_items (order_id, product_id, sku, name, quantity, unit, unit_price, tax_amount, row_total)
+SELECT $1::bigint, t.product_id, t.sku, t.name,
+       t.quantity::numeric, t.unit, t.unit_price::numeric, t.tax_amount::numeric, t.row_total::numeric
+FROM jsonb_to_recordset($2::jsonb) AS t(
+  product_id bigint, sku text, name text, quantity text, unit text,
+  unit_price text, tax_amount text, row_total text
+)
+`
+
+type AddOrderItemsBatchParams struct {
+	OrderID int64  `json:"order_id"`
+	Lines   []byte `json:"lines"`
+}
+
+func (q *Queries) AddOrderItemsBatch(ctx context.Context, arg AddOrderItemsBatchParams) error {
+	_, err := q.db.Exec(ctx, addOrderItemsBatch, arg.OrderID, arg.Lines)
+	return err
+}
+
 const addOrderStatusHistory = `-- name: AddOrderStatusHistory :exec
 INSERT INTO order_status_history (order_id, from_status, to_status, changed_by, note)
 VALUES ($1, $2, $3, $4, $5)
@@ -488,6 +508,41 @@ func (q *Queries) GetOrderByPublicID(ctx context.Context, publicID uuid.UUID) (O
 		&i.DisplayGrandTotal,
 	)
 	return i, err
+}
+
+const getProductsByIDs = `-- name: GetProductsByIDs :many
+SELECT id, sku, name FROM products WHERE organization_id = $1 AND id = ANY($2::bigint[])
+`
+
+type GetProductsByIDsParams struct {
+	OrganizationID int64   `json:"organization_id"`
+	Column2        []int64 `json:"column_2"`
+}
+
+type GetProductsByIDsRow struct {
+	ID   int64  `json:"id"`
+	Sku  string `json:"sku"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) GetProductsByIDs(ctx context.Context, arg GetProductsByIDsParams) ([]GetProductsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getProductsByIDs, arg.OrganizationID, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetProductsByIDsRow
+	for rows.Next() {
+		var i GetProductsByIDsRow
+		if err := rows.Scan(&i.ID, &i.Sku, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getQuoteByID = `-- name: GetQuoteByID :one

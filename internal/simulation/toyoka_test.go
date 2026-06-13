@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -29,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/auth"
@@ -288,31 +291,28 @@ func TestToyokaSimulation(t *testing.T) {
 
 	// ===================== H. Combined-price recompute ======================
 	{
-		// The known-heavy recursive CTE. Time it for a sample of customers via the
-		// query layer directly (the API enqueues it to the worker).
+		// Read-time price resolution — the NEW hot path that replaced the
+		// combined_prices cache. One resolve per (customer, product, qty); this
+		// is what cart-add / quote / subscription pay on every line. No cache, no
+		// recompute, no fan-out: a price edit is live on the next read.
 		q := store.New(seedPool).Queries()
 		var wsID int64
 		_ = seedPool.QueryRow(ctx, `SELECT id FROM websites WHERE organization_id=$1 ORDER BY id LIMIT 1`, orgID).Scan(&wsID)
-		s := &stat{name: "pricing.recompute/cust"}
-		sample := envInt("SIM_RECOMPUTE_SAMPLE", 5)
+		s := &stat{name: "pricing.resolve/line"}
+		n := envInt("SIM_RESOLVES", 2000)
 		start := time.Now()
-		for i := 0; i < sample && i < len(custIDs); i++ {
+		for i := 0; i < n; i++ {
 			cid := custIDs[rng.Intn(len(custIDs))]
+			pid := partIDs[rng.Intn(len(partIDs))]
 			t0 := time.Now()
-			err := q.RecomputeCombinedPricesForCustomer(ctx, gen.RecomputeCombinedPricesForCustomerParams{
-				CustomerID: cid, WebsiteID: &wsID, Currency: "USD", ComputedAt: time.Now(),
+			_, err := q.ResolvePriceTier(ctx, gen.ResolvePriceTierParams{
+				ID: cid, ProductID: pid, Unit: "each", Column4: "5", Currency: "USD",
+				WebsiteID: &wsID, ValidFrom: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 			})
-			s.add(time.Since(t0), err == nil)
-			if err != nil && s.errs <= 2 {
-				rep.logf("    recompute error: %v", err)
-			}
+			s.add(time.Since(t0), err == nil || errors.Is(err, pgx.ErrNoRows))
 		}
 		rep.logf("[H] %s", s.line(time.Since(start)))
-		var cpRows int64
-		_ = seedPool.QueryRow(ctx, `SELECT count(*) FROM combined_prices`).Scan(&cpRows)
-		perCust := cpRows / int64(max(sample, 1))
-		rep.logf("    combined_prices: %d rows for %d customers → ~%d rows/customer → full %d-customer fan-out ≈ %d rows",
-			cpRows, sample, perCust, nCust, perCust*int64(nCust))
+		rep.logf("    (read-time resolution — no combined_prices cache, no recompute storm)")
 	}
 
 	// ===================== I. Rebate program → report → settle ==============

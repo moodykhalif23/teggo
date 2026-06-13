@@ -41,7 +41,6 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &jobs.SendEmailWorker{Sender: sender, Q: gen.New(pool)})
-	river.AddWorker(workers, &jobs.RecomputeWorker{Pool: pool})
 	river.AddWorker(workers, &jobs.InvoicePDFWorker{Pool: pool, Renderer: renderer})
 	river.AddWorker(workers, &jobs.AutomationActionWorker{Registry: reg})
 	river.AddWorker(workers, &jobs.ScheduledEmitWorker{Dispatcher: dispatcher})
@@ -50,6 +49,7 @@ func NewWorkerClient(pool *pgxpool.Pool, renderer pdf.Renderer, sender email.Sen
 	river.AddWorker(workers, &jobs.GenerateRenditionWorker{Pool: pool, Store: store, Proc: proc})
 	river.AddWorker(workers, &jobs.RunReportSchedulesWorker{Pool: pool, Mailer: enq})
 	river.AddWorker(workers, &jobs.ERPSyncWorker{Pool: pool})
+	river.AddWorker(workers, &jobs.RebateSettleWorker{Pool: pool})
 	river.AddWorker(workers, &jobs.MaterializeSubscriptionsWorker{Pool: pool, Mailer: enq})
 	// Register additional workers here as modules add jobs.
 
@@ -124,16 +124,6 @@ func NewEnqueuer(pool *pgxpool.Pool) (*Enqueuer, error) {
 	return &Enqueuer{ic: ic}, nil
 }
 
-// EnqueueRecompute schedules a combined_prices rebuild for one customer/currency.
-func (e *Enqueuer) EnqueueRecompute(ctx context.Context, customerID int64, websiteID *int64, currency string) error {
-	_, err := e.ic.Insert(ctx, jobs.RecomputeCombinedPricesArgs{
-		CustomerID: customerID,
-		WebsiteID:  websiteID,
-		Currency:   currency,
-	}, nil)
-	return err
-}
-
 // EnqueueInvoicePDF schedules PDF generation for an issued invoice.
 func (e *Enqueuer) EnqueueInvoicePDF(ctx context.Context, invoiceID int64) error {
 	_, err := e.ic.Insert(ctx, jobs.GenerateInvoicePDFArgs{InvoiceID: invoiceID}, nil)
@@ -143,6 +133,14 @@ func (e *Enqueuer) EnqueueInvoicePDF(ctx context.Context, invoiceID int64) error
 // EnqueueRendition schedules derivation of one preset rendition for an asset.
 func (e *Enqueuer) EnqueueRendition(ctx context.Context, mediaAssetID int64, preset string) error {
 	_, err := e.ic.Insert(ctx, jobs.GenerateRenditionArgs{MediaAssetID: mediaAssetID, Preset: preset}, nil)
+	return err
+}
+
+// EnqueueRebateSettle schedules a rebate program's period settlement off the
+// request path (it can fan out to tens of thousands of credit notes). ref is an
+// optional RFC3339 period reference; empty = settle for the current period.
+func (e *Enqueuer) EnqueueRebateSettle(ctx context.Context, programID int64, ref string) error {
+	_, err := e.ic.Insert(ctx, jobs.SettleRebateArgs{ProgramID: programID, Ref: ref}, nil)
 	return err
 }
 

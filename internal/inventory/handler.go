@@ -254,7 +254,13 @@ func (h *Handler) lowStock(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	rows, err := h.q.ListLowStock(r.Context(), gen.ListLowStockParams{OrganizationID: org, Limit: int32(limit)})
+	offset := 0
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	rows, err := h.q.ListLowStock(r.Context(), gen.ListLowStockParams{OrganizationID: org, Limit: int32(limit), Offset: int32(offset)})
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not load low stock")
 		return
@@ -262,7 +268,16 @@ func (h *Handler) lowStock(w http.ResponseWriter, r *http.Request) {
 	if rows == nil {
 		rows = []gen.ListLowStockRow{}
 	}
-	response.JSON(w, http.StatusOK, map[string]any{"items": rows})
+	// total lets the ops team page through the WHOLE reorder worklist, not just
+	// the first page (was hard-capped at 500 with no paging — SIM §5). The count
+	// is a filtered scan, so only pay for it on the first page; deeper pages keep
+	// the total the client already has.
+	out := map[string]any{"items": rows, "limit": limit, "offset": offset}
+	if offset == 0 {
+		total, _ := h.q.CountLowStock(r.Context(), org)
+		out["total"] = total
+	}
+	response.JSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) atp(w http.ResponseWriter, r *http.Request) {

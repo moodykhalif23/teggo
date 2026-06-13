@@ -1,13 +1,11 @@
 // Package pricing implements the pricing engine (Implementation Pack 1 §4 + §12.1):
-// price lists, tiered prices, assignments, deterministic resolution, and the
-// precomputed combined_prices cache rebuilt by a river job. Admin-only, org-scoped.
+// price lists, tiered prices, assignments, and deterministic resolution computed
+// live on every read (no per-customer cache). Admin-only, org-scoped.
 package pricing
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -21,19 +19,11 @@ import (
 	"b2bcommerce/internal/store/gen"
 )
 
-// Enqueuer schedules background recompute of the combined_prices cache. It is
-// satisfied by *queue.Enqueuer in production and by a synchronous shim in tests.
-// May be nil (auto-enqueue and the recompute endpoint then become no-ops/503).
-type Enqueuer interface {
-	EnqueueRecompute(ctx context.Context, customerID int64, websiteID *int64, currency string) error
-}
-
 type Handler struct {
-	q   *gen.Queries
-	enq Enqueuer
+	q *gen.Queries
 }
 
-func New(q *gen.Queries, enq Enqueuer) *Handler { return &Handler{q: q, enq: enq} }
+func New(q *gen.Queries) *Handler { return &Handler{q: q} }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	r.Group(func(ar chi.Router) {
@@ -57,8 +47,7 @@ func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 		ar.With(mw.RequirePermission("price_list.manage")).Delete("/admin/price-adjustment-rules/{id}", h.deleteAdjustmentRule)
 
 		ar.With(mw.RequirePermission("price_list.view")).Get("/admin/pricing/resolve", h.resolve)
-		ar.With(mw.RequirePermission("price_list.view")).Get("/admin/customers/{id}/combined-prices", h.combinedForCustomer)
-		ar.With(mw.RequirePermission("price_list.manage")).Post("/admin/pricing/recompute", h.recompute)
+		ar.With(mw.RequirePermission("price_list.view")).Get("/admin/customers/{id}/resolved-prices", h.resolvedForCustomer)
 	})
 }
 
@@ -163,7 +152,6 @@ func (h *Handler) updateList(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not update price list")
 		return
 	}
-	h.enqueueForList(r.Context(), pl)
 	response.JSON(w, http.StatusOK, pl)
 }
 
@@ -217,7 +205,6 @@ func (h *Handler) upsertPrice(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not upsert price")
 		return
 	}
-	h.enqueueForList(r.Context(), pl)
 	response.JSON(w, http.StatusCreated, p)
 }
 
@@ -262,8 +249,7 @@ func (h *Handler) createAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Price list must belong to the caller's org.
-	pl, err := h.q.GetPriceList(r.Context(), gen.GetPriceListParams{OrganizationID: org, ID: req.PriceListID})
-	if err != nil {
+	if _, err := h.q.GetPriceList(r.Context(), gen.GetPriceListParams{OrganizationID: org, ID: req.PriceListID}); err != nil {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "price_list_id not found in organization")
 		return
 	}
@@ -275,7 +261,6 @@ func (h *Handler) createAssignment(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not create assignment")
 		return
 	}
-	h.enqueueForList(r.Context(), pl)
 	response.JSON(w, http.StatusCreated, a)
 }
 
@@ -350,8 +335,12 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) combinedForCustomer(w http.ResponseWriter, r *http.Request) {
-	if _, ok := orgID(r); !ok {
+// resolvedForCustomer resolves a customer's contract prices live (no cache) over
+// a keyset page of products: ?after=<product_id>&limit=N&currency=XXX. The
+// response carries next_after for the following page (or null at the end).
+func (h *Handler) resolvedForCustomer(w http.ResponseWriter, r *http.Request) {
+	org, ok := orgID(r)
+	if !ok {
 		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no claims")
 		return
 	}
@@ -365,54 +354,36 @@ func (h *Handler) combinedForCustomer(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "3-letter currency required")
 		return
 	}
-	rows, err := h.q.ListCombinedPricesForCustomer(r.Context(), gen.ListCombinedPricesForCustomerParams{CustomerID: id, Currency: currency})
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	limit := 200
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, e := strconv.Atoi(v); e == nil && n > 0 && n <= 1000 {
+			limit = n
+		}
+	}
+	var websiteID *int64
+	if ws, e := h.q.GetDefaultWebsite(r.Context(), org); e == nil {
+		websiteID = &ws.ID
+	}
+	rows, err := h.q.ListResolvedPricesForCustomer(r.Context(), gen.ListResolvedPricesForCustomerParams{
+		ID: id, WebsiteID: websiteID, Currency: currency, ValidFrom: now(),
+		OrganizationID: org, ID_2: after, Limit: int32(limit),
+	})
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not load combined prices")
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve prices")
 		return
 	}
 	if rows == nil {
-		rows = []gen.CombinedPrice{}
+		rows = []gen.ListResolvedPricesForCustomerRow{}
 	}
-	response.JSON(w, http.StatusOK, map[string]any{"items": rows})
-}
-
-func (h *Handler) recompute(w http.ResponseWriter, r *http.Request) {
-	org, ok := orgID(r)
-	if !ok {
-		response.Fail(w, http.StatusUnauthorized, "unauthorized", "no claims")
-		return
+	// next_after is the last PRODUCT id on this page (keyset cursor); null when
+	// the page came back short of the limit.
+	var nextAfter *int64
+	if len(rows) > 0 {
+		last := rows[len(rows)-1].ProductID
+		nextAfter = &last
 	}
-	if h.enq == nil {
-		response.Fail(w, http.StatusServiceUnavailable, "unavailable", "recompute queue not configured")
-		return
-	}
-	var req struct {
-		CustomerID int64  `json:"customer_id"`
-		WebsiteID  *int64 `json:"website_id"`
-		Currency   string `json:"currency"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CustomerID == 0 {
-		response.Fail(w, http.StatusBadRequest, "bad_request", "customer_id is required")
-		return
-	}
-	if req.Currency == "" || req.WebsiteID == nil {
-		ws, err := h.q.GetDefaultWebsite(r.Context(), org)
-		if err != nil {
-			response.Fail(w, http.StatusBadRequest, "bad_request", "no website to resolve currency/fallback")
-			return
-		}
-		if req.WebsiteID == nil {
-			req.WebsiteID = &ws.ID
-		}
-		if req.Currency == "" {
-			req.Currency = ws.DefaultCurrency
-		}
-	}
-	if err := h.enq.EnqueueRecompute(r.Context(), req.CustomerID, req.WebsiteID, req.Currency); err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not enqueue recompute")
-		return
-	}
-	response.JSON(w, http.StatusAccepted, map[string]any{"enqueued": true})
+	response.JSON(w, http.StatusOK, map[string]any{"items": rows, "next_after": nextAfter})
 }
 
 // ---- helpers -------------------------------------------------------------
@@ -434,29 +405,6 @@ func (h *Handler) loadList(w http.ResponseWriter, r *http.Request) (gen.PriceLis
 		return gen.PriceList{}, false
 	}
 	return pl, true
-}
-
-// enqueueForList fans recompute out to every customer affected by a price list
-// change (Pack 1 §4 AC). Best-effort: enqueue failures are not fatal to the
-// request, and a nil enqueuer (e.g. in some tests) is a no-op.
-func (h *Handler) enqueueForList(ctx context.Context, pl gen.PriceList) {
-	if h.enq == nil {
-		return
-	}
-	customers, err := h.q.CustomersAffectedByPriceList(ctx, pl.ID)
-	if err != nil {
-		return
-	}
-	ws, err := h.q.GetDefaultWebsite(ctx, pl.OrganizationID)
-	var websiteID *int64
-	if err == nil {
-		websiteID = &ws.ID
-	}
-	for _, cid := range customers {
-		if err := h.enq.EnqueueRecompute(ctx, cid, websiteID, pl.Currency); err != nil {
-			slog.WarnContext(ctx, "enqueue recompute failed", "customer_id", cid, "price_list_id", pl.ID, "err", err)
-		}
-	}
 }
 
 func tsPtr(t *time.Time) pgtype.Timestamptz {

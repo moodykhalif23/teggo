@@ -5,6 +5,7 @@
 package rebate
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -15,18 +16,27 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/money"
+	"b2bcommerce/internal/queue/jobs"
 	"b2bcommerce/internal/rebates"
 	mw "b2bcommerce/internal/server/middleware"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store/gen"
 )
 
+type SettleEnqueuer interface {
+	EnqueueRebateSettle(ctx context.Context, programID int64, ref string) error
+}
+
 type Handler struct {
 	pool *pgxpool.Pool
 	q    *gen.Queries
+	enq  SettleEnqueuer
 }
 
 func New(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool, q: gen.New(pool)} }
+
+// WithSettle wires the async-settlement enqueuer; returns the handler for chaining.
+func (h *Handler) WithSettle(e SettleEnqueuer) *Handler { h.enq = e; return h }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	r.Group(func(ar chi.Router) {
@@ -367,86 +377,35 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]any{"period_key": key, "currency": p.Currency, "rows": out})
 }
 
-type settleResult struct {
-	PeriodKey   string `json:"period_key"`
-	Settled     int    `json:"settled"`
-	Skipped     int    `json:"skipped"`
-	TotalRebate string `json:"total_rebate"`
-}
-
+// settle settles a program's current period. When the async enqueuer is wired
+// (production) it schedules a background job and returns 202 — a program can fan
+// out to tens of thousands of credit notes, far too many for one request.
+// Without an enqueuer (tests, single-customer programs) it runs the SAME job
+// logic inline and returns the result. The job is idempotent, so a duplicate
+// enqueue never double-pays.
 func (h *Handler) settle(w http.ResponseWriter, r *http.Request) {
 	p, ok := h.requireProgram(w, r)
 	if !ok {
 		return
 	}
-	tiers := engineTiers(h.loadTiers(r, p.ID))
-	start, end, key := rebates.PeriodWindow(p.Period, refTime(r))
-
-	rows, err := h.q.RebateQualifyingTotals(r.Context(), gen.RebateQualifyingTotalsParams{
-		OrganizationID: p.OrganizationID, Currency: p.Currency, CreatedAt: start, CreatedAt_2: end, Customer: p.CustomerID,
+	ref := refTime(r).Format(time.RFC3339)
+	if h.enq != nil {
+		if err := h.enq.EnqueueRebateSettle(r.Context(), p.ID, ref); err != nil {
+			response.Fail(w, http.StatusInternalServerError, "internal", "could not schedule settlement")
+			return
+		}
+		_, _, key := rebates.PeriodWindow(p.Period, refTime(r))
+		response.JSON(w, http.StatusAccepted, map[string]any{"scheduled": true, "period_key": key})
+		return
+	}
+	res, err := jobs.SettleRebateProgram(r.Context(), h.pool, p.ID, ref)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, "internal", "could not settle: "+err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{
+		"period_key": res.PeriodKey, "settled": res.Settled, "skipped": res.Skipped, "total_rebate": res.TotalRebate,
 	})
-	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not compute accruals")
-		return
-	}
-	// Already-settled customers for this period (idempotent re-runs skip them).
-	settled := map[int64]bool{}
-	if existing, e := h.q.ListRebateSettlementsForProgram(r.Context(), p.ID); e == nil {
-		for _, s := range existing {
-			if s.PeriodKey == key {
-				settled[s.CustomerID] = true
-			}
-		}
-	}
-
-	tx, err := h.pool.Begin(r.Context())
-	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not start settlement")
-		return
-	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
-	q := gen.New(tx)
-
-	count, skipped := 0, 0
-	totalRebate := "0"
-	for _, row := range rows {
-		if settled[row.CustomerID] {
-			skipped++
-			continue
-		}
-		rate, _, ok := rebates.Applicable(row.Total, tiers)
-		if !ok {
-			skipped++
-			continue // below the lowest tier — no rebate earned
-		}
-		amt, e := rebates.Rebate(row.Total, rate)
-		if e != nil {
-			skipped++
-			continue
-		}
-		// Issue a credit note for the rebate (no return/invoice link).
-		cid := row.CustomerID
-		cn, e := q.CreateCreditNote(r.Context(), gen.CreateCreditNoteParams{CustomerID: cid, Amount: amt, Currency: p.Currency})
-		if e != nil {
-			response.Fail(w, http.StatusInternalServerError, "internal", "could not issue credit note")
-			return
-		}
-		cnID := cn.ID
-		if _, e := q.CreateRebateSettlement(r.Context(), gen.CreateRebateSettlementParams{
-			ProgramID: p.ID, CustomerID: cid, PeriodKey: key, QualifyingTotal: row.Total,
-			RatePercent: rate, RebateAmount: amt, Currency: p.Currency, Status: "issued", CreditNoteID: &cnID,
-		}); e != nil {
-			response.Fail(w, http.StatusInternalServerError, "internal", "could not record settlement")
-			return
-		}
-		totalRebate, _ = money.Sum(totalRebate, amt)
-		count++
-	}
-	if err := tx.Commit(r.Context()); err != nil {
-		response.Fail(w, http.StatusInternalServerError, "internal", "could not commit settlement")
-		return
-	}
-	response.JSON(w, http.StatusOK, settleResult{PeriodKey: key, Settled: count, Skipped: skipped, TotalRebate: totalRebate})
 }
 
 func (h *Handler) listSettlements(w http.ResponseWriter, r *http.Request) {

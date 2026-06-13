@@ -1,8 +1,8 @@
 // Package cart implements the cart & shopping-list module (Implementation Pack
 // 1 §5). It is storefront-facing: every route is scoped to the authenticated
 // customer-user's buying company (from the storefront token), and line prices
-// are read from the precomputed combined_prices cache at add-time and
-// re-validated on demand. No price resolved => "price on request" (RFQ path).
+// are resolved live from price lists + assignments at add-time and re-validated
+// on demand. No price resolved => "price on request" (RFQ path).
 package cart
 
 import (
@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"b2bcommerce/internal/fx"
 	"b2bcommerce/internal/money"
@@ -124,11 +125,14 @@ func (h *Handler) activeCart(r *http.Request, p principal) (gen.Cart, error) {
 	})
 }
 
-// resolvePrice reads the customer's combined price for a product at a quantity.
-// Returns ("", false) when nothing resolves (price-on-request).
-func (h *Handler) resolvePrice(r *http.Request, p principal, productID int64, unit, qty, currency string) (string, bool, error) {
-	row, err := h.q.GetCombinedPrice(r.Context(), gen.GetCombinedPriceParams{
-		CustomerID: p.customerID, ProductID: productID, Unit: unit, Column4: qty, Currency: currency,
+// resolvePrice resolves the customer's contract price for a product at a
+// quantity, live from price lists + assignments (no cache). Returns ("", false)
+// when nothing resolves (price-on-request).
+func (h *Handler) resolvePrice(r *http.Request, p principal, websiteID int64, productID int64, unit, qty, currency string) (string, bool, error) {
+	wid := websiteID
+	row, err := h.q.ResolvePriceTier(r.Context(), gen.ResolvePriceTierParams{
+		ID: p.customerID, ProductID: productID, Unit: unit, Column4: qty, Currency: currency,
+		WebsiteID: &wid, ValidFrom: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
@@ -408,7 +412,7 @@ func (h *Handler) addItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	price, ok, err := h.resolvePrice(r, p, productID, req.Unit, req.Quantity, c.Currency)
+	price, ok, err := h.resolvePrice(r, p, c.WebsiteID, productID, req.Unit, req.Quantity, c.Currency)
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve price")
 		return
@@ -515,7 +519,7 @@ func (h *Handler) revalidate(w http.ResponseWriter, r *http.Request) {
 	}
 	changes := []drift{}
 	for _, it := range rows {
-		price, ok, err := h.resolvePrice(r, p, it.ProductID, it.Unit, it.Quantity, c.Currency)
+		price, ok, err := h.resolvePrice(r, p, c.WebsiteID, it.ProductID, it.Unit, it.Quantity, c.Currency)
 		if err != nil {
 			response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve price")
 			return
@@ -573,7 +577,7 @@ func (h *Handler) reorder(w http.ResponseWriter, r *http.Request) {
 	}
 	skipped := []string{}
 	for _, it := range items {
-		price, priced, err := h.resolvePrice(r, p, it.ProductID, it.Unit, it.Quantity, c.Currency)
+		price, priced, err := h.resolvePrice(r, p, c.WebsiteID, it.ProductID, it.Unit, it.Quantity, c.Currency)
 		if err != nil {
 			response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve price")
 			return
@@ -644,7 +648,7 @@ func (h *Handler) addBulk(w http.ResponseWriter, r *http.Request) {
 			notFound = append(notFound, sku)
 			continue
 		}
-		price, priced, err := h.resolvePrice(r, p, prod.ID, unit, qty, c.Currency)
+		price, priced, err := h.resolvePrice(r, p, c.WebsiteID, prod.ID, unit, qty, c.Currency)
 		if err != nil {
 			response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve price")
 			return
@@ -684,8 +688,9 @@ func (h *Handler) productPricing(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "no website configured")
 		return
 	}
-	rows, err := h.q.ListCustomerPriceTiersForSlug(r.Context(), gen.ListCustomerPriceTiersForSlugParams{
-		CustomerID: p.customerID, Slug: slug, OrganizationID: p.orgID, Currency: ws.DefaultCurrency,
+	rows, err := h.q.ResolvePriceTiersForSlug(r.Context(), gen.ResolvePriceTiersForSlugParams{
+		ID: p.customerID, Slug: slug, OrganizationID: p.orgID, Currency: ws.DefaultCurrency,
+		WebsiteID: &ws.ID, ValidFrom: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not load pricing")
@@ -969,7 +974,7 @@ func (h *Handler) convertList(w http.ResponseWriter, r *http.Request) {
 	}
 	skipped := []int64{}
 	for _, it := range items {
-		price, priced, err := h.resolvePrice(r, p, it.ProductID, it.Unit, it.Quantity, c.Currency)
+		price, priced, err := h.resolvePrice(r, p, c.WebsiteID, it.ProductID, it.Unit, it.Quantity, c.Currency)
 		if err != nil {
 			response.Fail(w, http.StatusInternalServerError, "internal", "could not resolve price")
 			return

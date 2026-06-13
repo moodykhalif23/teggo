@@ -7,7 +7,10 @@ import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import { api, errMessage } from '@/lib/client'
+import type { components } from '@teggo/api/schema'
 import { useCustomerOptions, useProductOptions } from '@/composables/useRecordOptions'
+
+type ResolvedPrice = components['schemas']['ResolvedPrice']
 
 const toast = useToast()
 
@@ -48,24 +51,26 @@ async function doResolve() {
   result.value = data
 }
 
-// Recompute combined_prices for a customer
-const recompute = reactive({ customer_id: null as number | null, currency: '' })
-const recomputing = ref(false)
-async function doRecompute() {
-  if (!recompute.customer_id) {
-    toast.add({ severity: 'warn', summary: 'customer_id required', life: 3000 })
+// Customer price book — resolved live , keyset-paginated.
+const book = reactive({ customer_id: null as number | null, currency: 'USD' })
+const bookRows = ref<ResolvedPrice[]>([])
+const bookLoading = ref(false)
+async function loadBook() {
+  if (!book.customer_id) {
+    toast.add({ severity: 'warn', summary: 'customer required', life: 3000 })
     return
   }
-  recomputing.value = true
-  const { error } = await api.POST('/admin/pricing/recompute', {
-    body: { customer_id: recompute.customer_id, currency: recompute.currency || undefined },
+  bookLoading.value = true
+  bookRows.value = []
+  const { data, error } = await api.GET('/admin/customers/{id}/resolved-prices', {
+    params: { path: { id: book.customer_id }, query: { currency: book.currency || 'USD', limit: 100 } },
   })
-  recomputing.value = false
-  if (error) {
-    toast.add({ severity: 'error', summary: 'Recompute failed', detail: errMessage(error), life: 4000 })
+  bookLoading.value = false
+  if (error || !data) {
+    toast.add({ severity: 'error', summary: 'Load failed', detail: errMessage(error), life: 4000 })
     return
   }
-  toast.add({ severity: 'success', summary: 'Recompute enqueued', life: 2500 })
+  bookRows.value = data.items ?? []
 }
 </script>
 
@@ -95,13 +100,20 @@ async function doRecompute() {
     </Card>
 
     <Card>
-      <template #title>Recompute combined prices</template>
-      <template #subtitle>Rebuild the cached prices for a customer (async job).</template>
+      <template #title>Customer price book</template>
+      <template #subtitle>Contract prices resolved live — no cache, always current.</template>
       <template #content>
         <div class="row">
-          <Select v-model="recompute.customer_id" :options="customers" optionLabel="name" optionValue="id" filter filterPlaceholder="Search…" placeholder="Customer" :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'" showClear />
-          <InputText v-model="recompute.currency" placeholder="ccy (default website)" class="sm" maxlength="3" />
-          <Button label="Recompute" icon="pi pi-bolt" :loading="recomputing" @click="doRecompute" />
+          <Select v-model="book.customer_id" :options="customers" optionLabel="name" optionValue="id" filter filterPlaceholder="Search…" placeholder="Customer" :emptyMessage="customersLoaded ? 'No customers' : 'Loading…'" showClear />
+          <InputText v-model="book.currency" placeholder="ccy" class="sm" maxlength="3" />
+          <Button label="Load" icon="pi pi-book" :loading="bookLoading" @click="loadBook" />
+        </div>
+        <div v-if="bookRows.length" class="result book">
+          <div v-for="r in bookRows.slice(0, 50)" :key="r.product_id + '-' + r.min_quantity" class="book-row">
+            <span class="muted">#{{ r.product_id }}</span>
+            <span class="muted">{{ r.min_quantity }}+</span>
+            <Tag :value="r.value" severity="success" />
+          </div>
         </div>
       </template>
     </Card>
@@ -115,5 +127,7 @@ async function doRecompute() {
 .row :deep(.p-select) { min-width: 13rem; }
 .row .sm :deep(input), .row .sm { width: 6rem; }
 .result { margin-top: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+.book { flex-direction: column; align-items: stretch; gap: 0.3rem; max-height: 18rem; overflow-y: auto; }
+.book-row { display: flex; align-items: center; gap: 0.6rem; }
 .muted { color: var(--p-text-muted-color, #64748b); }
 </style>
