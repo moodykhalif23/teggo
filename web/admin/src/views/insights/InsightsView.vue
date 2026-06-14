@@ -98,6 +98,11 @@ function delta(pct: number | undefined): Delta {
   return { text, dir: p > 0.05 ? 'up' : p < -0.05 ? 'down' : 'flat' }
 }
 
+const marginDir = computed<'up' | 'down' | 'flat'>(() => {
+  const d = kpis.value?.margin_delta_pts ?? 0
+  return d > 0.05 ? 'up' : d < -0.05 ? 'down' : 'flat'
+})
+
 const arNote = computed(() => {
   const over = kpis.value?.ar_90_plus
   if (over && Number(over) > 0) return `${over} over 90 days`
@@ -178,6 +183,15 @@ function goAction(href: string | undefined) {
         <div class="kpi-label">Avg order value</div>
         <div class="kpi-value">{{ kpis?.avg_order_value ?? '—' }}</div>
         <span class="kpi-sub">per order this period</span>
+      </template></Card>
+
+      <Card v-if="kpis?.has_cost" class="kpi"><template #content>
+        <div class="kpi-label">Gross margin</div>
+        <div class="kpi-value">{{ (kpis?.margin_pct ?? 0).toFixed(1) }}%</div>
+        <span class="kpi-delta" :class="marginDir">
+          <i :class="marginDir === 'down' ? 'pi pi-arrow-down-right' : 'pi pi-arrow-up-right'" />
+          {{ (kpis?.margin_delta_pts ?? 0) > 0 ? '+' : '' }}{{ (kpis?.margin_delta_pts ?? 0).toFixed(1) }} pts vs prior
+        </span>
       </template></Card>
 
       <Card class="kpi"><template #content>

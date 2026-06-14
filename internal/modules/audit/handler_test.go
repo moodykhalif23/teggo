@@ -160,6 +160,29 @@ func TestAuditExportCSV(t *testing.T) {
 	}
 }
 
+// TestAuditCapturesFailedLogin proves login attempts are audited even though the
+// login route is public (the middleware can't see it) — recorded via the
+// explicit Record path.
+func TestAuditCapturesFailedLogin(t *testing.T) {
+	h, issuer, _ := newServer(t)
+
+	rr := do(t, h, http.MethodPost, "/admin/auth/login", "", map[string]any{"email": "attacker@evil.test", "password": "nope"})
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("failed login: want 401, got %d", rr.Code)
+	}
+
+	tok := adminToken(t, issuer, "audit.view")
+	var list auditList
+	decode(t, do(t, h, http.MethodGet, "/admin/audit", tok, nil), &list)
+	a := find(list.Items, "auth.login_failed")
+	if a == nil {
+		t.Fatalf("expected an auth.login_failed audit entry, got %+v", list.Items)
+	}
+	if a.StatusCode != http.StatusUnauthorized || a.ActorAudience != "admin" {
+		t.Errorf("failed-login entry = %d/%s, want 401/admin", a.StatusCode, a.ActorAudience)
+	}
+}
+
 func TestAuditAuth(t *testing.T) {
 	h, issuer, _ := newServer(t)
 

@@ -7,8 +7,10 @@
 -- name: CreateProduct :one
 INSERT INTO products (
   organization_id, sku, type, name, slug, description, status,
-  attributes, unit, parent_id, attribute_family_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  attributes, unit, parent_id, attribute_family_id, cost_price
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+  -- Tolerate an empty cost (callers that don't set one) → 0.
+  COALESCE(NULLIF($12::text, ''), '0')::numeric)
 RETURNING *;
 
 -- name: GetProductByID :one
@@ -54,7 +56,8 @@ SET sku                 = $3,
     attributes          = $9,
     unit                = $10,
     parent_id           = $11,
-    attribute_family_id = $12
+    attribute_family_id = $12,
+    cost_price          = COALESCE(NULLIF($13::text, ''), '0')::numeric
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
 RETURNING *;
 

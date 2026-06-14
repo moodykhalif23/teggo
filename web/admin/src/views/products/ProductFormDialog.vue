@@ -166,6 +166,7 @@ const form = reactive<ProductInput>({
   status: 'draft',
   unit: 'each',
   description: '',
+  cost_price: '0',
 })
 
 watch(
@@ -182,6 +183,7 @@ watch(
         status: props.product.status,
         unit: props.product.unit,
         description: props.product.description ?? '',
+        cost_price: props.product.cost_price ?? '0',
       })
       attrsText.value = JSON.stringify(props.product.attributes ?? {}, null, 2)
       loadCustomers()
@@ -192,7 +194,7 @@ watch(
       visRules.value = []
       images.value = []
       translations.value = []
-      Object.assign(form, { sku: '', name: '', slug: '', type: 'simple', status: 'draft', unit: 'each', description: '' })
+      Object.assign(form, { sku: '', name: '', slug: '', type: 'simple', status: 'draft', unit: 'each', description: '', cost_price: '0' })
       attrsText.value = '{}'
     }
   },
@@ -260,9 +262,15 @@ async function save() {
           <Select v-model="form.status" :options="statuses" fluid />
         </div>
       </div>
-      <div class="field">
-        <label>Unit</label>
-        <InputText v-model="form.unit" fluid />
+      <div class="grid2">
+        <div class="field">
+          <label>Unit</label>
+          <InputText v-model="form.unit" fluid />
+        </div>
+        <div class="field">
+          <label>Cost price <span class="hint">(for margin)</span></label>
+          <InputText v-model="form.cost_price" fluid />
+        </div>
       </div>
       <div class="field">
         <label>Description</label>

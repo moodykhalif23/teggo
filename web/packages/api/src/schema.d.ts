@@ -4596,6 +4596,8 @@ export interface components {
             parent_id?: number | null;
             /** Format: int64 */
             attribute_family_id?: number | null;
+            /** @description Unit cost for margin/profitability (decimal string) */
+            cost_price?: string;
         };
         ProductInput: {
             sku: string;
@@ -4612,6 +4614,8 @@ export interface components {
             parent_id?: number | null;
             /** Format: int64 */
             attribute_family_id?: number | null;
+            /** @description Unit cost for margin/profitability (decimal string) */
+            cost_price?: string;
         };
         AdminProductList: {
             items: components["schemas"]["AdminProduct"][];
@@ -6557,6 +6561,12 @@ export interface components {
             orders_delta_pct?: number;
             /** Format: int64 */
             new_customers?: number;
+            cost?: string;
+            gross_margin?: string;
+            margin_pct?: number;
+            prev_margin_pct?: number;
+            margin_delta_pts?: number;
+            has_cost?: boolean;
             open_ar?: string;
             ar_90_plus?: string;
             open_invoices?: number;

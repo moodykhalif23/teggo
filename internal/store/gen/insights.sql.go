@@ -182,6 +182,41 @@ func (q *Queries) ListInsightDigests(ctx context.Context, arg ListInsightDigests
 	return items, nil
 }
 
+const marginWindow = `-- name: MarginWindow :one
+SELECT
+  COALESCE(sum(oi.row_total), 0)::numeric(15,4)         AS revenue,
+  COALESCE(sum(oi.quantity * p.cost_price), 0)::numeric(15,4) AS cost
+FROM order_items oi
+JOIN orders o   ON o.id = oi.order_id
+JOIN products p ON p.id = oi.product_id
+WHERE o.organization_id = $1
+  AND o.status <> 'cancelled'
+  AND o.created_at >= $2
+  AND o.created_at <  $3
+`
+
+type MarginWindowParams struct {
+	OrganizationID int64     `json:"organization_id"`
+	FromTs         time.Time `json:"from_ts"`
+	ToTs           time.Time `json:"to_ts"`
+}
+
+type MarginWindowRow struct {
+	Revenue string `json:"revenue"`
+	Cost    string `json:"cost"`
+}
+
+// MarginWindow returns line-item revenue and cost of goods over the window, for
+// gross-margin analysis. Cost is at the product's CURRENT cost_price (v1 — no
+// per-line cost snapshot yet); products with cost 0 contribute no cost, so margin
+// reads as 100% until costs are entered. Run twice (current + prior) for the trend.
+func (q *Queries) MarginWindow(ctx context.Context, arg MarginWindowParams) (MarginWindowRow, error) {
+	row := q.db.QueryRow(ctx, marginWindow, arg.OrganizationID, arg.FromTs, arg.ToTs)
+	var i MarginWindowRow
+	err := row.Scan(&i.Revenue, &i.Cost)
+	return i, err
+}
+
 const newCustomerCountWindow = `-- name: NewCustomerCountWindow :one
 SELECT count(*)::bigint AS new_customers FROM (
   SELECT o.customer_id

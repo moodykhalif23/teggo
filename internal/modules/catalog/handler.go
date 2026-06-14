@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
+	"b2bcommerce/internal/audit"
 	"b2bcommerce/internal/changelog"
 	"b2bcommerce/internal/merchandising"
 	mw "b2bcommerce/internal/server/middleware"
@@ -144,6 +145,7 @@ type adminProduct struct {
 	Unit              string          `json:"unit"`
 	ParentID          *int64          `json:"parent_id"`
 	AttributeFamilyID *int64          `json:"attribute_family_id"`
+	CostPrice         string          `json:"cost_price"`
 }
 
 func rawJSON(b []byte) json.RawMessage {
@@ -159,6 +161,7 @@ func toAdminProduct(p gen.Product) adminProduct {
 		Name: p.Name, Slug: p.Slug, Description: p.Description, Status: p.Status,
 		Attributes: rawJSON(p.Attributes), Unit: p.Unit,
 		ParentID: p.ParentID, AttributeFamilyID: p.AttributeFamilyID,
+		CostPrice: p.CostPrice,
 	}
 }
 
@@ -548,6 +551,7 @@ type productRequest struct {
 	Unit              string          `json:"unit"`
 	ParentID          *int64          `json:"parent_id"`
 	AttributeFamilyID *int64          `json:"attribute_family_id"`
+	CostPrice         string          `json:"cost_price"`
 }
 
 func (pr *productRequest) defaults() {
@@ -562,6 +566,9 @@ func (pr *productRequest) defaults() {
 	}
 	if len(pr.Attributes) == 0 {
 		pr.Attributes = json.RawMessage("{}")
+	}
+	if pr.CostPrice == "" {
+		pr.CostPrice = "0"
 	}
 }
 
@@ -638,6 +645,7 @@ func (h *Handler) adminCreate(w http.ResponseWriter, r *http.Request) {
 		OrganizationID: org, Sku: req.SKU, Type: req.Type, Name: req.Name, Slug: req.Slug,
 		Description: req.Description, Status: req.Status, Attributes: req.Attributes,
 		Unit: req.Unit, ParentID: req.ParentID, AttributeFamilyID: req.AttributeFamilyID,
+		Column12: req.CostPrice, // cost_price (text-coalesced to 0 when empty)
 	})
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not create product")
@@ -645,6 +653,9 @@ func (h *Handler) adminCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Shared catalog: global change_log entry for field-sync devices.
 	changelog.Record(r.Context(), h.q, org, nil, "product", p.ID, "upsert", toAdminProduct(p))
+	audit.SetEntity(r.Context(), "products", p.ID)
+	audit.SetSummary(r.Context(), "Created product "+p.Sku)
+	audit.SetChange(r.Context(), nil, toAdminProduct(p))
 	response.JSON(w, http.StatusCreated, toAdminProduct(p))
 }
 
@@ -692,10 +703,12 @@ func (h *Handler) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.defaults()
+	before, _ := h.q.GetProductByID(r.Context(), gen.GetProductByIDParams{OrganizationID: org, ID: id})
 	p, err := h.q.UpdateProduct(r.Context(), gen.UpdateProductParams{
 		OrganizationID: org, ID: id, Sku: req.SKU, Type: req.Type, Name: req.Name, Slug: req.Slug,
 		Description: req.Description, Status: req.Status, Attributes: req.Attributes,
 		Unit: req.Unit, ParentID: req.ParentID, AttributeFamilyID: req.AttributeFamilyID,
+		Column13: req.CostPrice, // cost_price (text-coalesced to 0 when empty)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -706,6 +719,13 @@ func (h *Handler) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	changelog.Record(r.Context(), h.q, org, nil, "product", p.ID, "upsert", toAdminProduct(p))
+	audit.SetEntity(r.Context(), "products", p.ID)
+	audit.SetSummary(r.Context(), "Updated product "+p.Sku)
+	var beforeDTO any
+	if before.ID != 0 {
+		beforeDTO = toAdminProduct(before)
+	}
+	audit.SetChange(r.Context(), beforeDTO, toAdminProduct(p))
 	response.JSON(w, http.StatusOK, toAdminProduct(p))
 }
 
@@ -720,6 +740,7 @@ func (h *Handler) adminDelete(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusBadRequest, "bad_request", "invalid id")
 		return
 	}
+	before, _ := h.q.GetProductByID(r.Context(), gen.GetProductByIDParams{OrganizationID: org, ID: id})
 	n, err := h.q.SoftDeleteProduct(r.Context(), gen.SoftDeleteProductParams{OrganizationID: org, ID: id})
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not delete product")
@@ -728,6 +749,11 @@ func (h *Handler) adminDelete(w http.ResponseWriter, r *http.Request) {
 	if n == 0 {
 		response.Fail(w, http.StatusNotFound, "not_found", "product not found")
 		return
+	}
+	audit.SetEntity(r.Context(), "products", id)
+	if before.ID != 0 {
+		audit.SetSummary(r.Context(), "Deleted product "+before.Sku)
+		audit.SetChange(r.Context(), toAdminProduct(before), nil)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

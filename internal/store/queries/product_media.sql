@@ -31,7 +31,7 @@ SELECT id, url FROM media_assets WHERE id = $1 AND organization_id = $2;
 
 -- ExportProductsAdmin streams the full (non-deleted) catalog for CSV export.
 -- name: ExportProductsAdmin :many
-SELECT sku, type, name, slug, description, status, unit, attributes
+SELECT sku, type, name, slug, description, status, unit, attributes, cost_price
 FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL
 ORDER BY sku;

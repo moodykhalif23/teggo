@@ -162,7 +162,7 @@ func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="products.csv"`)
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"sku", "name", "slug", "type", "status", "unit", "description", "attributes"})
+	_ = cw.Write([]string{"sku", "name", "slug", "type", "status", "unit", "cost_price", "description", "attributes"})
 	for _, p := range rows {
 		desc := ""
 		if p.Description != nil {
@@ -172,7 +172,7 @@ func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
 		if attrs == "" {
 			attrs = "{}"
 		}
-		_ = cw.Write([]string{p.Sku, p.Name, p.Slug, p.Type, p.Status, p.Unit, desc, attrs})
+		_ = cw.Write([]string{p.Sku, p.Name, p.Slug, p.Type, p.Status, p.Unit, p.CostPrice, desc, attrs})
 	}
 	cw.Flush()
 }
@@ -253,6 +253,8 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		pr := productRequest{SKU: sku, Name: name, Slug: slug, Type: field(rec, "type"), Status: field(rec, "status"), Unit: field(rec, "unit")}
+		pr.CostPrice = field(rec, "cost_price")
+		costGiven := pr.CostPrice != "" // when absent on update, preserve the existing cost
 		if d := field(rec, "description"); d != "" {
 			pr.Description = &d
 		}
@@ -269,9 +271,14 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 		existing, lookupErr := h.q.GetProductBySKU(r.Context(), gen.GetProductBySKUParams{OrganizationID: org, Sku: sku})
 		switch {
 		case lookupErr == nil:
+			cost := pr.CostPrice
+			if !costGiven {
+				cost = existing.CostPrice // no cost column → keep the existing cost, don't zero it
+			}
 			p, uerr := h.q.UpdateProduct(r.Context(), gen.UpdateProductParams{
 				OrganizationID: org, ID: existing.ID, Sku: pr.SKU, Type: pr.Type, Name: pr.Name, Slug: pr.Slug,
 				Description: pr.Description, Status: pr.Status, Attributes: pr.Attributes, Unit: pr.Unit,
+				Column13: cost, // cost_price
 			})
 			if uerr != nil {
 				entry.Action, entry.Error = "error", "could not update (duplicate slug?)"
@@ -285,6 +292,7 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 			p, cerr := h.q.CreateProduct(r.Context(), gen.CreateProductParams{
 				OrganizationID: org, Sku: pr.SKU, Type: pr.Type, Name: pr.Name, Slug: pr.Slug,
 				Description: pr.Description, Status: pr.Status, Attributes: pr.Attributes, Unit: pr.Unit,
+				Column12: pr.CostPrice, // cost_price
 			})
 			if cerr != nil {
 				entry.Action, entry.Error = "error", "could not create (duplicate slug?)"

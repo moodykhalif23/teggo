@@ -158,14 +158,60 @@ func (rec *Recorder) finalize(r *http.Request, e *Entry, status int) {
 		Metadata:       metadata,
 	}
 
-	// Detached from request cancellation (an audit write must outlive a client
-	// disconnect) but preserving context values, so the RLS-armed pool still
-	// binds the right org. Best-effort: a failed audit write never affects the
-	// request the user already completed.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	rec.write(r.Context(), params)
+}
+
+// Event is a pre-attributed audit record written directly via Record — for
+// actions outside the authenticated mutation path that the middleware can't see:
+// login attempts (a public route) and data exports (a read, not a mutation).
+type Event struct {
+	OrgID      int64
+	ActorID    *int64 // nil when there is no authenticated actor (e.g. a failed login)
+	Audience   string // "admin" | "vendor"
+	Action     string
+	EntityType string
+	EntityID   *int64
+	StatusCode int
+	Summary    string
+	Metadata   map[string]any
+}
+
+// Record writes one audit entry from e plus the request's transport metadata
+// (IP, user-agent, request id). Best-effort, like the middleware's own writes.
+func (rec *Recorder) Record(r *http.Request, e Event) {
+	metadata := []byte("{}")
+	if len(e.Metadata) > 0 {
+		if b, err := json.Marshal(e.Metadata); err == nil {
+			metadata = b
+		}
+	}
+	rec.write(r.Context(), gen.CreateAuditLogParams{
+		OrganizationID: e.OrgID,
+		ActorUserID:    e.ActorID,
+		ActorAudience:  e.Audience,
+		Action:         e.Action,
+		EntityType:     e.EntityType,
+		EntityID:       e.EntityID,
+		Method:         r.Method,
+		Path:           r.URL.Path,
+		StatusCode:     int32(e.StatusCode),
+		Ip:             clientIP(r),
+		UserAgent:      truncate(r.UserAgent(), 512),
+		RequestID:      chimw.GetReqID(r.Context()),
+		Summary:        truncate(e.Summary, 1024),
+		Metadata:       metadata,
+	})
+}
+
+// write persists one audit row. Detached from request cancellation (an audit
+// write must outlive a client disconnect) but preserving context values so the
+// RLS-armed pool still binds the right org. A failed write never affects the
+// request the user already completed.
+func (rec *Recorder) write(reqCtx context.Context, params gen.CreateAuditLogParams) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), 5*time.Second)
 	defer cancel()
 	if _, err := gen.New(rec.pool).CreateAuditLog(ctx, params); err != nil {
-		rec.logger.Warn("audit write failed", "err", err, "action", action, "path", r.URL.Path)
+		rec.logger.Warn("audit write failed", "err", err, "action", params.Action, "path", params.Path)
 	}
 }
 

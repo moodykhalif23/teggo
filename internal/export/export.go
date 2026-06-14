@@ -19,25 +19,42 @@ type Table struct {
 	Rows    [][]string
 }
 
-func (t Table) header() []string {
-	h := make([]string, len(t.Columns))
-	for i, c := range t.Columns {
-		h[i] = c.Name
-	}
-	return h
-}
-
-// WriteCSV streams the table as CSV to w (RFC 4180 via encoding/csv).
+// WriteCSV writes the whole table as CSV to w (RFC 4180 via encoding/csv).
 func WriteCSV(w io.Writer, t Table) error {
-	cw := csv.NewWriter(w)
-	if err := cw.Write(t.header()); err != nil {
+	s, err := NewCSVStream(w, t.Columns)
+	if err != nil {
 		return err
 	}
 	for _, row := range t.Rows {
-		if err := cw.Write(row); err != nil {
+		if err := s.Write(row); err != nil {
 			return err
 		}
 	}
-	cw.Flush()
-	return cw.Error()
+	return s.Flush()
+}
+
+// CSVStream writes CSV incrementally, so a large export streams to the client
+// with bounded memory rather than materializing every row first. NewCSVStream
+// writes the header from the columns.
+type CSVStream struct{ cw *csv.Writer }
+
+func NewCSVStream(w io.Writer, cols []Column) (*CSVStream, error) {
+	cw := csv.NewWriter(w)
+	hdr := make([]string, len(cols))
+	for i, c := range cols {
+		hdr[i] = c.Name
+	}
+	if err := cw.Write(hdr); err != nil {
+		return nil, err
+	}
+	return &CSVStream{cw: cw}, nil
+}
+
+// Write emits one row.
+func (s *CSVStream) Write(row []string) error { return s.cw.Write(row) }
+
+// Flush flushes buffered rows and returns any write error.
+func (s *CSVStream) Flush() error {
+	s.cw.Flush()
+	return s.cw.Error()
 }

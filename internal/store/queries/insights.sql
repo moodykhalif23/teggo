@@ -34,6 +34,22 @@ WHERE o.organization_id = $1
 GROUP BY o.customer_id, c.name
 ORDER BY revenue DESC;
 
+-- MarginWindow returns line-item revenue and cost of goods over the window, for
+-- gross-margin analysis. Cost is at the product's CURRENT cost_price (v1 — no
+-- per-line cost snapshot yet); products with cost 0 contribute no cost, so margin
+-- reads as 100% until costs are entered. Run twice (current + prior) for the trend.
+-- name: MarginWindow :one
+SELECT
+  COALESCE(sum(oi.row_total), 0)::numeric(15,4)         AS revenue,
+  COALESCE(sum(oi.quantity * p.cost_price), 0)::numeric(15,4) AS cost
+FROM order_items oi
+JOIN orders o   ON o.id = oi.order_id
+JOIN products p ON p.id = oi.product_id
+WHERE o.organization_id = $1
+  AND o.status <> 'cancelled'
+  AND o.created_at >= sqlc.arg(from_ts)
+  AND o.created_at <  sqlc.arg(to_ts);
+
 -- NewCustomerCountWindow counts accounts whose FIRST ever non-cancelled order
 -- falls inside the window — new-logo acquisition for the period.
 -- name: NewCustomerCountWindow :one

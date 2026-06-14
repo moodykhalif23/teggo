@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"b2bcommerce/internal/audit"
 	"b2bcommerce/internal/auth"
 	"b2bcommerce/internal/server/response"
 	"b2bcommerce/internal/store"
@@ -16,12 +17,24 @@ import (
 )
 
 type Handler struct {
-	store  *store.Store
-	issuer *auth.Issuer
+	store    *store.Store
+	issuer   *auth.Issuer
+	auditRec *audit.Recorder
 }
 
 func New(s *store.Store, issuer *auth.Issuer) *Handler {
 	return &Handler{store: s, issuer: issuer}
+}
+
+// WithAudit wires the audit recorder so login attempts (a public route the audit
+// middleware can't see) are recorded. Without it, login auditing is a no-op.
+func (h *Handler) WithAudit(rec *audit.Recorder) *Handler { h.auditRec = rec; return h }
+
+// audit records a login event when a recorder is wired (no-op otherwise).
+func (h *Handler) audit(r *http.Request, e audit.Event) {
+	if h.auditRec != nil {
+		h.auditRec.Record(r, e)
+	}
 }
 
 // Routes mounts the login endpoints. The limiter middleware throttles
@@ -103,10 +116,12 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.store.GetUserByEmail(r.Context(), req.OrgID, req.Email)
 	if err != nil || !auth.CheckPassword(u.PasswordHash, req.Password) {
+		h.audit(r, audit.Event{OrgID: req.OrgID, Audience: "admin", Action: "auth.login_failed", StatusCode: http.StatusUnauthorized, Summary: req.Email})
 		response.Fail(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 		return
 	}
 	if !h.orgLoginAllowed(w, r, u.OrgID) {
+		h.audit(r, audit.Event{OrgID: u.OrgID, ActorID: &u.ID, Audience: "admin", Action: "auth.login_blocked", StatusCode: http.StatusForbidden, Summary: req.Email})
 		return
 	}
 
@@ -121,6 +136,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not issue token")
 		return
 	}
+	h.audit(r, audit.Event{OrgID: u.OrgID, ActorID: &u.ID, Audience: "admin", Action: "auth.login", StatusCode: http.StatusOK, Summary: req.Email})
 	response.JSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
@@ -173,6 +189,7 @@ func (h *Handler) vendorLogin(w http.ResponseWriter, r *http.Request) {
 		Email:          req.Email,
 	})
 	if err != nil || !auth.CheckPassword(vu.PasswordHash, req.Password) {
+		h.audit(r, audit.Event{OrgID: req.OrgID, Audience: "vendor", Action: "auth.login_failed", StatusCode: http.StatusUnauthorized, Summary: req.Email})
 		response.Fail(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 		return
 	}
@@ -185,5 +202,6 @@ func (h *Handler) vendorLogin(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not issue token")
 		return
 	}
+	h.audit(r, audit.Event{OrgID: vu.OrganizationID, ActorID: &vu.ID, Audience: "vendor", Action: "auth.login", StatusCode: http.StatusOK, Summary: req.Email})
 	response.JSON(w, http.StatusOK, loginResponse{Token: token})
 }

@@ -91,6 +91,27 @@ func Detect(s Snapshot) []Anomaly {
 		})
 	}
 
+	// --- gross margin --------------------------------------------------------
+	// Only meaningful once products carry a cost; a drop in margin % vs the prior
+	// period is the "profitability slipping" signal.
+	if s.HasCost && s.PrevMarginPct > 0 {
+		drop := s.PrevMarginPct - s.MarginPct
+		if drop >= 5 {
+			sev := SevWarn
+			if drop >= 10 {
+				sev = SevCritical
+			}
+			out = append(out, Anomaly{
+				Key: "margin_erosion", Severity: sev,
+				Title:          fmt.Sprintf("Gross margin down %.1f pts", drop),
+				Detail:         fmt.Sprintf("margin fell from %.1f%% to %.1f%% versus the prior period", s.PrevMarginPct, s.MarginPct),
+				Metric:         fmt.Sprintf("%.1f%%", s.MarginPct),
+				Recommendation: "Review pricing and supplier costs on the highest-volume SKUs",
+				Action:         &Action{Kind: "analytics", Label: "Open analytics", Href: "/analytics"},
+			})
+		}
+	}
+
 	// --- churn risk ----------------------------------------------------------
 	if len(s.AtRisk) > 0 {
 		names := make([]string, 0, 3)

@@ -33,6 +33,7 @@ type Querier interface {
 	RevenueWindow(ctx context.Context, arg gen.RevenueWindowParams) (gen.RevenueWindowRow, error)
 	RevenueByCustomerWindow(ctx context.Context, arg gen.RevenueByCustomerWindowParams) ([]gen.RevenueByCustomerWindowRow, error)
 	NewCustomerCountWindow(ctx context.Context, arg gen.NewCustomerCountWindowParams) (int64, error)
+	MarginWindow(ctx context.Context, arg gen.MarginWindowParams) (gen.MarginWindowRow, error)
 	ListOpenInvoicesForOrg(ctx context.Context, organizationID int64) ([]gen.ListOpenInvoicesForOrgRow, error)
 	AccountHealth(ctx context.Context, organizationID int64) ([]gen.AccountHealthRow, error)
 	CountLowStock(ctx context.Context, organizationID int64) (int64, error)
@@ -70,6 +71,17 @@ type Snapshot struct {
 	RevenueDelta float64 `json:"revenue_delta_pct"`
 	OrdersDelta  float64 `json:"orders_delta_pct"`
 	NewCustomers int64   `json:"new_customers"`
+
+	// Gross margin (line-item revenue minus cost of goods at current cost).
+	// HasCost is false when no product carries a cost yet, in which case margin
+	// is not meaningful and the UI/narrator omits it.
+	MarginRevenue  string  `json:"margin_revenue"`
+	Cost           string  `json:"cost"`
+	GrossMargin    string  `json:"gross_margin"`
+	MarginPct      float64 `json:"margin_pct"`
+	PrevMarginPct  float64 `json:"prev_margin_pct"`
+	MarginDeltaPts float64 `json:"margin_delta_pts"`
+	HasCost        bool    `json:"has_cost"`
 
 	// Receivables.
 	OpenAR       string `json:"open_ar"`
@@ -115,6 +127,25 @@ func Build(ctx context.Context, q Querier, orgID int64, now time.Time, windowDay
 	// New-logo acquisition this period.
 	if n, err := q.NewCustomerCountWindow(ctx, gen.NewCustomerCountWindowParams{OrganizationID: orgID, FromTs: start, ToTs: end}); err == nil {
 		s.NewCustomers = n
+	}
+
+	// Gross margin (current vs prior), at current product cost.
+	curM, err := q.MarginWindow(ctx, gen.MarginWindowParams{OrganizationID: orgID, FromTs: start, ToTs: end})
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("margin window: %w", err)
+	}
+	prevM, err := q.MarginWindow(ctx, gen.MarginWindowParams{OrganizationID: orgID, FromTs: prevStart, ToTs: start})
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("prior margin window: %w", err)
+	}
+	s.MarginRevenue = curM.Revenue
+	s.Cost = curM.Cost
+	s.GrossMargin, _ = money.Sub(curM.Revenue, curM.Cost)
+	s.MarginPct = marginPct(curM.Revenue, curM.Cost)
+	s.PrevMarginPct = marginPct(prevM.Revenue, prevM.Cost)
+	s.HasCost = isPositive(curM.Cost)
+	if s.HasCost {
+		s.MarginDeltaPts = round1(s.MarginPct - s.PrevMarginPct)
 	}
 
 	// Receivables aging (open invoices bucketed by days past due).
@@ -244,6 +275,21 @@ func ratio(cur, prev float64) float64 {
 		return 0
 	}
 	return round1((cur - prev) / prev * 100)
+}
+
+// marginPct returns gross margin as a percentage of revenue (0 when revenue is 0).
+func marginPct(revenue, cost string) float64 {
+	r, err1 := money.Parse(revenue)
+	c, err2 := money.Parse(cost)
+	if err1 != nil || err2 != nil {
+		return 0
+	}
+	rf, _ := r.Float64()
+	cf, _ := c.Float64()
+	if rf == 0 {
+		return 0
+	}
+	return round1((rf - cf) / rf * 100)
 }
 
 // share returns part as a percentage of whole (0 when whole is 0).

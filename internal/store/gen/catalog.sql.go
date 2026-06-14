@@ -280,9 +280,11 @@ const createProduct = `-- name: CreateProduct :one
 
 INSERT INTO products (
   organization_id, sku, type, name, slug, description, status,
-  attributes, unit, parent_id, attribute_family_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status
+  attributes, unit, parent_id, attribute_family_id, cost_price
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+  -- Tolerate an empty cost (callers that don't set one) → 0.
+  COALESCE(NULLIF($12::text, ''), '0')::numeric)
+RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price
 `
 
 type CreateProductParams struct {
@@ -297,6 +299,7 @@ type CreateProductParams struct {
 	Unit              string  `json:"unit"`
 	ParentID          *int64  `json:"parent_id"`
 	AttributeFamilyID *int64  `json:"attribute_family_id"`
+	Column12          string  `json:"column_12"`
 }
 
 // Catalog & PIM queries — Implementation Pack 1 §3, §12.3 (subtree), §12.5 (facets).
@@ -316,6 +319,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Unit,
 		arg.ParentID,
 		arg.AttributeFamilyID,
+		arg.Column12,
 	)
 	var i Product
 	err := row.Scan(
@@ -339,6 +343,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.TaxClass,
 		&i.VendorID,
 		&i.ApprovalStatus,
+		&i.CostPrice,
 	)
 	return i, err
 }
@@ -363,7 +368,7 @@ func (q *Queries) DeleteCatalogVisibility(ctx context.Context, arg DeleteCatalog
 }
 
 const filterActiveProductsByAttributes = `-- name: FilterActiveProductsByAttributes :many
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price FROM products
 WHERE organization_id = $1
   AND status = 'active' AND approval_status = 'approved' AND deleted_at IS NULL
   AND attributes @> $2
@@ -416,6 +421,7 @@ func (q *Queries) FilterActiveProductsByAttributes(ctx context.Context, arg Filt
 			&i.TaxClass,
 			&i.VendorID,
 			&i.ApprovalStatus,
+			&i.CostPrice,
 		); err != nil {
 			return nil, err
 		}
@@ -474,7 +480,7 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, arg GetCategoryBySlugPa
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price FROM products
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
 `
 
@@ -507,6 +513,7 @@ func (q *Queries) GetProductByID(ctx context.Context, arg GetProductByIDParams) 
 		&i.TaxClass,
 		&i.VendorID,
 		&i.ApprovalStatus,
+		&i.CostPrice,
 	)
 	return i, err
 }
@@ -859,7 +866,7 @@ func (q *Queries) ListProductCategoryIDs(ctx context.Context, productID int64) (
 }
 
 const listProductsAdmin = `-- name: ListProductsAdmin :many
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL
 ORDER BY name
 LIMIT $2 OFFSET $3
@@ -901,6 +908,7 @@ func (q *Queries) ListProductsAdmin(ctx context.Context, arg ListProductsAdminPa
 			&i.TaxClass,
 			&i.VendorID,
 			&i.ApprovalStatus,
+			&i.CostPrice,
 		); err != nil {
 			return nil, err
 		}
@@ -1046,7 +1054,7 @@ func (q *Queries) SearchActiveProducts(ctx context.Context, arg SearchActiveProd
 }
 
 const searchProductsAdmin = `-- name: SearchProductsAdmin :many
-SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status FROM products
+SELECT id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL
   AND search_vector @@ websearch_to_tsquery('english', $2)
 ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $2)) DESC, name
@@ -1097,6 +1105,7 @@ func (q *Queries) SearchProductsAdmin(ctx context.Context, arg SearchProductsAdm
 			&i.TaxClass,
 			&i.VendorID,
 			&i.ApprovalStatus,
+			&i.CostPrice,
 		); err != nil {
 			return nil, err
 		}
@@ -1218,9 +1227,10 @@ SET sku                 = $3,
     attributes          = $9,
     unit                = $10,
     parent_id           = $11,
-    attribute_family_id = $12
+    attribute_family_id = $12,
+    cost_price          = COALESCE(NULLIF($13::text, ''), '0')::numeric
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
-RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status
+RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price
 `
 
 type UpdateProductParams struct {
@@ -1236,6 +1246,7 @@ type UpdateProductParams struct {
 	Unit              string  `json:"unit"`
 	ParentID          *int64  `json:"parent_id"`
 	AttributeFamilyID *int64  `json:"attribute_family_id"`
+	Column13          string  `json:"column_13"`
 }
 
 func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
@@ -1252,6 +1263,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.Unit,
 		arg.ParentID,
 		arg.AttributeFamilyID,
+		arg.Column13,
 	)
 	var i Product
 	err := row.Scan(
@@ -1275,6 +1287,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.TaxClass,
 		&i.VendorID,
 		&i.ApprovalStatus,
+		&i.CostPrice,
 	)
 	return i, err
 }

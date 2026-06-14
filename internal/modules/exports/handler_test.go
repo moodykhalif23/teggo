@@ -155,6 +155,33 @@ func TestExportPerDatasetPermission(t *testing.T) {
 	}
 }
 
+func TestExportIsAudited(t *testing.T) {
+	h, issuer, pool := newServer(t)
+	seedOrder(t, pool, 1)
+	tok := adminToken(t, issuer, "report.view", "order.view", "audit.view")
+
+	if rr := do(t, h, http.MethodGet, "/admin/exports/orders?format=csv", tok); rr.Code != http.StatusOK {
+		t.Fatalf("export: status %d", rr.Code)
+	}
+	// The export (a read) is recorded in the audit trail via the explicit path.
+	var list struct {
+		Items []struct {
+			Action     string `json:"action"`
+			EntityType string `json:"entity_type"`
+		} `json:"items"`
+	}
+	decodeBody(t, do(t, h, http.MethodGet, "/admin/audit", tok), &list)
+	found := false
+	for _, it := range list.Items {
+		if it.Action == "exports.download" && it.EntityType == "orders" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected an exports.download audit entry for orders, got %+v", list.Items)
+	}
+}
+
 func decodeBody(t *testing.T, rr *httptest.ResponseRecorder, v any) {
 	t.Helper()
 	if rr.Code != http.StatusOK {

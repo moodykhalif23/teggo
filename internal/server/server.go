@@ -257,7 +257,8 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	// Audit middleware records every state-changing admin/vendor request. It sits
 	// innermost (after claims are set) so it can attribute the actor and read any
 	// handler enrichment; reads (GET/HEAD) and buyer traffic pass through untouched.
-	auditMW := audit.NewRecorder(st.Pool(), o.logger).Middleware
+	auditRec := audit.NewRecorder(st.Pool(), o.logger)
+	auditMW := auditRec.Middleware
 	authMW := func(next http.Handler) http.Handler { return authn(orgGate(planGate(auditMW(next)))) }
 	optAuthMW := func(next http.Handler) http.Handler { return optAuthn(orgGate(planGate(next))) }
 	// Throttle credential endpoints to blunt brute-force / credential stuffing.
@@ -265,7 +266,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 
 	// Modules mount their own routes. Add new modules here as they land.
 	health.New(st).Routes(r)
-	authmod.New(st, issuer).Routes(r, loginLimit)
+	authmod.New(st, issuer).WithAudit(auditRec).Routes(r, loginLimit)
 	platformmod.New(st.Pool(), o.notifier, statuses, o.platformDomain, o.signupVerify).WithBilling(billingSvc).Routes(r, authMW, loginLimit)
 	catalog.New(st.Queries()).RoutesWithOptionalAuth(r, authMW, optAuthMW)
 	customers.New(st.Queries()).Routes(r, authMW)
@@ -294,7 +295,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	reporting.New(st.Pool()).Routes(r, authMW)
 	insightsmod.New(st.Pool()).WithNarrator(o.insightsNarr).WithEnqueuer(o.insightDigest).Routes(r, authMW)
 	auditmod.New(st.Pool()).Routes(r, authMW)
-	exports.New(st.Pool()).Routes(r, authMW)
+	exports.New(st.Pool()).WithAudit(auditRec).Routes(r, authMW)
 	tenancy.New(st.Pool()).Routes(r, authMW)
 	if o.blobStore != nil {
 		proc := o.imageProc

@@ -69,6 +69,24 @@ func TestDetectAtRiskAndConcentration(t *testing.T) {
 	}
 }
 
+func TestDetectMarginErosion(t *testing.T) {
+	// Margin fell 12 points with cost data present → critical.
+	s := Snapshot{
+		Revenue: "1000.0000", PrevRevenue: "1000.0000", RevenueDelta: 0, OpenAR: "0", AR90Plus: "0",
+		HasCost: true, MarginPct: 30, PrevMarginPct: 42,
+	}
+	a := find(Detect(s), "margin_erosion")
+	if a == nil || a.Severity != SevCritical {
+		t.Fatalf("expected critical margin_erosion, got %+v", a)
+	}
+
+	// Same drop but NO cost data → not meaningful, no signal.
+	s.HasCost = false
+	if a := find(Detect(s), "margin_erosion"); a != nil {
+		t.Errorf("no cost data should suppress margin_erosion, got %+v", a)
+	}
+}
+
 func TestDetectHealthyIsQuiet(t *testing.T) {
 	s := Snapshot{
 		Revenue: "1010.0000", PrevRevenue: "1000.0000", RevenueDelta: 1, OrdersDelta: 1,

@@ -80,6 +80,12 @@ func (s Snapshot) KPIs() map[string]any {
 		"revenue_delta_pct":     s.RevenueDelta,
 		"orders_delta_pct":      s.OrdersDelta,
 		"new_customers":         s.NewCustomers,
+		"cost":                  s.Cost,
+		"gross_margin":          s.GrossMargin,
+		"margin_pct":            s.MarginPct,
+		"prev_margin_pct":       s.PrevMarginPct,
+		"margin_delta_pts":      s.MarginDeltaPts,
+		"has_cost":              s.HasCost,
 		"open_ar":               s.OpenAR,
 		"ar_90_plus":            s.AR90Plus,
 		"open_invoices":         s.OpenInvoices,
@@ -111,6 +117,9 @@ func (s Snapshot) Brief(anomalies []Anomaly) ai.InsightBrief {
 	headlines := []string{
 		fmt.Sprintf("Revenue %s (%s vs the prior period).", s.Revenue, pct(s.RevenueDelta)),
 		fmt.Sprintf("Orders %d (%s); average order value %s.", s.Orders, pct(s.OrdersDelta), s.AOV),
+	}
+	if s.HasCost {
+		headlines = append(headlines, fmt.Sprintf("Gross margin %.1f%% (%+.1f pts vs the prior period).", s.MarginPct, s.MarginDeltaPts))
 	}
 	if isPositive(s.OpenAR) {
 		headlines = append(headlines, fmt.Sprintf("Open receivables %s across %d invoice(s).", s.OpenAR, s.OpenInvoices))

@@ -81,7 +81,7 @@ func (q *Queries) DeleteProductImage(ctx context.Context, arg DeleteProductImage
 }
 
 const exportProductsAdmin = `-- name: ExportProductsAdmin :many
-SELECT sku, type, name, slug, description, status, unit, attributes
+SELECT sku, type, name, slug, description, status, unit, attributes, cost_price
 FROM products
 WHERE organization_id = $1 AND deleted_at IS NULL
 ORDER BY sku
@@ -96,6 +96,7 @@ type ExportProductsAdminRow struct {
 	Status      string  `json:"status"`
 	Unit        string  `json:"unit"`
 	Attributes  []byte  `json:"attributes"`
+	CostPrice   string  `json:"cost_price"`
 }
 
 // ExportProductsAdmin streams the full (non-deleted) catalog for CSV export.
@@ -117,6 +118,7 @@ func (q *Queries) ExportProductsAdmin(ctx context.Context, organizationID int64)
 			&i.Status,
 			&i.Unit,
 			&i.Attributes,
+			&i.CostPrice,
 		); err != nil {
 			return nil, err
 		}

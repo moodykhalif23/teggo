@@ -760,6 +760,7 @@ type Product struct {
 	TaxClass          string             `json:"tax_class"`
 	VendorID          *int64             `json:"vendor_id"`
 	ApprovalStatus    string             `json:"approval_status"`
+	CostPrice         string             `json:"cost_price"`
 }
 
 type ProductCategory struct {

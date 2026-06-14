@@ -266,17 +266,6 @@ type Querier interface {
 	EnsureInventoryLevel(ctx context.Context, arg EnsureInventoryLevelParams) error
 	// ExportAuditLog is the list query without pagination, capped, for CSV export.
 	ExportAuditLog(ctx context.Context, arg ExportAuditLogParams) ([]AuditLog, error)
-	ExportCustomers(ctx context.Context, arg ExportCustomersParams) ([]ExportCustomersRow, error)
-	// Invoices carry no organization_id of their own — they are org-scoped through
-	// their customer (the same indirect scoping the AR-aging query relies on).
-	ExportInvoices(ctx context.Context, arg ExportInvoicesParams) ([]ExportInvoicesRow, error)
-	ExportOrderItems(ctx context.Context, arg ExportOrderItemsParams) ([]ExportOrderItemsRow, error)
-	// Raw-record exports for the data-export center. Distinct from the report
-	// builder (which aggregates): these dump full rows of the core entities, joined
-	// to human-readable names, org-scoped and capped, for the customer's own
-	// finance/BI/budgeting systems. Ordered newest-first; the LIMIT is the export
-	// cap applied by the handler.
-	ExportOrders(ctx context.Context, arg ExportOrdersParams) ([]ExportOrdersRow, error)
 	// ExportProductsAdmin streams the full (non-deleted) catalog for CSV export.
 	ExportProductsAdmin(ctx context.Context, organizationID int64) ([]ExportProductsAdminRow, error)
 	// FilterActiveProductsByAttributes: faceted filter over the JSONB attributes,
@@ -707,6 +696,11 @@ type Querier interface {
 	ListWorkflowDefinitions(ctx context.Context, organizationID int64) ([]WorkflowDefinition, error)
 	ListWorkflowStates(ctx context.Context, definitionID int64) ([]WorkflowState, error)
 	ListWorkflowTransitions(ctx context.Context, definitionID int64) ([]WorkflowTransition, error)
+	// MarginWindow returns line-item revenue and cost of goods over the window, for
+	// gross-margin analysis. Cost is at the product's CURRENT cost_price (v1 — no
+	// per-line cost snapshot yet); products with cost 0 contribute no cost, so margin
+	// reads as 100% until costs are entered. Run twice (current + prior) for the trend.
+	MarginWindow(ctx context.Context, arg MarginWindowParams) (MarginWindowRow, error)
 	MarkAllNotificationsRead(ctx context.Context, arg MarkAllNotificationsReadParams) error
 	MarkCartConverted(ctx context.Context, id int64) error
 	MarkCartReminded(ctx context.Context, id int64) error

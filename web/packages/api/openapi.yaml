@@ -94,6 +94,7 @@ components:
         unit: { type: string }
         parent_id: { type: integer, format: int64, nullable: true }
         attribute_family_id: { type: integer, format: int64, nullable: true }
+        cost_price: { type: string, description: "Unit cost for margin/profitability (decimal string)" }
 
     ProductInput:
       type: object
@@ -109,6 +110,7 @@ components:
         unit: { type: string }
         parent_id: { type: integer, format: int64, nullable: true }
         attribute_family_id: { type: integer, format: int64, nullable: true }
+        cost_price: { type: string, description: "Unit cost for margin/profitability (decimal string)" }
 
     AdminProductList:
       type: object
@@ -2212,6 +2214,12 @@ components:
         revenue_delta_pct: { type: number }
         orders_delta_pct: { type: number }
         new_customers: { type: integer, format: int64 }
+        cost: { type: string }
+        gross_margin: { type: string }
+        margin_pct: { type: number }
+        prev_margin_pct: { type: number }
+        margin_delta_pts: { type: number }
+        has_cost: { type: boolean }
         open_ar: { type: string }
         ar_90_plus: { type: string }
         open_invoices: { type: integer }
