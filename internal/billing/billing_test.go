@@ -47,9 +47,9 @@ func TestEntitlementsFeaturesAndLimits(t *testing.T) {
 
 func TestRuleTable(t *testing.T) {
 	cases := []struct {
-		method, path     string
-		feature, metric  string
-		want             bool
+		method, path    string
+		feature, metric string
+		want            bool
 	}{
 		{http.MethodPost, "/admin/orders", "", MetricOrders, true},
 		{http.MethodPost, "/storefront/orders", "", MetricOrders, true},

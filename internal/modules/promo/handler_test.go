@@ -106,10 +106,10 @@ func TestPromotionValidation(t *testing.T) {
 	tok := token(t, issuer, "promotion.view", "promotion.manage")
 
 	cases := []map[string]any{
-		{"name": "", "discount_type": "percent", "discount_value": "10"},        // missing name
-		{"name": "X", "discount_type": "bogus", "discount_value": "10"},          // bad type
-		{"name": "X", "discount_type": "percent", "discount_value": "150"},       // >100%
-		{"name": "X", "discount_type": "amount", "discount_value": "-5"},         // negative
+		{"name": "", "discount_type": "percent", "discount_value": "10"},   // missing name
+		{"name": "X", "discount_type": "bogus", "discount_value": "10"},    // bad type
+		{"name": "X", "discount_type": "percent", "discount_value": "150"}, // >100%
+		{"name": "X", "discount_type": "amount", "discount_value": "-5"},   // negative
 	}
 	for i, body := range cases {
 		rr := do(t, h, http.MethodPost, "/admin/promotions", tok, body)

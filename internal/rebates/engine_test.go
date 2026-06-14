@@ -32,10 +32,10 @@ func TestApplicable(t *testing.T) {
 		total, wantRate string
 		wantOK          bool
 	}{
-		{"5000", "", false},      // below all tiers
-		{"10000", "2", true},     // exactly the first tier
-		{"30000", "3.5", true},   // between 25k and 50k
-		{"100000", "5", true},    // top tier
+		{"5000", "", false},    // below all tiers
+		{"10000", "2", true},   // exactly the first tier
+		{"30000", "3.5", true}, // between 25k and 50k
+		{"100000", "5", true},  // top tier
 	}
 	for _, c := range cases {
 		rate, _, ok := Applicable(c.total, tiers)

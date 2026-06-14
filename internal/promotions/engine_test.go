@@ -6,7 +6,7 @@ import (
 )
 
 func ptrStr(s string) *string { return &s }
-func ptrI32(n int32) *int32    { return &n }
+func ptrI32(n int32) *int32   { return &n }
 
 func TestEvaluate(t *testing.T) {
 	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
