@@ -280,10 +280,8 @@ const createProduct = `-- name: CreateProduct :one
 
 INSERT INTO products (
   organization_id, sku, type, name, slug, description, status,
-  attributes, unit, parent_id, attribute_family_id, cost_price
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-  -- Tolerate an empty cost (callers that don't set one) → 0.
-  COALESCE(NULLIF($12::text, ''), '0')::numeric)
+  attributes, unit, parent_id, attribute_family_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price
 `
 
@@ -299,7 +297,6 @@ type CreateProductParams struct {
 	Unit              string  `json:"unit"`
 	ParentID          *int64  `json:"parent_id"`
 	AttributeFamilyID *int64  `json:"attribute_family_id"`
-	Column12          string  `json:"column_12"`
 }
 
 // Catalog & PIM queries — Implementation Pack 1 §3, §12.3 (subtree), §12.5 (facets).
@@ -319,7 +316,6 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Unit,
 		arg.ParentID,
 		arg.AttributeFamilyID,
-		arg.Column12,
 	)
 	var i Product
 	err := row.Scan(
@@ -1197,6 +1193,52 @@ func (q *Queries) SearchProductsFaceted(ctx context.Context, arg SearchProductsF
 	return items, nil
 }
 
+const setProductCost = `-- name: SetProductCost :one
+UPDATE products SET cost_price = $3
+WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
+RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price
+`
+
+type SetProductCostParams struct {
+	OrganizationID int64  `json:"organization_id"`
+	ID             int64  `json:"id"`
+	CostPrice      string `json:"cost_price"`
+}
+
+// SetProductCost sets a product's unit cost (for margin). Kept separate from
+// Create/UpdateProduct so those stay free of cost — every existing caller that
+// doesn't set a cost relies on the column's DEFAULT 0. The param maps straight
+// to the column, so it generates a clean CostPrice (callers pass a valid decimal
+// string, never empty).
+func (q *Queries) SetProductCost(ctx context.Context, arg SetProductCostParams) (Product, error) {
+	row := q.db.QueryRow(ctx, setProductCost, arg.OrganizationID, arg.ID, arg.CostPrice)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.Sku,
+		&i.Type,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.Status,
+		&i.Attributes,
+		&i.Unit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ParentID,
+		&i.AttributeFamilyID,
+		&i.SearchVector,
+		&i.TaxClass,
+		&i.VendorID,
+		&i.ApprovalStatus,
+		&i.CostPrice,
+	)
+	return i, err
+}
+
 const softDeleteProduct = `-- name: SoftDeleteProduct :execrows
 UPDATE products
 SET deleted_at = now()
@@ -1227,8 +1269,7 @@ SET sku                 = $3,
     attributes          = $9,
     unit                = $10,
     parent_id           = $11,
-    attribute_family_id = $12,
-    cost_price          = COALESCE(NULLIF($13::text, ''), '0')::numeric
+    attribute_family_id = $12
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
 RETURNING id, public_id, organization_id, sku, type, name, slug, description, status, attributes, unit, created_at, updated_at, deleted_at, parent_id, attribute_family_id, search_vector, tax_class, vendor_id, approval_status, cost_price
 `
@@ -1246,7 +1287,6 @@ type UpdateProductParams struct {
 	Unit              string  `json:"unit"`
 	ParentID          *int64  `json:"parent_id"`
 	AttributeFamilyID *int64  `json:"attribute_family_id"`
-	Column13          string  `json:"column_13"`
 }
 
 func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
@@ -1263,7 +1303,6 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.Unit,
 		arg.ParentID,
 		arg.AttributeFamilyID,
-		arg.Column13,
 	)
 	var i Product
 	err := row.Scan(

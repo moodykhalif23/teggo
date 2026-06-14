@@ -6,6 +6,7 @@ package catalog
 // catalog in/out as CSV for ERP and spreadsheet workflows.
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -275,10 +276,17 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 			if !costGiven {
 				cost = existing.CostPrice // no cost column → keep the existing cost, don't zero it
 			}
-			p, uerr := h.q.UpdateProduct(r.Context(), gen.UpdateProductParams{
-				OrganizationID: org, ID: existing.ID, Sku: pr.SKU, Type: pr.Type, Name: pr.Name, Slug: pr.Slug,
-				Description: pr.Description, Status: pr.Status, Attributes: pr.Attributes, Unit: pr.Unit,
-				Column13: cost, // cost_price
+			var p gen.Product
+			uerr := h.inTx(r.Context(), func(ctx context.Context, qtx *gen.Queries) error {
+				var e error
+				if p, e = qtx.UpdateProduct(ctx, gen.UpdateProductParams{
+					OrganizationID: org, ID: existing.ID, Sku: pr.SKU, Type: pr.Type, Name: pr.Name, Slug: pr.Slug,
+					Description: pr.Description, Status: pr.Status, Attributes: pr.Attributes, Unit: pr.Unit,
+				}); e != nil {
+					return e
+				}
+				p, e = qtx.SetProductCost(ctx, gen.SetProductCostParams{OrganizationID: org, ID: p.ID, CostPrice: cost})
+				return e
 			})
 			if uerr != nil {
 				entry.Action, entry.Error = "error", "could not update (duplicate slug?)"
@@ -289,10 +297,17 @@ func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
 			updated++
 			entry.Action = "updated"
 		case errors.Is(lookupErr, pgx.ErrNoRows):
-			p, cerr := h.q.CreateProduct(r.Context(), gen.CreateProductParams{
-				OrganizationID: org, Sku: pr.SKU, Type: pr.Type, Name: pr.Name, Slug: pr.Slug,
-				Description: pr.Description, Status: pr.Status, Attributes: pr.Attributes, Unit: pr.Unit,
-				Column12: pr.CostPrice, // cost_price
+			var p gen.Product
+			cerr := h.inTx(r.Context(), func(ctx context.Context, qtx *gen.Queries) error {
+				var e error
+				if p, e = qtx.CreateProduct(ctx, gen.CreateProductParams{
+					OrganizationID: org, Sku: pr.SKU, Type: pr.Type, Name: pr.Name, Slug: pr.Slug,
+					Description: pr.Description, Status: pr.Status, Attributes: pr.Attributes, Unit: pr.Unit,
+				}); e != nil {
+					return e
+				}
+				p, e = qtx.SetProductCost(ctx, gen.SetProductCostParams{OrganizationID: org, ID: p.ID, CostPrice: pr.CostPrice})
+				return e
 			})
 			if cerr != nil {
 				entry.Action, entry.Error = "error", "could not create (duplicate slug?)"

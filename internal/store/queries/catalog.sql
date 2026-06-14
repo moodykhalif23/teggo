@@ -7,10 +7,8 @@
 -- name: CreateProduct :one
 INSERT INTO products (
   organization_id, sku, type, name, slug, description, status,
-  attributes, unit, parent_id, attribute_family_id, cost_price
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-  -- Tolerate an empty cost (callers that don't set one) → 0.
-  COALESCE(NULLIF($12::text, ''), '0')::numeric)
+  attributes, unit, parent_id, attribute_family_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetProductByID :one
@@ -56,8 +54,17 @@ SET sku                 = $3,
     attributes          = $9,
     unit                = $10,
     parent_id           = $11,
-    attribute_family_id = $12,
-    cost_price          = COALESCE(NULLIF($13::text, ''), '0')::numeric
+    attribute_family_id = $12
+WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
+RETURNING *;
+
+-- SetProductCost sets a product's unit cost (for margin). Kept separate from
+-- Create/UpdateProduct so those stay free of cost — every existing caller that
+-- doesn't set a cost relies on the column's DEFAULT 0. The param maps straight
+-- to the column, so it generates a clean CostPrice (callers pass a valid decimal
+-- string, never empty).
+-- name: SetProductCost :one
+UPDATE products SET cost_price = $3
 WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL
 RETURNING *;
 

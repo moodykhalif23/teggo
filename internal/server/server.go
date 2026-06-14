@@ -19,6 +19,7 @@ import (
 	"b2bcommerce/internal/inventory"
 	"b2bcommerce/internal/modules/account"
 	"b2bcommerce/internal/modules/assistant"
+	auditmod "b2bcommerce/internal/modules/audit"
 	authmod "b2bcommerce/internal/modules/auth"
 	"b2bcommerce/internal/modules/cart"
 	"b2bcommerce/internal/modules/catalog"
@@ -31,7 +32,6 @@ import (
 	"b2bcommerce/internal/modules/exports"
 	"b2bcommerce/internal/modules/field"
 	"b2bcommerce/internal/modules/fxadmin"
-	auditmod "b2bcommerce/internal/modules/audit"
 	"b2bcommerce/internal/modules/health"
 	insightsmod "b2bcommerce/internal/modules/insights"
 	"b2bcommerce/internal/modules/integration"
@@ -268,7 +268,7 @@ func New(st *store.Store, issuer *auth.Issuer, opts ...Option) http.Handler {
 	health.New(st).Routes(r)
 	authmod.New(st, issuer).WithAudit(auditRec).Routes(r, loginLimit)
 	platformmod.New(st.Pool(), o.notifier, statuses, o.platformDomain, o.signupVerify).WithBilling(billingSvc).Routes(r, authMW, loginLimit)
-	catalog.New(st.Queries()).RoutesWithOptionalAuth(r, authMW, optAuthMW)
+	catalog.New(st.Pool()).RoutesWithOptionalAuth(r, authMW, optAuthMW)
 	customers.New(st.Queries()).Routes(r, authMW)
 	account.New(st.Queries()).Routes(r, authMW)
 	mp := marketplace.New(st.Pool())

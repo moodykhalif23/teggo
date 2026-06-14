@@ -156,6 +156,52 @@ func TestAdminProductCRUD(t *testing.T) {
 	}
 }
 
+// TestProductCostRoundTrip proves the unit cost is written atomically with the
+// product (create + update) and round-trips through the API.
+func TestProductCostRoundTrip(t *testing.T) {
+	h, issuer, _ := newServer(t)
+	tok := catalogToken(t, issuer)
+
+	create := do(t, h, http.MethodPost, "/admin/products", tok, map[string]any{
+		"sku": "COST-1", "name": "Costed", "slug": "costed", "status": "active", "cost_price": "12.5000",
+	})
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create: want 201, got %d (%s)", create.Code, create.Body.String())
+	}
+	var created struct {
+		ID        int64  `json:"id"`
+		CostPrice string `json:"cost_price"`
+	}
+	_ = json.Unmarshal(create.Body.Bytes(), &created)
+	if created.CostPrice != "12.5000" {
+		t.Fatalf("create cost: want 12.5000, got %q", created.CostPrice)
+	}
+
+	id := strconv.FormatInt(created.ID, 10)
+	get := do(t, h, http.MethodGet, "/admin/products/"+id, tok, nil)
+	var got struct {
+		CostPrice string `json:"cost_price"`
+	}
+	_ = json.Unmarshal(get.Body.Bytes(), &got)
+	if got.CostPrice != "12.5000" {
+		t.Errorf("get cost: want 12.5000, got %q", got.CostPrice)
+	}
+
+	upd := do(t, h, http.MethodPut, "/admin/products/"+id, tok, map[string]any{
+		"sku": "COST-1", "name": "Costed v2", "slug": "costed", "status": "active", "cost_price": "9.0000",
+	})
+	if upd.Code != http.StatusOK {
+		t.Fatalf("update: want 200, got %d (%s)", upd.Code, upd.Body.String())
+	}
+	var updated struct {
+		CostPrice string `json:"cost_price"`
+	}
+	_ = json.Unmarshal(upd.Body.Bytes(), &updated)
+	if updated.CostPrice != "9.0000" {
+		t.Errorf("update cost: want 9.0000, got %q", updated.CostPrice)
+	}
+}
+
 // --- Category subtree (§12.3) ---------------------------------------------
 
 func TestCategorySubtreeListing(t *testing.T) {

@@ -5,6 +5,7 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"b2bcommerce/internal/audit"
 	"b2bcommerce/internal/changelog"
@@ -23,10 +25,11 @@ import (
 )
 
 type Handler struct {
-	q *gen.Queries
+	q    *gen.Queries
+	pool *pgxpool.Pool
 }
 
-func New(q *gen.Queries) *Handler { return &Handler{q: q} }
+func New(pool *pgxpool.Pool) *Handler { return &Handler{q: gen.New(pool), pool: pool} }
 
 func (h *Handler) Routes(r chi.Router, authMW func(http.Handler) http.Handler) {
 	h.RoutesWithOptionalAuth(r, authMW, nil)
@@ -153,6 +156,20 @@ func rawJSON(b []byte) json.RawMessage {
 		return json.RawMessage("{}")
 	}
 	return json.RawMessage(b)
+}
+
+// inTx runs fn inside a single transaction, committing on success and rolling
+// back on any error. Used so a product write and its cost write apply atomically.
+func (h *Handler) inTx(ctx context.Context, fn func(context.Context, *gen.Queries) error) error {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := fn(ctx, h.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func toAdminProduct(p gen.Product) adminProduct {
@@ -641,13 +658,21 @@ func (h *Handler) adminCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.defaults()
-	p, err := h.q.CreateProduct(r.Context(), gen.CreateProductParams{
+	params := gen.CreateProductParams{
 		OrganizationID: org, Sku: req.SKU, Type: req.Type, Name: req.Name, Slug: req.Slug,
 		Description: req.Description, Status: req.Status, Attributes: req.Attributes,
 		Unit: req.Unit, ParentID: req.ParentID, AttributeFamilyID: req.AttributeFamilyID,
-		Column12: req.CostPrice, // cost_price (text-coalesced to 0 when empty)
-	})
-	if err != nil {
+	}
+	// Create the product and set its cost atomically.
+	var p gen.Product
+	if err := h.inTx(r.Context(), func(ctx context.Context, qtx *gen.Queries) error {
+		var e error
+		if p, e = qtx.CreateProduct(ctx, params); e != nil {
+			return e
+		}
+		p, e = qtx.SetProductCost(ctx, gen.SetProductCostParams{OrganizationID: org, ID: p.ID, CostPrice: req.CostPrice})
+		return e
+	}); err != nil {
 		response.Fail(w, http.StatusInternalServerError, "internal", "could not create product")
 		return
 	}
@@ -704,13 +729,21 @@ func (h *Handler) adminUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	req.defaults()
 	before, _ := h.q.GetProductByID(r.Context(), gen.GetProductByIDParams{OrganizationID: org, ID: id})
-	p, err := h.q.UpdateProduct(r.Context(), gen.UpdateProductParams{
+	params := gen.UpdateProductParams{
 		OrganizationID: org, ID: id, Sku: req.SKU, Type: req.Type, Name: req.Name, Slug: req.Slug,
 		Description: req.Description, Status: req.Status, Attributes: req.Attributes,
 		Unit: req.Unit, ParentID: req.ParentID, AttributeFamilyID: req.AttributeFamilyID,
-		Column13: req.CostPrice, // cost_price (text-coalesced to 0 when empty)
-	})
-	if err != nil {
+	}
+	// Update the product and its cost atomically.
+	var p gen.Product
+	if err := h.inTx(r.Context(), func(ctx context.Context, qtx *gen.Queries) error {
+		var e error
+		if p, e = qtx.UpdateProduct(ctx, params); e != nil {
+			return e
+		}
+		p, e = qtx.SetProductCost(ctx, gen.SetProductCostParams{OrganizationID: org, ID: p.ID, CostPrice: req.CostPrice})
+		return e
+	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			response.Fail(w, http.StatusNotFound, "not_found", "product not found")
 			return

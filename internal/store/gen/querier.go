@@ -840,6 +840,12 @@ type Querier interface {
 	SetPageStatus(ctx context.Context, arg SetPageStatusParams) (ContentPage, error)
 	SetPaymentStatus(ctx context.Context, arg SetPaymentStatusParams) (Payment, error)
 	SetProductApproval(ctx context.Context, arg SetProductApprovalParams) (SetProductApprovalRow, error)
+	// SetProductCost sets a product's unit cost (for margin). Kept separate from
+	// Create/UpdateProduct so those stay free of cost — every existing caller that
+	// doesn't set a cost relies on the column's DEFAULT 0. The param maps straight
+	// to the column, so it generates a clean CostPrice (callers pass a valid decimal
+	// string, never empty).
+	SetProductCost(ctx context.Context, arg SetProductCostParams) (Product, error)
 	SetPunchoutCart(ctx context.Context, arg SetPunchoutCartParams) error
 	SetPunchoutStatus(ctx context.Context, arg SetPunchoutStatusParams) error
 	SetQuoteStatus(ctx context.Context, arg SetQuoteStatusParams) (Quote, error)
